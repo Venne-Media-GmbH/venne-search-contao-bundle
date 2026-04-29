@@ -1,0 +1,66 @@
+{
+    "name": "venne-media/venne-search-contao-bundle",
+    "description": "Volltext-Suche für Contao mit Live-Indexing von Seiten und Datei-Inhalten (PDF, DOCX, ODT, RTF). Tippfehler-Toleranz, mehrsprachig, ACL-aware.",
+    "type": "contao-bundle",
+    "license": "LGPL-3.0-or-later",
+    "keywords": ["contao", "contao-bundle", "search", "fulltext", "meilisearch", "pdf"],
+    "homepage": "https://venne-search.de",
+    "support": {
+        "email": "support@venne-media.de",
+        "issues": "https://github.com/Venne-Media-GmbH/venne-search-contao-bundle/issues",
+        "source": "https://github.com/Venne-Media-GmbH/venne-search-contao-bundle"
+    },
+    "authors": [
+        {
+            "name": "Jannik Schwarz",
+            "email": "jschwarz@venne-media.de",
+            "role": "Developer"
+        },
+        {
+            "name": "Venne Media GmbH",
+            "email": "info@venne-media.de",
+            "homepage": "https://venne-media.de",
+            "role": "Publisher"
+        }
+    ],
+    "require": {
+        "php": "^8.1",
+        "ext-json": "*",
+        "contao/core-bundle": "^4.13 || ^5.0",
+        "meilisearch/meilisearch-php": "^1.11",
+        "smalot/pdfparser": "^2.12",
+        "symfony/config": "^5.4 || ^6.4 || ^7.0",
+        "symfony/dependency-injection": "^5.4 || ^6.4 || ^7.0",
+        "symfony/http-foundation": "^5.4 || ^6.4 || ^7.0",
+        "symfony/http-kernel": "^5.4 || ^6.4 || ^7.0",
+        "symfony/messenger": "^5.4 || ^6.4 || ^7.0",
+        "symfony/yaml": "^5.4 || ^6.4 || ^7.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.11"
+    },
+    "autoload": {
+        "psr-4": {
+            "VenneMedia\\VenneSearchContaoBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "VenneMedia\\VenneSearchContaoBundle\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "contao-manager-plugin": "VenneMedia\\VenneSearchContaoBundle\\ContaoManager\\Plugin"
+    },
+    "config": {
+        "allow-plugins": {
+            "contao-components/installer": true,
+            "contao/manager-plugin": true,
+            "php-http/discovery": true
+        },
+        "sort-packages": true
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

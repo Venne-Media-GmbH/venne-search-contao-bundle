@@ -1,0 +1,18 @@
+/vendor/
+/composer.lock
+.phpunit.cache/
+.php-cs-fixer.cache
+*.log
+.idea/
+.vscode/
+/test.md
+/TEST.md
+/TODO.md
+phpstan.neon
+.phpunit.result.cache
+.claude/
+.playwright-mcp/
+.commit-msg.tmp
+# Test-Screenshots aus Playwright-Sessions — niemals committen
+/*.png
+

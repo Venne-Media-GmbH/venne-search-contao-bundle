@@ -1,0 +1,89 @@
+# Container-Services. Alles autowire/autoconfig — Symfony zieht Hooks/Commands
+# über das Attribut-System (#[AsHook], #[AsCommand]) automatisch ein.
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    # Auto-Registrierung aller Klassen unter src/. DI/Resources/Tests ausschließen.
+    VenneMedia\VenneSearchContaoBundle\:
+        resource: '../../../src/'
+        exclude:
+            - '../../../src/DependencyInjection/'
+            - '../../../src/Message/'
+            - '../../../src/Service/Indexer/SearchDocument.php'
+            - '../../../src/Service/Search/SearchResult.php'
+            - '../../../src/Service/Settings/SettingsConfig.php'
+            - '../../../src/Service/Pdf/PdfExtractor.php'
+            - '../../../src/Service/Platform/ResolveClient.php'
+        public: false
+
+    # ResolveClient: spricht die venne_search-Plattform an + cached das Result.
+    # platform_url bleibt Default (https://venne-search.de), kann aber pro
+    # Installation via DCA-Feld (Spalte platform_url) überschrieben werden —
+    # dann liest SettingsRepository den Override aus der DB.
+    VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveClient:
+        arguments:
+            $db: '@database_connection'
+            $platformUrl: 'https://venne-search.de'
+            $logger: '@?logger'
+
+    # PdfExtractor + Result-Klassen sind Wert-Objekte / brauchen explizite Definition,
+    # weil sie kein autowiring-Pattern matchen (oder eigene Construct-Args haben).
+    VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor:
+        arguments:
+            $logger: '@?logger'
+
+    # Meilisearch-Client als Singleton — gebaut von der Factory, die das
+    # Endpoint+Key aus den DCA-Settings (tl_venne_search_settings) holt.
+    Meilisearch\Client:
+        factory: ['@VenneMedia\VenneSearchContaoBundle\Service\MeilisearchClientFactory', 'create']
+
+    # Public Services — werden von Contao-Hooks/Modulen direkt referenziert.
+    VenneMedia\VenneSearchContaoBundle\Service\Search\SearchService:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Indexer\DocumentIndexer:
+        public: true
+
+    # Controller müssen public sein, damit Symfony sie als Action invoken kann.
+    VenneMedia\VenneSearchContaoBundle\Controller\FrontendSearchController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\IndexBrowserController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ProgressController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexStreamController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexPlanController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexItemController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexFinalizeController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexRemoveController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexSingleController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    # Public, damit DCA-input_field_callback ihn statisch über System::getContainer()->get() holen kann.
+    VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener:
+        public: true

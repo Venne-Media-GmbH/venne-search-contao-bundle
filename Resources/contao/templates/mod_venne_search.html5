@@ -1,0 +1,453 @@
+<?php
+/**
+ * Frontend-Template: zwei Modes — `inline` (Suchfeld direkt im Layout) und
+ * `modal` (Trigger-Button öffnet Overlay-Suche).
+ *
+ * @var \Contao\FrontendTemplate $this
+ */
+$isModal = ($this->displayMode ?? 'inline') === 'modal';
+?>
+<!-- venne-search-bundle template v0.17 — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^0.17 -->
+<div class="vsearch mod_venne_search vsearch--<?= $isModal ? 'modal' : 'inline' ?><?= $this->cssID && $this->cssID[1] ? ' '.$this->cssID[1] : '' ?>"<?= $this->cssID && $this->cssID[0] ? ' id="'.$this->cssID[0].'"' : '' ?>
+     data-vsearch
+     data-vsearch-version="0.17"
+     data-mode="<?= $isModal ? 'modal' : 'inline' ?>"
+     data-api-url="<?= $this->apiUrl ?>"
+     data-locale="<?= $this->locale ?>"
+     data-min-chars="<?= $this->minChars ?>"
+     data-limit="<?= $this->limit ?>">
+
+    <?php if ($isModal): ?>
+        <button type="button" class="vsearch__trigger" data-vsearch-trigger>
+            <svg class="vsearch__trigger-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span class="vsearch__trigger-label"><?= htmlspecialchars((string) $this->triggerLabel) ?></span>
+        </button>
+    <?php endif; ?>
+
+    <div class="vsearch__shell<?= $isModal ? ' vsearch__shell--modal' : '' ?>"<?= $isModal ? ' data-vsearch-shell hidden' : '' ?>>
+        <div class="vsearch__panel">
+            <?php if ($isModal): ?>
+                <button type="button" class="vsearch__close" data-vsearch-close aria-label="Schließen">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                    </svg>
+                </button>
+            <?php endif; ?>
+
+            <?php if ($this->headline && !$isModal): ?>
+                <<?= $this->hl ?: 'h2' ?> class="vsearch__headline"><?= $this->headline ?></<?= $this->hl ?: 'h2' ?>>
+            <?php endif; ?>
+
+            <form class="vsearch__form" role="search" autocomplete="off" onsubmit="return false;">
+                <div class="vsearch__inputwrap">
+                    <svg class="vsearch__inputicon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <circle cx="11" cy="11" r="7"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <label class="vsearch__sr" for="vsearch-input-<?= $this->moduleId ?>">Suche</label>
+                    <input
+                        id="vsearch-input-<?= $this->moduleId ?>"
+                        class="vsearch__input"
+                        type="search"
+                        name="q"
+                        placeholder="<?= htmlspecialchars((string) $this->placeholder, ENT_QUOTES) ?>"
+                        autocomplete="off"
+                        spellcheck="false"
+                        data-vsearch-input
+                    >
+                </div>
+            </form>
+
+            <div class="vsearch__toolbar" data-vsearch-toolbar hidden>
+                <p class="vsearch__meta" data-vsearch-meta></p>
+                <?php if ($this->showFacets): ?>
+                    <div class="vsearch__facets" data-vsearch-facets></div>
+                <?php endif; ?>
+            </div>
+
+            <div class="vsearch__results" data-vsearch-results hidden>
+                <ul class="vsearch__list" data-vsearch-list></ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .vsearch { max-width: 880px; --vs-accent: #4a8087; --vs-accent-soft: rgba(74,128,135,.08); --vs-text: #1f2937; --vs-text-muted: #6b7280; --vs-border: rgba(0,0,0,.1); --vs-border-strong: rgba(0,0,0,.16); --vs-pdf: #c4341e; --vs-pdf-soft: rgba(196,52,30,.1); --vs-bg: #ffffff; --vs-mark: #ffe27a; }
+    .vsearch *, .vsearch *::before, .vsearch *::after { box-sizing: border-box; }
+    .vsearch--modal { max-width: none; display: inline-block; }
+    .vsearch__sr { position: absolute; left: -9999px; }
+    .vsearch__headline { font-size: 1.4rem; margin: 0 0 .8rem; color: var(--vs-text); }
+
+    /* Trigger (Modal) */
+    .vsearch__trigger {
+        display: inline-flex; align-items: center; gap: .5rem;
+        padding: .65rem 1rem; border: 1px solid var(--vs-border-strong);
+        background: var(--vs-bg); color: var(--vs-text); border-radius: 8px;
+        cursor: pointer; font-size: .95rem; font-weight: 500;
+        transition: border-color .15s, background .15s, color .15s;
+    }
+    .vsearch__trigger:hover { border-color: var(--vs-accent); background: var(--vs-accent-soft); color: var(--vs-accent); }
+    .vsearch__trigger-icon { color: var(--vs-accent); flex-shrink: 0; }
+
+    /* Modal-Shell — Overlay */
+    .vsearch__shell--modal {
+        position: fixed; inset: 0; z-index: 9999;
+        background: rgba(15, 23, 42, .55);
+        backdrop-filter: blur(4px);
+        display: flex; align-items: flex-start; justify-content: center;
+        padding: 6vh 1rem 2rem;
+        animation: vsearch-fade-in .18s ease-out;
+        overflow-y: auto;
+    }
+    .vsearch__shell--modal[hidden] { display: none; }
+    .vsearch__shell--modal .vsearch__panel {
+        max-width: 720px; width: 100%; background: var(--vs-bg); border-radius: 14px;
+        box-shadow: 0 24px 64px -12px rgba(0,0,0,.4);
+        position: relative; padding: 1.25rem 1.25rem 1rem;
+    }
+
+    /* Inline-Shell */
+    .vsearch--inline .vsearch__panel { background: transparent; }
+
+    @keyframes vsearch-fade-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+
+    /* Close — !important auf alle Geometrie-Werte, sonst quetscht das Theme
+       (z.B. FFA mit globalem button{border-radius:9999px;background:#f15a24})
+       den Button zu einem orangen Oval. */
+    .vsearch__close {
+        position: absolute !important; top: .9rem !important; right: .9rem !important; z-index: 10;
+        width: 36px !important; height: 36px !important; min-width: 36px !important; max-width: 36px !important;
+        padding: 0 !important; margin: 0 !important;
+        border-radius: 50% !important; border: 0 !important;
+        background: rgba(0,0,0,.06) !important; color: rgba(0,0,0,.6) !important;
+        cursor: pointer; display: inline-flex !important; align-items: center; justify-content: center;
+        box-shadow: none !important; text-shadow: none !important;
+        font: 0/0 monospace;
+        flex: none !important;
+    }
+    .vsearch__close:hover { background: rgba(0,0,0,.12) !important; color: rgba(0,0,0,.85) !important; }
+    /* SVG nicht zeigen, wir nutzen den Pseudo-Element-X (Theme-resistent). */
+    .vsearch__close svg { display: none !important; }
+    .vsearch__close::before {
+        content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px;
+        background: currentColor; transform: translate(-50%, -50%) rotate(45deg);
+    }
+    .vsearch__close::after {
+        content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px;
+        background: currentColor; transform: translate(-50%, -50%) rotate(-45deg);
+    }
+    /* Suchfeld neben dem Close-Button etwas Platz lassen */
+    .vsearch__shell--modal .vsearch__form { padding-right: 2.8rem; }
+
+    /* Suchfeld */
+    .vsearch__form { margin: 0 0 .9rem; }
+    .vsearch__inputwrap { position: relative; }
+    .vsearch__inputicon {
+        position: absolute; left: 1rem; top: 50%; transform: translateY(-50%);
+        color: var(--vs-text-muted); pointer-events: none;
+    }
+    .vsearch__input {
+        width: 100%; padding: .85rem 1rem .85rem 2.8rem; font-size: 1.05rem;
+        border: 1px solid var(--vs-border); border-radius: 10px;
+        background: var(--vs-bg); color: var(--vs-text);
+        transition: border-color .15s, box-shadow .15s;
+    }
+    .vsearch__input:focus { outline: 0; border-color: var(--vs-accent); box-shadow: 0 0 0 3px var(--vs-accent-soft); }
+
+    /* Toolbar — Meta + Facets */
+    .vsearch__toolbar { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: .25rem 0 .8rem; border-bottom: 1px solid var(--vs-border); margin-bottom: .8rem; }
+    .vsearch__meta { color: var(--vs-text-muted); font-size: .85rem; margin: 0; }
+    .vsearch__facets { display: flex; gap: .35rem; flex-wrap: wrap; }
+    /* Facet-Pills — !important, sonst kapert das Theme (orange Buttons im FFA)
+       die Hintergrundfarbe und der "Alle"-Pill ist immer aktiv-orange. */
+    .vsearch__facet {
+        padding: .3rem .8rem !important; font-size: .82rem !important;
+        border: 1px solid var(--vs-border) !important;
+        border-radius: 999px !important; cursor: pointer;
+        background: var(--vs-bg) !important; color: var(--vs-text-muted) !important;
+        box-shadow: none !important; text-shadow: none !important;
+        transition: all .15s;
+        font-weight: 500 !important;
+    }
+    .vsearch__facet:hover { border-color: var(--vs-accent) !important; color: var(--vs-accent) !important; background: var(--vs-bg) !important; }
+    .vsearch__facet--active, .vsearch__facet--active:hover { background: var(--vs-accent) !important; color: #fff !important; border-color: var(--vs-accent) !important; }
+
+    /* Liste */
+    .vsearch__results { margin: 0; max-height: 60vh; overflow-y: auto; padding-right: .25rem; }
+    .vsearch__list { list-style: none !important; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+    .vsearch__list li {
+        list-style: none !important;
+        padding: 0; border: 1px solid var(--vs-border);
+        border-radius: 10px; background: var(--vs-bg);
+        transition: border-color .15s, box-shadow .15s, transform .1s;
+    }
+    .vsearch__list li::before, .vsearch__list li::marker { content: none !important; display: none !important; }
+    .vsearch__list li:hover { border-color: var(--vs-accent); box-shadow: 0 4px 16px -8px rgba(74,128,135,.35); }
+    .vsearch__list a {
+        color: inherit; text-decoration: none;
+        display: flex; gap: .9rem; padding: .85rem 1rem;
+    }
+
+    .vs-icon {
+        flex-shrink: 0; width: 42px; height: 42px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 10px; background: var(--vs-accent-soft); color: var(--vs-accent);
+    }
+    /* Datei-Icons: Farbe pro Format, damit man PDF/DOCX/TXT auf einen Blick erkennt. */
+    .vs-icon--file { background: #f3f4f6; color: #4b5563; }
+    .vs-icon--pdf { background: #fee2e2; color: #b91c1c; }
+    .vs-icon--docx, .vs-icon--doc { background: #dbeafe; color: #1d4ed8; }
+    .vs-icon--xlsx, .vs-icon--xls { background: #d1fae5; color: #047857; }
+    .vs-icon--pptx, .vs-icon--ppt { background: #fed7aa; color: #c2410c; }
+    .vs-icon--odt { background: #e0e7ff; color: #4338ca; }
+    .vs-icon--rtf { background: #f3e8ff; color: #7e22ce; }
+    .vs-icon--txt, .vs-icon--md { background: #f3f4f6; color: #374151; }
+
+    .vs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+    .vs-title { font-weight: 600; font-size: 1rem; color: var(--vs-text); margin: 0; line-height: 1.35; display: inline-flex; align-items: center; gap: .35rem; }
+    .vs-lock {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 18px; height: 18px;
+        color: #a16207; background: rgba(202, 138, 4, 0.12); border-radius: 4px;
+        flex-shrink: 0;
+    }
+    .vs-url {
+        font-size: .78rem; color: var(--vs-accent);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        line-height: 1.3; margin: 0;
+    }
+    .vs-snippet { font-size: .88rem; color: var(--vs-text-muted); line-height: 1.5; margin: .2rem 0 0; }
+    .vsearch__list mark { background: var(--vs-mark); color: var(--vs-text); padding: 0 2px; border-radius: 2px; font-weight: 600; }
+
+    /* Empty-State */
+    .vsearch__empty { padding: 2.5rem 1rem; text-align: center; color: var(--vs-text-muted); }
+    .vsearch__empty-icon { color: rgba(0,0,0,.18); margin-bottom: .8rem; }
+    .vsearch__empty-title { font-size: 1.05rem; font-weight: 600; color: var(--vs-text); margin: 0 0 .35rem; }
+    .vsearch__empty-hint { font-size: .9rem; margin: 0; }
+
+    /* Loading */
+    .vsearch__loading { padding: 2rem; text-align: center; color: var(--vs-text-muted); font-size: .9rem; }
+</style>
+
+<script>
+(function () {
+    'use strict';
+    var boxes = document.querySelectorAll('[data-vsearch]:not([data-vsearch-init])');
+    if (!boxes.length) return;
+
+    boxes.forEach(function (box) {
+        box.setAttribute('data-vsearch-init', '1');
+
+        var mode = box.dataset.mode;
+        var input = box.querySelector('[data-vsearch-input]');
+        var resultsBox = box.querySelector('[data-vsearch-results]');
+        var resultsList = box.querySelector('[data-vsearch-list]');
+        var toolbar = box.querySelector('[data-vsearch-toolbar]');
+        var meta = box.querySelector('[data-vsearch-meta]');
+        var facetsBox = box.querySelector('[data-vsearch-facets]');
+        var apiUrl = box.dataset.apiUrl;
+        var locale = box.dataset.locale;
+        var minChars = parseInt(box.dataset.minChars, 10) || 3;
+        var limit = parseInt(box.dataset.limit, 10) || 10;
+
+        var debounceTimer = null;
+        var lastQuery = '';
+        var ctrl = null;
+        var currentTypeFilter = '';
+
+        // Modal
+        if (mode === 'modal') {
+            var trigger = box.querySelector('[data-vsearch-trigger]');
+            var shell = box.querySelector('[data-vsearch-shell]');
+            var close = box.querySelector('[data-vsearch-close]');
+
+            function openModal() {
+                shell.hidden = false;
+                document.body.style.overflow = 'hidden';
+                setTimeout(function () { input.focus(); }, 60);
+            }
+            function closeModal() {
+                shell.hidden = true;
+                document.body.style.overflow = '';
+                resultsBox.hidden = true;
+                if (toolbar) toolbar.hidden = true;
+                input.value = '';
+                lastQuery = '';
+                currentTypeFilter = '';
+            }
+
+            trigger.addEventListener('click', openModal);
+            close.addEventListener('click', closeModal);
+            shell.addEventListener('click', function (e) { if (e.target === shell) closeModal(); });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && !shell.hidden) closeModal();
+            });
+            document.addEventListener('keydown', function (e) {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                    e.preventDefault();
+                    if (shell.hidden) openModal(); else closeModal();
+                }
+            });
+        }
+
+        input.addEventListener('input', function () {
+            var q = input.value.trim();
+            if (q.length < minChars) {
+                resultsBox.hidden = true;
+                if (toolbar) toolbar.hidden = true;
+                return;
+            }
+            if (q === lastQuery) return;
+            lastQuery = q;
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(function () { runSearch(q); }, 220);
+        });
+
+        function runSearch(q) {
+            if (ctrl) ctrl.abort();
+            ctrl = new AbortController();
+            var url = apiUrl + '?q=' + encodeURIComponent(q) + '&locale=' + encodeURIComponent(locale) + '&limit=' + limit;
+            if (currentTypeFilter) url += '&type=' + encodeURIComponent(currentTypeFilter);
+
+            resultsBox.hidden = false;
+            resultsList.innerHTML = '<li class="vsearch__loading">Suche läuft…</li>';
+
+            fetch(url, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) { render(data, q); })
+                .catch(function (err) {
+                    if (err.name === 'AbortError') return;
+                    resultsList.innerHTML = '<li class="vsearch__empty"><p class="vsearch__empty-title">Fehler bei der Suche</p><p class="vsearch__empty-hint">Bitte versuche es erneut.</p></li>';
+                });
+        }
+
+        function render(data, q) {
+            resultsList.innerHTML = '';
+
+            if (toolbar) toolbar.hidden = false;
+            meta.textContent = (data.totalHits || 0) + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
+
+            if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, q);
+
+            if (!data.hits || data.hits.length === 0) {
+                resultsList.innerHTML =
+                    '<li class="vsearch__empty">' +
+                        '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+                            '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
+                        '</svg>' +
+                        '<p class="vsearch__empty-title">Keine Treffer</p>' +
+                        '<p class="vsearch__empty-hint">Für „' + escapeHtml(q) + '" haben wir nichts gefunden. Versuch ein anderes Wort.</p>' +
+                    '</li>';
+                return;
+            }
+
+            data.hits.forEach(function (hit) {
+                var li = document.createElement('li');
+                var a = document.createElement('a');
+                a.href = hit.url || '#';
+                a.title = hit.url || '';
+                var ext = '';
+                if (hit.type === 'file') {
+                    var m = String(hit.url || '').match(/\.([a-z0-9]+)(?:[?#]|$)/i);
+                    ext = m ? m[1].toLowerCase() : '';
+                }
+                var iconHtml = hit.type === 'file' ? iconFile(ext) : iconPage();
+                var iconClass = 'vs-icon';
+                if (hit.type === 'file') {
+                    iconClass += ' vs-icon--file vs-icon--' + (ext || 'generic');
+                }
+                var snippet = hit.snippet ? sanitizeWithMark(hit.snippet) : '';
+                // Schloss-Badge bei geschützten Treffern: signalisiert dem Nutzer
+                // dass dieser Eintrag nur durch sein Mitglieder-Login sichtbar
+                // ist. Anonyme Besucher bekommen geschützte Treffer durch den
+                // ACL-Filter ohnehin nicht zu sehen.
+                var lockBadge = hit.isProtected
+                    ? '<span class="vs-lock" title="Nur für Mitglieder sichtbar" aria-label="Geschützter Inhalt">' + iconLock() + '</span>'
+                    : '';
+                a.innerHTML =
+                    '<span class="' + iconClass + '">' + iconHtml + '</span>' +
+                    '<span class="vs-body">' +
+                        '<span class="vs-title">' + sanitizeWithMark(hit.title || '(ohne Titel)') + lockBadge + '</span>' +
+                        (snippet ? '<span class="vs-snippet">' + snippet + '</span>' : '') +
+                    '</span>';
+                li.appendChild(a);
+                resultsList.appendChild(li);
+            });
+        }
+
+        function iconLock() {
+            return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
+                '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>' +
+            '</svg>';
+        }
+
+        function renderFacets(typeFacets, q) {
+            var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel' };
+            var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet="">Alle</button>';
+            Object.keys(typeFacets).forEach(function (type) {
+                var active = currentTypeFilter === type ? ' vsearch__facet--active' : '';
+                var label = labels[type] || type;
+                html += '<button type="button" class="vsearch__facet' + active + '" data-vsearch-facet="' + escapeHtml(type) + '">' + escapeHtml(label) + ' (' + typeFacets[type] + ')</button>';
+            });
+            facetsBox.innerHTML = html;
+            Array.from(facetsBox.querySelectorAll('[data-vsearch-facet]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    currentTypeFilter = btn.dataset.vsearchFacet;
+                    runSearch(q);
+                });
+            });
+        }
+
+        function escapeHtml(s) {
+            return String(s).replace(/[&<>"']/g, function (c) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+            });
+        }
+        function sanitizeWithMark(s) {
+            return escapeHtml(s)
+                .replace(/&lt;mark&gt;/g, '<mark>')
+                .replace(/&lt;\/mark&gt;/g, '</mark>');
+        }
+
+        // Macht einen URL-Pfad lesbar: Files -> nur Dateiname, Pages -> /alias
+        // ohne /files-Prefix oder URL-Encoding-Mist.
+        function prettifyUrl(url, type) {
+            if (!url) return '';
+            try { url = decodeURI(url); } catch (e) {}
+            if (type === 'file') {
+                // Letztes Pfad-Segment = Dateiname
+                var idx = url.lastIndexOf('/');
+                return idx >= 0 ? url.substring(idx + 1) : url;
+            }
+            // Page: nur den letzten relevanten Teil zeigen, kein leeres /
+            return url === '/' ? 'Startseite' : url;
+        }
+
+        function iconFile(ext) {
+            // Datei-Icon mit Format-Label am unteren Rand. Damit erkennt der
+            // User auf einen Blick ob es ein PDF, DOCX, TXT, ... ist.
+            var label = (ext || 'FILE').toUpperCase().substring(0, 4);
+            // Schrift kleiner machen wenn das Label länger als 3 Zeichen wird
+            var fontSize = label.length > 3 ? 4.6 : 5.5;
+            return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
+                '<polyline points="14 2 14 8 20 8"/>' +
+                '<text x="12" y="17" text-anchor="middle" stroke="none" fill="currentColor" font-size="' + fontSize + '" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" letter-spacing="0.3">' + label + '</text>' +
+            '</svg>';
+        }
+        function iconPage() {
+            return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<circle cx="12" cy="12" r="9"/>' +
+                '<line x1="3" y1="12" x2="21" y2="12"/>' +
+                '<path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z"/>' +
+            '</svg>';
+        }
+    });
+})();
+</script>

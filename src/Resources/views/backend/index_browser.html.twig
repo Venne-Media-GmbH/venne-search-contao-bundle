@@ -1,0 +1,158 @@
+{# Standalone-Backend-Page — funktioniert identisch in Contao 4.13 und 5.x.
+   Wir extenden NICHT @Contao/be_main, weil der Path zwischen 4.13 und 5.x
+   variiert. Stattdessen rendern wir die komplette HTML-Seite + verlinken
+   die Contao-Backend-Stylesheets manuell, damit das Look&Feel identisch
+   zum restlichen Backend bleibt. #}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Venne Search · Indexierte Daten</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { background:#1d1d1d; color:#e2e8f0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; margin:0; padding:0; }
+        .vsi-page { padding:24px 32px; max-width:1280px; margin:0 auto; }
+        .vsi-header { display:flex; align-items:center; justify-content:space-between; padding-bottom:16px; border-bottom:1px solid #333; margin-bottom:18px; }
+        .vsi-header h1 { font-size:1.4rem; margin:0; font-weight:600; }
+        .vsi-header a { color:#5b969e; text-decoration:none; font-size:.85rem; }
+        .vsi-header a:hover { text-decoration:underline; }
+        .vsi-toolbar { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; padding:14px 18px; border:1px solid #333; border-radius:8px; background:rgba(255,255,255,0.02); margin-bottom:18px; }
+        .vsi-toolbar label { font-size:.78rem; color:#94a3b8; text-transform:uppercase; letter-spacing:.06em; margin-right:.4rem; }
+        .vsi-toolbar input[type=text], .vsi-toolbar select { background:rgba(255,255,255,0.05); border:1px solid #444; color:#e2e8f0; padding:.45rem .7rem; border-radius:6px; font-size:.9rem; }
+        .vsi-toolbar input[type=text] { min-width:240px; }
+        .vsi-btn { background:#5b969e; color:#0f0f0f; padding:.5rem 1.1rem; border:0; border-radius:6px; cursor:pointer; font-weight:600; font-size:.85rem; text-decoration:none; display:inline-block; }
+        .vsi-btn:hover { background:#6da8b0; }
+        .vsi-btn--ghost { background:transparent; color:#94a3b8; border:1px solid #444; }
+        .vsi-stats { padding:10px 0; color:#94a3b8; font-size:.85rem; margin-bottom:8px; }
+        .vsi-stats strong { color:#e2e8f0; }
+        .vsi-table { width:100%; border-collapse:collapse; }
+        .vsi-table th { text-align:left; font-size:.72rem; text-transform:uppercase; letter-spacing:.08em; color:#94a3b8; padding:10px 12px; border-bottom:1px solid #333; background:rgba(255,255,255,0.03); }
+        .vsi-table td { padding:11px 12px; border-bottom:1px solid #2a2a2a; font-size:.88rem; color:#e2e8f0; vertical-align:top; }
+        .vsi-table tr:hover td { background:rgba(91,150,158,0.05); }
+        .vsi-type { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+        .vsi-type--page { background:rgba(91,150,158,0.15); color:#5b969e; }
+        .vsi-type--file { background:rgba(248,113,113,0.15); color:#f87171; }
+        .vsi-type--article { background:rgba(134,239,172,0.15); color:#86efac; }
+        .vsi-tag { display:inline-block; padding:1px 7px; margin-right:3px; font-size:.7rem; background:rgba(255,255,255,0.06); border-radius:3px; color:#94a3b8; }
+        .vsi-url { color:#5b969e; text-decoration:none; }
+        .vsi-url:hover { text-decoration:underline; }
+        .vsi-empty { padding:40px; text-align:center; color:#64748b; }
+        .vsi-pagination { display:flex; gap:.4rem; padding:14px 0; align-items:center; justify-content:center; }
+        .vsi-pagination a, .vsi-pagination span { padding:.4rem .8rem; border-radius:5px; font-size:.85rem; border:1px solid #333; color:#94a3b8; text-decoration:none; }
+        .vsi-pagination a:hover { background:rgba(91,150,158,0.1); color:#fff; }
+        .vsi-pagination .vsi-current { background:#5b969e; color:#0f0f0f; border-color:#5b969e; font-weight:600; }
+        .vsi-error { padding:18px; border:1px solid #f87171; border-radius:8px; background:rgba(248,113,113,0.06); color:#fca5a5; margin-bottom:16px; }
+    </style>
+</head>
+<body>
+<div class="vsi-page">
+    <div class="vsi-header">
+        <h1>Venne Search · Indexierte Daten</h1>
+        <a href="/contao?do=venne_search">← Zurück zu Venne Search</a>
+    </div>
+
+{% if not configured %}
+    <div class="vsi-error">
+        <strong>Noch nicht konfiguriert.</strong><br>
+        Trag deinen API-Key unter <a href="/contao?do=venne_search" style="color:#fca5a5;text-decoration:underline;">System → Venne Search</a> ein, dann starte einen Komplett-Reindex.
+    </div>
+{% else %}
+
+    {% if error is defined and error %}
+        <div class="vsi-error">
+            <strong>Index nicht erreichbar:</strong> {{ error }}<br>
+            Wahrscheinlich noch keine Daten indexiert. Geh zu <a href="/contao?do=venne_search" style="color:#fca5a5;text-decoration:underline;">Venne Search</a> und klick „Komplett-Reindex".
+        </div>
+    {% endif %}
+
+    <form method="get" class="vsi-toolbar">
+        <input type="hidden" name="page" value="1">
+        <label>Suche</label>
+        <input type="text" name="q" value="{{ currentQuery }}" placeholder="z.B. spongebob, café, masse…">
+
+        <label>Typ</label>
+        <select name="type">
+            <option value=""{% if currentType == '' %} selected{% endif %}>Alle</option>
+            <option value="page"{% if currentType == 'page' %} selected{% endif %}>Seiten</option>
+            <option value="article"{% if currentType == 'article' %} selected{% endif %}>Artikel</option>
+            <option value="file"{% if currentType == 'file' %} selected{% endif %}>Dateien</option>
+        </select>
+
+        {% if enabledLocales|length > 1 %}
+            <label>Sprache</label>
+            <select name="locale">
+                {% for loc in enabledLocales %}
+                    <option value="{{ loc }}"{% if currentLocale == loc %} selected{% endif %}>{{ loc|upper }}</option>
+                {% endfor %}
+            </select>
+        {% else %}
+            <input type="hidden" name="locale" value="{{ currentLocale }}">
+        {% endif %}
+
+        <button type="submit" class="vsi-btn">Filtern</button>
+        {% if currentQuery != '' or currentType != '' %}
+            <a href="?locale={{ currentLocale }}" class="vsi-btn vsi-btn--ghost">Zurücksetzen</a>
+        {% endif %}
+    </form>
+
+    <div class="vsi-stats">
+        <strong>{{ totalDocuments|number_format(0, ',', '.') }}</strong> Dokumente im Index
+        {% if currentQuery != '' or currentType != '' %}(gefiltert){% endif %}
+        · {{ queryTimeMs }} ms
+        {% if facets is defined and facets is not empty %}
+            ·
+            {% for type, count in facets %}
+                <span class="vsi-type vsi-type--{{ type }}">{{ type }}</span> {{ count }}
+            {% endfor %}
+        {% endif %}
+    </div>
+
+    {% if documents is empty %}
+        <div class="vsi-empty">
+            {% if currentQuery != '' %}
+                Keine Treffer für „{{ currentQuery }}".
+            {% else %}
+                Noch keine Dokumente im Index. Geh zu <a href="/contao?do=venne_search" class="vsi-url">Venne Search</a> und klick „Komplett-Reindex".
+            {% endif %}
+        </div>
+    {% else %}
+        <table class="vsi-table">
+            <thead>
+                <tr>
+                    <th style="width:90px">Typ</th>
+                    <th>Titel</th>
+                    <th>URL</th>
+                    <th style="width:120px">Tags</th>
+                    <th style="width:130px">Indexiert</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for doc in documents %}
+                    <tr>
+                        <td><span class="vsi-type vsi-type--{{ doc.type|default('page') }}">{{ doc.type|default('page') }}</span></td>
+                        <td><strong>{{ doc.title|default('(ohne Titel)') }}</strong></td>
+                        <td>{% if doc.url is defined and doc.url %}<a href="{{ doc.url }}" target="_blank" rel="noopener" class="vsi-url">{{ doc.url }}</a>{% else %}—{% endif %}</td>
+                        <td>{% for tag in doc.tags|default([]) %}<span class="vsi-tag">{{ tag }}</span>{% endfor %}</td>
+                        <td>{% if doc.indexed_at is defined and doc.indexed_at %}{{ doc.indexed_at|date('d.m.Y H:i') }}{% else %}—{% endif %}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        {% if totalPages > 1 %}
+            <div class="vsi-pagination">
+                {% if currentPage > 1 %}
+                    <a href="?page={{ currentPage - 1 }}&q={{ currentQuery }}&type={{ currentType }}&locale={{ currentLocale }}">← Zurück</a>
+                {% endif %}
+                <span class="vsi-current">{{ currentPage }} / {{ totalPages }}</span>
+                {% if currentPage < totalPages %}
+                    <a href="?page={{ currentPage + 1 }}&q={{ currentQuery }}&type={{ currentType }}&locale={{ currentLocale }}">Weiter →</a>
+                {% endif %}
+            </div>
+        {% endif %}
+    {% endif %}
+
+{% endif %}
+</div>
+</body>
+</html>

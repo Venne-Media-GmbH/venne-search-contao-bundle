@@ -1,0 +1,92 @@
+# Frontend-API für AJAX-Suche.
+# _scope:frontend ist wichtig — sonst läuft der Endpoint außerhalb der
+# Contao-Frontend-Firewall, das Member-Cookie wird nicht gelesen und
+# der TokenStorage liefert anonym. Ohne diese Zeile sieht ein einge-
+# loggter Member dieselben Treffer wie ein anonymer Besucher.
+venne_search_api:
+    path: /vsearch/api
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\FrontendSearchController::search
+    defaults:
+        _scope: frontend
+    methods: [GET]
+
+# Backend: Liste aller indexierten Dokumente (eigene Backend-Page,
+# verlinkt aus dem Sidebar-Modul "venne_search_index").
+venne_search_backend_index:
+    path: /contao/venne-search/index
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\IndexBrowserController
+    defaults:
+        _scope: backend
+        _token_check: true
+    methods: [GET]
+
+# Backend: JSON-Status für den Fortschrittsbalken (Legacy).
+venne_search_backend_progress:
+    path: /contao/venne-search/progress
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ProgressController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [GET]
+
+# Backend: SSE-Stream-Reindex (Legacy).
+venne_search_backend_reindex_stream:
+    path: /contao/venne-search/reindex-stream
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexStreamController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [GET]
+
+# === PLAN-FIRST-API (v0.3.0) ===
+# Bewusst FLAT-PFADE (mit Bindestrich, kein Sub-Slash) — Contao 4.13
+# hat mit verschachtelten /reindex/plan Sub-Routen unter _scope:backend
+# Routing-Probleme. Die alten Routen (reindex-stream, progress) sind
+# auch flat, die haben funktioniert.
+# GET + POST beides erlaubt — POST ist primär, GET als Diagnose-Fallback.
+
+venne_search_backend_reindex_plan:
+    path: /contao/venne-search/reindex-plan
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexPlanController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [GET, POST]
+
+venne_search_backend_reindex_item:
+    path: /contao/venne-search/reindex-item
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexItemController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [GET, POST]
+
+venne_search_backend_reindex_finalize:
+    path: /contao/venne-search/reindex-finalize
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexFinalizeController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [GET, POST]
+
+# v0.4.0: Einzelne / mehrere Docs gezielt aus dem Index entfernen
+# (UI im Index-Browser-Panel + Bulk-Aktion "Alle protected entfernen").
+venne_search_backend_reindex_remove:
+    path: /contao/venne-search/reindex-remove
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexRemoveController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]
+
+# v1.0.0: Einzelne Doc per Refresh-Button im Documents-Panel reindexieren.
+# Nimmt eine docId entgegen ("page-42" oder "file-<uuid-hex>") und löst
+# das passende Item selbst aus DB auf — das spart dem Frontend einen
+# separaten Plan-Lookup pro Refresh-Klick.
+venne_search_backend_reindex_single:
+    path: /contao/venne-search/reindex-single
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\ReindexSingleController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]

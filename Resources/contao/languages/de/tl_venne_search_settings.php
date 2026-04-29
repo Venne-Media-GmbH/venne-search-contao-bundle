@@ -9,6 +9,7 @@ declare(strict_types=1);
 // Legends (Form-Gruppen)
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['verbindung_legend'] = 'Verbindung';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['indexing_legend'] = 'Indexierung';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['search_legend'] = 'Suchverhalten';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_legend'] = 'Index aktualisieren';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['security_legend'] = 'Sicherheit & Zugriff';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['status_legend'] = 'Status';
@@ -35,6 +36,15 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['index_pdfs'] = [
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['auto_indexing'] = [
     'Automatisch indexieren',
     'Reindex bei jedem Save und nach Datei-Upload/-Löschen.',
+];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness'] = [
+    'Suchstärke',
+    'Wie tolerant soll die Suche bei Tippfehlern sein? <strong>Streng</strong>: kurze Suchbegriffe wie „Di" oder „vegan" matchen nur exakt — verhindert false positives. <strong>Ausgewogen</strong>: empfohlen für die meisten Sites. <strong>Tolerant</strong>: findet auch grobe Vertipper, kann aber bei kurzen Begriffen ungewollte Treffer liefern.',
+];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness_options'] = [
+    'strict' => 'Streng — exakte Treffer bei kurzen Suchbegriffen',
+    'balanced' => 'Ausgewogen (empfohlen)',
+    'tolerant' => 'Tolerant — findet auch grobe Vertipper',
 ];
 
 // Operations

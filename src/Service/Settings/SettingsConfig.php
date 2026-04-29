@@ -23,6 +23,23 @@ final class SettingsConfig
     public const MODE_WHITELIST = 'whitelist';
     public const MODE_BLACKLIST = 'blacklist';
 
+    /**
+     * Such-Strenge — beeinflusst Tippfehler-Toleranz und Prefix-Match.
+     *
+     *   strict: ab Wortlänge 8 = 1 Tippfehler, ab 12 = 2.
+     *           Verhindert Treffer wie "vegan" → "verantwortung" oder
+     *           "Di Caprio" → "DFFF 2018" (kurze Tokens wie "di" matchen nur exakt).
+     *   balanced: ab 6 = 1 Tippfehler, ab 10 = 2.
+     *             Sinnvoller Mittelweg: deutsche Komposita werden noch
+     *             gefunden, aber 2-3-Buchstaben-Tokens nicht mehr fuzzy.
+     *   tolerant: Meilisearch-Default (5 = 1 Tippfehler, 9 = 2). Findet
+     *             auch grobe Vertipper wie "Krabbnburger" → "Krabbenburger",
+     *             produziert aber bei kurzen Suchbegriffen viele false positives.
+     */
+    public const STRICTNESS_STRICT = 'strict';
+    public const STRICTNESS_BALANCED = 'balanced';
+    public const STRICTNESS_TOLERANT = 'tolerant';
+
     public function __construct(
         public readonly string $endpoint,
         public readonly string $apiKey,
@@ -42,6 +59,8 @@ final class SettingsConfig
         public readonly array $includedPaths = [],
         /** Auto-Indexing über Backend-Hooks aktiv (Default: true). */
         public readonly bool $autoIndexing = true,
+        /** Such-Strenge (siehe STRICTNESS_* Konstanten). Default: balanced. */
+        public readonly string $searchStrictness = self::STRICTNESS_BALANCED,
     ) {
     }
 }

@@ -29,8 +29,12 @@ foreach (['vsearch_display_mode', 'vsearch_trigger_label', 'vsearch_placeholder'
 }
 
 // Falls tl_module-DCA noch nicht geladen war (Reihenfolge), explizit definieren.
+// WICHTIG: jedes Field bekommt explizit ein 'label', sonst rendert Contao
+// im Inhaltselement-Editor die Raw-Spaltennamen ("vsearch_display_mode"
+// statt "Anzeige").
 if (!isset($GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_display_mode'])) {
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_display_mode'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_display_mode'],
         'inputType' => 'select',
         'options' => ['inline', 'modal'],
         'reference' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_display_modes'],
@@ -38,31 +42,37 @@ if (!isset($GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_display_mode'])) 
         'sql' => "varchar(16) NOT NULL default 'inline'",
     ];
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_trigger_label'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_trigger_label'],
         'inputType' => 'text',
         'eval' => ['maxlength' => 64, 'tl_class' => 'w50', 'placeholder' => 'Suche öffnen'],
         'sql' => "varchar(64) NOT NULL default ''",
     ];
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_placeholder'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_placeholder'],
         'inputType' => 'text',
         'eval' => ['maxlength' => 64, 'tl_class' => 'w50', 'placeholder' => 'Suche…'],
         'sql' => "varchar(64) NOT NULL default ''",
     ];
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_button_label'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_button_label'],
         'inputType' => 'text',
         'eval' => ['maxlength' => 32, 'tl_class' => 'w50', 'placeholder' => 'Suchen'],
         'sql' => "varchar(32) NOT NULL default ''",
     ];
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_min_chars'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_min_chars'],
         'inputType' => 'text',
         'eval' => ['rgxp' => 'natural', 'tl_class' => 'w50', 'placeholder' => '3'],
         'sql' => 'int(2) unsigned NOT NULL default 3',
     ];
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_limit'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_limit'],
         'inputType' => 'text',
         'eval' => ['rgxp' => 'natural', 'tl_class' => 'w50', 'placeholder' => '10'],
         'sql' => 'int(3) unsigned NOT NULL default 10',
     ];
     $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_show_facets'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_show_facets'],
         'inputType' => 'checkbox',
         'eval' => ['tl_class' => 'w50 m12'],
         'sql' => "char(1) NOT NULL default '1'",

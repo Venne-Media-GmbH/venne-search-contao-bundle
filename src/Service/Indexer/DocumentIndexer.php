@@ -84,6 +84,19 @@ final class DocumentIndexer
         'gruss' => ['gruß'],
     ];
 
+    /**
+     * typoTolerance-Profile pro Suchstärke. Werte sind Schwellen ab denen
+     * Meilisearch 1 bzw. 2 Tippfehler erlaubt.
+     *
+     * Beispiel STRICT: oneTypo=8 → Wörter mit ≤7 Zeichen müssen exakt matchen.
+     * "vegan" (5 Zeichen) findet damit NUR "vegan", nicht mehr "verantwortung".
+     */
+    private const TYPO_PROFILES = [
+        'strict' => ['oneTypo' => 8, 'twoTypos' => 12],
+        'balanced' => ['oneTypo' => 6, 'twoTypos' => 10],
+        'tolerant' => ['oneTypo' => 5, 'twoTypos' => 9],
+    ];
+
     public function __construct(
         private readonly Client $meilisearch,
         private readonly SettingsRepository $settings,
@@ -116,6 +129,40 @@ final class DocumentIndexer
 
         if ($locale === 'de') {
             $index->updateSynonyms(self::DEFAULT_SYNONYMS_DE);
+        }
+
+        // Such-Strenge: typoTolerance + prefix-search entsprechend setzen.
+        // Bei strict deaktivieren wir zusätzlich Prefix-Search — sonst matcht
+        // eine 2-Buchstaben-Query wie "Di" alles was mit "di…" anfängt
+        // (Dokumentation, Direktor, …). Das ist genau der User-Bug.
+        try {
+            $config = $this->settings->load();
+            $profile = self::TYPO_PROFILES[$config->searchStrictness] ?? self::TYPO_PROFILES['balanced'];
+            $index->updateTypoTolerance([
+                'enabled' => true,
+                'minWordSizeForTypos' => [
+                    'oneTypo' => $profile['oneTypo'],
+                    'twoTypos' => $profile['twoTypos'],
+                ],
+            ]);
+            // updateSearchCutoffMs gibt es nicht für alle Meili-Versionen.
+            // updatePrefixSearch ist erst in Meilisearch 1.12+ verfügbar —
+            // bei älteren Servern fängt das try/catch unten ab.
+            try {
+                if ($config->searchStrictness === 'strict') {
+                    $index->updateSettings(['prefixSearch' => 'disabled']);
+                } else {
+                    // Default zurücksetzen (falls vorher strict war).
+                    $index->updateSettings(['prefixSearch' => 'indexingTime']);
+                }
+            } catch (\Throwable) {
+                // Ältere Meili-Version ohne prefixSearch-Support — egal.
+            }
+        } catch (\Throwable $e) {
+            // Settings nicht ladbar (z.B. in Migrations-Phase) — Default belassen.
+            $this->logger->warning('venne_search.indexer.typo_tolerance_skipped', [
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 

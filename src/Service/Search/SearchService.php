@@ -60,6 +60,25 @@ final class SearchService
             'sort' => ['indexed_at:desc'],
         ];
 
+        // Strenge Such-Strategie: bei "strict" zwingen wir Meilisearch dazu,
+        // ALLE Query-Tokens zu finden (kein partielles Match). Das verhindert
+        // u.a. dass eine Query "Di Caprio" auch Pages mit nur "die" matched.
+        // Außerdem quoten wir kurze Tokens (≤3 Zeichen) als Phrase, damit
+        // Meilisearch sie nicht als Prefix-Match auf längere Wörter wertet
+        // ("Di" sonst → "die", "DFFF" usw.).
+        if ($config->searchStrictness === 'strict') {
+            $params['matchingStrategy'] = 'all';
+            $query = $this->quoteShortTokens($query);
+        } elseif ($config->searchStrictness === 'balanced') {
+            // Bei balanced behalten wir last-Match (Default), aber Single-Token-
+            // Queries unter 3 Zeichen quoten wir trotzdem — sonst sind die
+            // Treffer nicht sinnvoll.
+            $tokens = preg_split('/\s+/', trim($query)) ?: [];
+            if (\count($tokens) === 1 && mb_strlen($tokens[0]) <= 3) {
+                $query = '"' . str_replace('"', '', $tokens[0]) . '"';
+            }
+        }
+
         // Permission-Filter ist HARD-REQUIRED: nur Dokumente die der aktuelle
         // User sehen darf. Anonyme User sehen nur is_protected=false. Eingeloggte
         // sehen zusätzlich alle Docs deren allowed_groups eine ihrer Gruppen-IDs
@@ -136,6 +155,34 @@ final class SearchService
             return 'is_protected != true';
         }
         return 'is_protected != true OR allowed_groups IN [' . implode(', ', $clean) . ']';
+    }
+
+/**
+     * Umgibt kurze Tokens (≤3 Zeichen) mit Quotes, damit Meilisearch sie als
+     * Phrase versteht — kein Prefix-Match, kein Tippfehler. Längere Tokens
+     * bleiben unangetastet, damit der "Vegane Rezepte"-Treffer für "vegane"
+     * weiterhin funktioniert.
+     */
+    private function quoteShortTokens(string $query): string
+    {
+        $tokens = preg_split('/\s+/', trim($query)) ?: [];
+        $out = [];
+        foreach ($tokens as $token) {
+            if ($token === '') {
+                continue;
+            }
+            // Bereits quoted? Dann unverändert übernehmen.
+            if ($token[0] === '"') {
+                $out[] = $token;
+                continue;
+            }
+            if (mb_strlen($token) <= 3) {
+                $out[] = '"' . str_replace('"', '', $token) . '"';
+            } else {
+                $out[] = $token;
+            }
+        }
+        return implode(' ', $out);
     }
 
     /**

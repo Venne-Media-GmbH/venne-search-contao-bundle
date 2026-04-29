@@ -90,6 +90,18 @@ final class SettingsRepository
         // Auto-Indexing standardmäßig an (Default '1' in der DCA, leer/0 deaktiviert).
         $autoIndexing = (string) ($row['auto_indexing'] ?? '1') === '1';
 
+        // Such-Strenge: nur die drei Konstanten sind erlaubt — ungültige Werte
+        // (z.B. wenn die Spalte in einer alten DB noch fehlt) fallen auf Default.
+        $rawStrictness = (string) ($row['search_strictness'] ?? '');
+        $allowedStrictness = [
+            SettingsConfig::STRICTNESS_STRICT,
+            SettingsConfig::STRICTNESS_BALANCED,
+            SettingsConfig::STRICTNESS_TOLERANT,
+        ];
+        $searchStrictness = \in_array($rawStrictness, $allowedStrictness, true)
+            ? $rawStrictness
+            : SettingsConfig::STRICTNESS_BALANCED;
+
         // Default-Blacklist: wenn der User noch nichts ausgewählt hat,
         // schützen wir konventionell die typischen Admin-Verzeichnisse.
         if ($excludedPaths === []) {
@@ -112,6 +124,7 @@ final class SettingsRepository
                 excludedPaths: $excludedPaths,
                 includedPaths: $includedPaths,
                 autoIndexing: $autoIndexing,
+                searchStrictness: $searchStrictness,
             );
         }
 
@@ -130,6 +143,7 @@ final class SettingsRepository
             excludedPaths: $excludedPaths,
             includedPaths: $includedPaths,
             autoIndexing: $autoIndexing,
+            searchStrictness: $searchStrictness,
         );
     }
 

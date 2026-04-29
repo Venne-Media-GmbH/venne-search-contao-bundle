@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,index_pdfs,auto_indexing;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{documents_legend},documents_panel',
+        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,index_pdfs,auto_indexing;{search_legend},search_strictness;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -120,6 +120,44 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
             'default' => '1',
             'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
             'sql' => "char(1) NOT NULL default '1'",
+        ],
+        'search_strictness' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness'],
+            'inputType' => 'select',
+            'options' => ['strict', 'balanced', 'tolerant'],
+            'reference' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness_options'],
+            'default' => 'balanced',
+            'eval' => ['tl_class' => 'w50', 'submitOnChange' => true],
+            'sql' => "varchar(16) NOT NULL default 'balanced'",
+            'save_callback' => [
+                // Wenn die Strenge geändert wird, müssen die Index-Settings
+                // neu geschrieben werden — sonst greift die neue Toleranz
+                // erst beim nächsten Reindex. Wir triggern das hier direkt.
+                static function ($value) {
+                    try {
+                        $container = \Contao\System::getContainer();
+                        $settings = $container?->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Settings\\SettingsRepository');
+                        $indexer = $container?->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Indexer\\DocumentIndexer');
+                        if ($settings && $indexer && $settings->isConfigured()) {
+                            // Cache invalidieren damit der neue Wert wirklich greift
+                            $container->get('database_connection')
+                                ?->executeStatement(
+                                    'UPDATE tl_venne_search_settings SET search_strictness = ?, resolve_cache = NULL WHERE id = 1',
+                                    [(string) $value],
+                                );
+                            $config = $settings->load();
+                            foreach ($config->enabledLocales as $locale) {
+                                try {
+                                    $indexer->ensureIndex($locale);
+                                } catch (\Throwable) {
+                                }
+                            }
+                        }
+                    } catch (\Throwable) {
+                    }
+                    return $value;
+                },
+            ],
         ],
         'reindex_button' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'],

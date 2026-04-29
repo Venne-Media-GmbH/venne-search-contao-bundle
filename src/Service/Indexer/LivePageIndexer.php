@@ -307,11 +307,45 @@ final class LivePageIndexer
     }
 
     /**
-     * Generiert die Frontend-URL rein aus DB-Daten — KEINE Contao-Framework-
-     * Aufrufe (PageModel, UrlGenerator) im Indexer-Kontext, die crashen.
+     * Drei-Stufen-URL-Generierung: ContentUrlGenerator (5.3+), PageModel::getFrontendUrl
+     * (4.13 / 5.0-5.2), Fallback aus DB.
      */
     private function resolvePageUrl(int $pageId, string $aliasFallback): string
     {
+        try {
+            $container = \Contao\System::getContainer();
+            if ($container->has('contao.routing.content_url_generator')
+                && class_exists(\Contao\PageModel::class)) {
+                $page = \Contao\PageModel::findWithDetails($pageId);
+                if ($page !== null) {
+                    $generator = $container->get('contao.routing.content_url_generator');
+                    $url = $generator->generate(
+                        $page,
+                        [],
+                        \Symfony\Component\Routing\Generator\UrlGeneratorInterface::ABSOLUTE_PATH
+                    );
+                    if (\is_string($url) && $url !== '') {
+                        return $this->stripHost($url);
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        try {
+            if (class_exists(\Contao\PageModel::class)) {
+                $page = \Contao\PageModel::findWithDetails($pageId);
+                if ($page !== null) {
+                    /** @phpstan-ignore-next-line — getFrontendUrl ist auf 4.13 deprecated, aber funktional */
+                    $url = @$page->getFrontendUrl();
+                    if (\is_string($url) && $url !== '') {
+                        return $this->stripHost($url);
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
         $alias = ltrim($aliasFallback, '/');
         if ($alias === '' || $alias === 'index') {
             return '/';
@@ -319,12 +353,29 @@ final class LivePageIndexer
         return '/'.$alias.$this->resolveUrlSuffix($pageId);
     }
 
+    private function stripHost(string $url): string
+    {
+        $parts = parse_url($url);
+        if (\is_array($parts) && isset($parts['path'])) {
+            $path = (string) $parts['path'];
+            if ($path !== '' && $path[0] !== '/') {
+                $path = '/' . $path;
+            }
+            if (isset($parts['query']) && $parts['query'] !== '') {
+                $path .= '?' . $parts['query'];
+            }
+            return $path;
+        }
+        return $url !== '' && $url[0] !== '/' ? '/' . $url : $url;
+    }
+
     /**
-     * Liest den URL-Suffix: Root-Page urlSuffix oder Container-Parameter
-     * contao.url_suffix (Default '.html').
+     * Fallback-Suffix-Resolver: nur überschreibend, wenn die Root-Page
+     * urlSuffix EXPLIZIT gesetzt hat (nicht-leer). Sonst globaler Default.
      */
     private function resolveUrlSuffix(int $pageId): string
     {
+        $rootSuffix = null;
         try {
             $current = $pageId;
             for ($i = 0; $i < 50 && $current > 0; $i++) {
@@ -334,14 +385,15 @@ final class LivePageIndexer
                 }
                 if (($row['type'] ?? '') === 'root') {
                     $rootSuffix = (string) ($row['urlSuffix'] ?? '');
-                    if ($rootSuffix !== '') {
-                        return $rootSuffix;
-                    }
                     break;
                 }
                 $current = (int) ($row['pid'] ?? 0);
             }
         } catch (\Throwable) {
+        }
+
+        if ($rootSuffix !== null && $rootSuffix !== '') {
+            return $rootSuffix;
         }
 
         try {

@@ -363,8 +363,53 @@ final class IndexableItemProcessor
         return ['text' => $text, 'reason' => null];
     }
 
+    /**
+     * Erzeugt die Frontend-URL einer Page. Drei-Stufen-Strategie:
+     *   1) Contao 5.3+: ContentUrlGenerator (offizieller Weg, kennt alles)
+     *   2) Contao 4.13 + 5.0–5.2: PageModel::getFrontendUrl (deprecated aber funktional)
+     *   3) Fallback: alias + Root-Page-urlSuffix (oder globaler url_suffix)
+     */
     private function generatePageUrl(int $pageId, string $aliasFallback): string
     {
+        // Stufe 1: ContentUrlGenerator (Contao 5.3+)
+        try {
+            $container = \Contao\System::getContainer();
+            if ($container->has('contao.routing.content_url_generator')
+                && class_exists(\Contao\PageModel::class)) {
+                $page = \Contao\PageModel::findWithDetails($pageId);
+                if ($page !== null) {
+                    $generator = $container->get('contao.routing.content_url_generator');
+                    $url = $generator->generate(
+                        $page,
+                        [],
+                        \Symfony\Component\Routing\Generator\UrlGeneratorInterface::ABSOLUTE_PATH
+                    );
+                    if (\is_string($url) && $url !== '') {
+                        return $this->stripHost($url);
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // ContentUrlGenerator nicht verfügbar oder Page nicht routbar — Stufe 2.
+        }
+
+        // Stufe 2: PageModel::getFrontendUrl (auf 4.13 deprecated, aber kein Drop-in
+        // Replacement vorhanden und liefert die korrekte URL inkl. Suffix).
+        try {
+            if (class_exists(\Contao\PageModel::class)) {
+                $page = \Contao\PageModel::findWithDetails($pageId);
+                if ($page !== null) {
+                    /** @phpstan-ignore-next-line — getFrontendUrl ist auf 4.13 deprecated, aber funktional */
+                    $url = @$page->getFrontendUrl();
+                    if (\is_string($url) && $url !== '') {
+                        return $this->stripHost($url);
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        // Stufe 3: manueller Fallback aus DB-Daten.
         $alias = ltrim($aliasFallback, '/');
         if ($alias === '' || $alias === 'index') {
             return '/';
@@ -372,8 +417,42 @@ final class IndexableItemProcessor
         return '/' . $alias . $this->resolveUrlSuffix($pageId);
     }
 
+    /**
+     * Macht aus einer (evtl. absoluten/scheme-relativen) URL einen sauberen
+     * Pfad mit führendem '/'. Beispiele:
+     *   "https://example.com/home.html"  → "/home.html"
+     *   "//127.0.0.1/home"               → "/home"
+     *   "home.html"                      → "/home.html"   (4.13 getFrontendUrl)
+     *   "/home.html"                     → "/home.html"
+     */
+    private function stripHost(string $url): string
+    {
+        $parts = parse_url($url);
+        if (\is_array($parts) && isset($parts['path'])) {
+            $path = (string) $parts['path'];
+            if ($path !== '' && $path[0] !== '/') {
+                $path = '/' . $path;
+            }
+            if (isset($parts['query']) && $parts['query'] !== '') {
+                $path .= '?' . $parts['query'];
+            }
+            return $path;
+        }
+        // parse_url failed — bestmöglicher Fallback: Slash voranstellen wenn nötig.
+        return $url !== '' && $url[0] !== '/' ? '/' . $url : $url;
+    }
+
+    /**
+     * Liefert das URL-Suffix der Root-Page für $pageId. Auf Contao 4.13 gilt
+     * tl_page.urlSuffix ist NUR überschreibend — wenn dort '' steht, fällt
+     * Contao auf den globalen contao.url_suffix-Parameter zurück (Default '.html').
+     * Auf 5.x ist die urlSuffix-Spalte teils gar nicht mehr da.
+     *
+     * Diese Methode ist nur Fallback — der Hauptpfad nutzt PageModel::getFrontendUrl().
+     */
     private function resolveUrlSuffix(int $pageId): string
     {
+        $rootSuffix = null;
         try {
             $current = $pageId;
             for ($i = 0; $i < 50 && $current > 0; $i++) {
@@ -383,14 +462,17 @@ final class IndexableItemProcessor
                 }
                 if (($row['type'] ?? '') === 'root') {
                     $rootSuffix = (string) ($row['urlSuffix'] ?? '');
-                    if ($rootSuffix !== '') {
-                        return $rootSuffix;
-                    }
                     break;
                 }
                 $current = (int) ($row['pid'] ?? 0);
             }
         } catch (\Throwable) {
+        }
+
+        // Wenn der Root-Page explizit ein nicht-leerer Suffix gesetzt ist,
+        // nutze den. Sonst (leer oder Spalte fehlt) → globaler Fallback.
+        if ($rootSuffix !== null && $rootSuffix !== '') {
+            return $rootSuffix;
         }
 
         try {

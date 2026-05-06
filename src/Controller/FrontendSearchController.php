@@ -42,7 +42,11 @@ final class FrontendSearchController extends AbstractController
         TagRepository $tags,
     ): JsonResponse {
         $query = trim((string) $request->query->get('q', ''));
-        if ($query === '') {
+        // Wenn Tag-Filter gesetzt sind, ist eine leere Volltext-Query OK
+        // (Browse-by-Tag-Modus: User klickt eine Tag-Pill, sieht alle Treffer).
+        $hasTagFilter = \is_array($request->query->all('tags') ?? null)
+            && \count($request->query->all('tags')) > 0;
+        if ($query === '' && !$hasTagFilter) {
             return new JsonResponse([
                 'hits' => [],
                 'totalHits' => 0,

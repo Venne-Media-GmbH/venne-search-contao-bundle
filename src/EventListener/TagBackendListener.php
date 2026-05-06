@@ -55,11 +55,7 @@ final class TagBackendListener
         }
 
         $targets = $this->tags->targetsForTag($tagId);
-        if ($targets === []) {
-            return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;color:#6b7280;font-size:.9rem;">'
-                . 'Diesem Tag ist noch nichts zugewiesen. Geh zurück auf "Venne Search" und nutze den Seitenbaum, um Seiten zu taggen.'
-                . '</div>';
-        }
+        // Auch bei leerer Liste: weiter, damit der Picker gerendert wird.
 
         // Page-Pfade auflösen für die Anzeige (Breadcrumb).
         $pageIds = [];
@@ -74,6 +70,9 @@ final class TagBackendListener
         $pageInfo = $this->resolvePageBreadcrumbs($pageIds);
 
         $rows = '';
+        if ($targets === []) {
+            $rows = '<tr><td colspan="3" style="padding:14px;color:#6b7280;font-style:italic;text-align:center;">Diesem Tag ist noch nichts zugewiesen — Seiten unten auswählen.</td></tr>';
+        }
         foreach ($targets as $t) {
             $type = $t['targetType'];
             $tid = $t['targetId'];
@@ -210,6 +209,11 @@ final class TagBackendListener
     var pickerApply = document.getElementById('vstag-picker-apply');
     var pickerStatus = document.getElementById('vstag-picker-status');
 
+    // Hilfsfunktion: ausgewählte Page-IDs lesen
+    function selectedPageIds() {
+        return Array.from(picker.querySelectorAll('input.vstag-picker-cb:checked')).map(function (cb) { return cb.dataset.id; });
+    }
+
     // Entfernen-Buttons (Bestand)
     if (tbody) tbody.addEventListener('click', function (e) {
         var btn = e.target.closest('.vstag-unassign-btn');
@@ -233,27 +237,22 @@ final class TagBackendListener
     });
 
     // Picker-Toggle
-    if (toggleBtn) toggleBtn.addEventListener('click', function () {
+    if (toggleBtn) toggleBtn.addEventListener('click', function (e) {
+        e.preventDefault();
         picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
         toggleBtn.textContent = picker.style.display === 'block' ? '− Picker schließen' : '+ Seiten zuweisen';
     });
-    if (pickerCancel) pickerCancel.addEventListener('click', function () {
+    if (pickerCancel) pickerCancel.addEventListener('click', function (e) {
+        e.preventDefault();
+        picker.querySelectorAll('input.vstag-picker-cb:checked').forEach(function (cb) { cb.checked = false; });
         picker.style.display = 'none';
         toggleBtn.textContent = '+ Seiten zuweisen';
+        pickerStatus.textContent = '';
     });
 
-    // Auswahl anwenden
-    if (pickerApply) pickerApply.addEventListener('click', function () {
-        var ids = Array.from(picker.querySelectorAll('input.vstag-picker-cb:checked')).map(function (cb) { return cb.dataset.id; });
-        if (ids.length === 0) {
-            pickerStatus.style.color = '#dc2626';
-            pickerStatus.textContent = 'Mindestens eine Seite auswählen.';
-            return;
-        }
-        pickerApply.disabled = true;
-        pickerStatus.style.color = '#6b7280';
-        pickerStatus.textContent = 'Weise zu …';
-        fetch('/contao/venne-search/tag/bulk-assign', {
+    // Bulk-Assign API-Helper
+    function bulkAssign(ids) {
+        return fetch('/contao/venne-search/tag/bulk-assign', {
             method: 'POST',
             headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
             body: JSON.stringify({
@@ -263,7 +262,22 @@ final class TagBackendListener
                 createLabel: TAG_LABEL,
                 createColor: TAG_COLOR,
             }),
-        }).then(function (r) { return r.json(); }).then(function (d) {
+        }).then(function (r) { return r.json(); });
+    }
+
+    // Auswahl anwenden (manuell per Apply-Button)
+    if (pickerApply) pickerApply.addEventListener('click', function (e) {
+        e.preventDefault();
+        var ids = selectedPageIds();
+        if (ids.length === 0) {
+            pickerStatus.style.color = '#dc2626';
+            pickerStatus.textContent = 'Mindestens eine Seite auswählen.';
+            return;
+        }
+        pickerApply.disabled = true;
+        pickerStatus.style.color = '#6b7280';
+        pickerStatus.textContent = 'Weise zu …';
+        bulkAssign(ids).then(function (d) {
             pickerApply.disabled = false;
             if (d.ok) {
                 pickerStatus.style.color = '#10b981';
@@ -279,6 +293,43 @@ final class TagBackendListener
             pickerStatus.textContent = '✗ Netzwerk-Fehler';
         });
     });
+
+    // Auto-Apply beim Save: wenn der User Pages markiert UND auf Speichern
+    // klickt ohne vorher Apply zu drücken, weisen wir die Pages trotzdem
+    // automatisch zu. So kann der User einfach "auswählen → Speichern" denken.
+    var tagForm = document.getElementById('tl_venne_search_tag');
+    if (tagForm) {
+        tagForm.addEventListener('submit', function (e) {
+            // Nur wenn echtes Save geklickt wurde (nicht z.B. nur Form-validation-Trigger)
+            var ids = selectedPageIds();
+            if (ids.length === 0) return; // nichts zu tun, Form-Submit normal
+            if (tagForm.dataset.vstagAssigned === '1') return; // schon erledigt
+            // Submit blocken, erst zuweisen, dann Form erneut submitten.
+            e.preventDefault();
+            // Welcher Submit-Button wurde geklickt?
+            var submitter = e.submitter;
+            bulkAssign(ids).then(function (d) {
+                if (d.ok) {
+                    tagForm.dataset.vstagAssigned = '1';
+                    if (submitter && submitter.name) {
+                        // Einen versteckten Eintrag mit dem Button-Wert anhängen,
+                        // damit Contao den richtigen Action-Mode bekommt
+                        // (saveNclose vs. save vs. saveNcreate).
+                        var hidden = document.createElement('input');
+                        hidden.type = 'hidden';
+                        hidden.name = submitter.name;
+                        hidden.value = submitter.value || '1';
+                        tagForm.appendChild(hidden);
+                    }
+                    tagForm.submit();
+                } else {
+                    alert('Konnte Seiten nicht zuweisen: ' + (d.error || 'unbekannter Fehler'));
+                }
+            }).catch(function () {
+                alert('Netzwerk-Fehler beim Zuweisen — versuch es nochmal.');
+            });
+        });
+    }
 })();
 </script>
 HTML;

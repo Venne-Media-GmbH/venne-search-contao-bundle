@@ -71,23 +71,71 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
                     // Slug bei jedem Save aus Label aktualisieren — User
                     // muss das nicht mehr selbst pflegen, ist intern.
                     if (\is_object($dc) && $value !== '') {
+                        $container = \Contao\System::getContainer();
+                        $db = $container?->get('database_connection');
+                        if ($db === null) {
+                            return $value;
+                        }
+                        $tagId = (int) $dc->id;
+                        $oldSlug = (string) ($db->fetchOne(
+                            'SELECT slug FROM tl_venne_search_tag WHERE id = ?',
+                            [$tagId],
+                        ) ?: '');
+
                         $slug = \VenneMedia\VenneSearchContaoBundle\Migration\Version200\Mig02_AddTagSystem::slugify((string) $value);
-                        if ($slug !== '') {
-                            // Doppelte Slugs vermeiden: hänge -2 an wenn schon vorhanden
-                            // bei einem anderen Datensatz.
-                            $db = \Contao\System::getContainer()?->get('database_connection');
-                            if ($db !== null) {
-                                $exists = $db->fetchOne(
-                                    'SELECT id FROM tl_venne_search_tag WHERE slug = ? AND id <> ?',
-                                    [$slug, (int) $dc->id],
+                        if ($slug === '') {
+                            return $value;
+                        }
+                        // Doppelte Slugs vermeiden
+                        $exists = $db->fetchOne(
+                            'SELECT id FROM tl_venne_search_tag WHERE slug = ? AND id <> ?',
+                            [$slug, $tagId],
+                        );
+                        if ($exists !== false && $exists !== null) {
+                            $slug .= '-' . $tagId;
+                        }
+                        $db->executeStatement(
+                            'UPDATE tl_venne_search_tag SET slug = ? WHERE id = ?',
+                            [$slug, $tagId],
+                        );
+
+                        // Wenn sich der Slug oder das Label geändert hat,
+                        // alle zugewiesenen Pages/Files reindexieren — sonst
+                        // ist der alte Tag-Wert weiter im Such-Index aktiv.
+                        $needsReindex = $oldSlug !== $slug; // Slug-Wechsel = Label hat sich geändert
+                        if ($needsReindex) {
+                            try {
+                                $assignments = $db->fetchAllAssociative(
+                                    'SELECT target_type, target_id FROM tl_venne_search_tag_assignment WHERE tag_id = ?',
+                                    [$tagId],
                                 );
-                                if ($exists !== false && $exists !== null) {
-                                    $slug .= '-' . (int) $dc->id;
+                                $settings = $container->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Settings\\SettingsRepository');
+                                if ($settings && $settings->isConfigured()) {
+                                    $config = $settings->load();
+                                    $processor = $container->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Indexer\\IndexableItemProcessor');
+                                    $projectDir = (string) $container->getParameter('kernel.project_dir');
+                                    foreach ($assignments as $a) {
+                                        $type = (string) $a['target_type'];
+                                        $tid = (string) $a['target_id'];
+                                        if ($type === 'page') {
+                                            $pageId = (int) $tid;
+                                            if ($pageId > 0) {
+                                                @$processor->processItem(
+                                                    ['type' => 'page', 'ref' => $pageId, 'docId' => 'page-' . $pageId],
+                                                    $config,
+                                                    $projectDir,
+                                                );
+                                            }
+                                        } elseif ($type === 'file') {
+                                            @$processor->processItem(
+                                                ['type' => 'file', 'ref' => $tid, 'docId' => 'file-path-' . md5($tid)],
+                                                $config,
+                                                $projectDir,
+                                            );
+                                        }
+                                    }
                                 }
-                                $db->executeStatement(
-                                    'UPDATE tl_venne_search_tag SET slug = ? WHERE id = ?',
-                                    [$slug, (int) $dc->id],
-                                );
+                            } catch (\Throwable) {
                             }
                         }
                     }

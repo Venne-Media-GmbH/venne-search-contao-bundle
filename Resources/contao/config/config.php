@@ -9,7 +9,7 @@ declare(strict_types=1);
  * mitgerendert (siehe DCA-onsubmit_callback / Twig-Snippet).
  */
 $GLOBALS['BE_MOD']['system']['venne_search'] = [
-    'tables' => ['tl_venne_search_settings'],
+    'tables' => ['tl_venne_search_settings', 'tl_venne_search_tag'],
     'icon' => 'bundles/vennesearchcontao/icon.svg',
 ];
 

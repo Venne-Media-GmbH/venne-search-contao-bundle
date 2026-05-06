@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 
 use Doctrine\DBAL\Connection;
+use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
+use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
 use VenneMedia\VenneSearchContaoBundle\Service\Text\TextNormalizer;
 
 /**
@@ -27,6 +29,8 @@ final class IndexableItemProcessor
         private readonly TextNormalizer $normalizer,
         private readonly PdfExtractor $pdfExtractor,
         private readonly PermissionResolver $permissions,
+        private readonly FileLocaleDetector $localeDetector,
+        private readonly TagRepository $tags,
     ) {
     }
 
@@ -139,10 +143,26 @@ final class IndexableItemProcessor
 
         $url = $this->generatePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
-        $tags = array_values(array_filter(array_map(
-            'trim',
-            explode(',', (string) ($pageRow['keywords'] ?? ''))
-        )));
+        // v2.0.0: Tags aus dem zentralen Tag-System.
+        // Wir schreiben sowohl Slug als auch Label ins Tag-Array, damit
+        // (a) der Slug für "?tags[]=neues"-Filter-Queries genutzt werden kann
+        //     und (b) das Label searchable ist (User tippt "neues" → Match).
+        $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
+        $tags = [];
+        foreach ($tagObjects as $t) {
+            $tags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $tags[] = $t['label'];
+            }
+        }
+        // Fallback: Legacy-Keywords-CSV wenn keine Tag-Zuweisungen.
+        if ($tags === []) {
+            $tags = array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) ($pageRow['keywords'] ?? ''))
+            )));
+        }
+        $tags = array_values(array_unique($tags));
 
         $doc = new SearchDocument(
             id: $docId,
@@ -200,8 +220,21 @@ final class IndexableItemProcessor
             ];
         }
 
-        $locale = $config->enabledLocales[0] ?? 'de';
+        // v2.0.0: File-Locale per Detector statt einfach erste enabled_locale.
+        $locale = $this->localeDetector->detect($relativePath, $config);
         $this->indexer->ensureIndex($locale);
+
+        // Tags aus dem Tag-System (Slug + Label, beides searchable) + Extension.
+        $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
+        $fileTags = [];
+        foreach ($tagObjects as $t) {
+            $fileTags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $fileTags[] = $t['label'];
+            }
+        }
+        $fileTags[] = $ext;
+        $fileTags = array_values(array_unique(array_filter($fileTags)));
 
         $doc = new SearchDocument(
             id: $docId,
@@ -210,7 +243,7 @@ final class IndexableItemProcessor
             title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
             url: '/' . ltrim($relativePath, '/'),
             content: $this->normalizer->normalize($text),
-            tags: [$ext],
+            tags: $fileTags,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
         );

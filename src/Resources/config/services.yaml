@@ -47,6 +47,12 @@ services:
     VenneMedia\VenneSearchContaoBundle\Service\Indexer\DocumentIndexer:
         public: true
 
+    VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsRepository:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector:
+        public: true
+
     # Controller müssen public sein, damit Symfony sie als Action invoken kann.
     VenneMedia\VenneSearchContaoBundle\Controller\FrontendSearchController:
         public: true
@@ -84,6 +90,35 @@ services:
         public: true
         tags: ['controller.service_arguments']
 
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\FileLocaleController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagAssignController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagUnassignController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagBulkAssignController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagSuggestController:
+        public: true
+        tags: ['controller.service_arguments']
+
     # Public, damit DCA-input_field_callback ihn statisch über System::getContainer()->get() holen kann.
     VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagBackendListener:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Analytics\SearchAnalyticsBuffer:
         public: true

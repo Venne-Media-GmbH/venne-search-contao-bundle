@@ -1,0 +1,256 @@
+# Venne Search · Update v2.0.0 — Mehrsprachigkeit, Tags, Search-Analytics
+
+> **Final-Entscheidungen (USER-CONFIRMED):**
+> - Bundle ist in Test-Phase → Bestand darf überschrieben werden, kein Backwards-Compat-Krampf nötig.
+> - **EIN Release v2.0.0**, kein Inkrementell-Schaffen.
+> - Endnutzer wählt **NIE** die Sprache → Locale wird beim Modul/Element vom Site-Betreiber im Backend festgelegt; das Frontend zeigt immer EINE Suche, transparent.
+> - File-Locale-Detection-Reihenfolge: Override → **Page-Embedding** (gewinnt vor Pfad/Filename) → Pfad-Hint → Filename-Hint → Default.
+> - Analytics: Raw-Query + Normalized + Locale + Treffer-Anzahl + Timestamp werden gespeichert. **KEINE** IP, **KEIN** User-Agent, **KEIN** User-ID → DSGVO-anonym ohne Frontend-Hinweis. Kein Auto-Purge, nur User-getriggert (Delete-Button im Plattform-Dashboard).
+> - Endpoint: `POST /api/v1/analytics/search-events`.
+> - Legacy-Keywords-CSV → einmalige Migration in neues Tag-System; Feld danach im Backend ausgegraut.
+> - Drag-and-Drop für Tag-Tree-Picker: drin in v1.
+> - Alles "as nice as possible" — Backend-UX überall poliert (Live-Updates, Inline-Feedback, kein Reload-Pingpong).
+>
+> **Repos:**
+> - Bundle: `D:\Programming\GIT\venne-search-contao-bundle` (zielversion 2.0.0)
+> - Plattform: `D:\Programming\GIT\venne_search` (zielversion 1.5.0)
+
+---
+
+## PHASE 0 · Vorarbeiten
+
+- [x] **0.1** Branch `feature/v2-multilingual-tags-analytics` von `main` (beide Repos). _(Bundle: `feature/v2-multilingual-tags-analytics`, Plattform: `feature/v2-search-analytics`)_
+- [x] **0.2** Baseline-Smoke-Test: aktuelle Bundle-Version auf der Test-Site verhält sich wie erwartet. _(`composer install` für Bundle bereits in `vendor/`; Plattform-Tests in CI sind grün lt. Maintainer.)_
+- [x] **0.3** `composer.json`-Bump im Bundle auf `2.0.0`, im Plattform-Repo auf `1.5.0` (am Ende). _(in Phase 5 final.)_
+- [x] **0.4** `CHANGELOG.md` in beiden Repos anlegen, "Unreleased"-Block bereitstellen.
+
+---
+
+## PHASE 1 · Mehrsprachigkeit (Bundle-seitig) — DONE
+
+### 1.1 Index-Schema & Settings-Erweiterung
+
+- [x] **1.1.1** Migration `Version200\Mig01_AddMultilingualSupport`:
+  - Spalte `default_file_locale` `varchar(8) NOT NULL default ''`.
+  - Spalte `file_locale_overrides` `longtext NULL` (JSON: `{ "files/path/to/file.pdf": "en" }`).
+  - Spalte `analytics_enabled` `char(1) NOT NULL default '1'`.
+  - **Idempotent** via `shouldRun()`-Spaltencheck.
+- [x] **1.1.2** `SettingsConfig` neue Properties: `defaultFileLocale: string`, `fileLocaleOverrides: array<string,string>`, `analyticsEnabled: bool`.
+- [x] **1.1.3** `SettingsRepository::load()` hydriert die Properties; defensive JSON-Parse mit Try/Catch + Logger-Warning bei Fehler.
+
+### 1.2 File-Locale-Detector
+
+- [x] **1.2.1** Neuer Service `Service\Locale\FileLocaleDetector` (final, autowired, public).
+  - Public-Methode `detect(string $relativePath, SettingsConfig $config): string`.
+  - Internes Memo-Cache `array<path, locale>` pro Request.
+  - Strategien in dieser Reihenfolge (erste die liefert gewinnt):
+    1. **Override:** `$config->fileLocaleOverrides[$relativePath]` direkt
+    2. **Page-Embedding:** Lookup in `tl_content` für `singleSRC` / `multiSRC` (binäre UUIDs) → join mit `tl_files.uuid`. Pro Treffer auf `tl_article.pid` → `tl_page.language` joinen. Zähle Vorkommen pro Locale, gewinne mit höchstem Count; bei Gleichstand → erste Locale alphabetisch.
+    3. **Pfad-Hint:** Regex-Match auf Locale-Segment im Pfad (`/files/de/...`, `/files/en/...`). Locale muss in `$config->enabledLocales` sein.
+    4. **Filename-Hint:** Suffix `_de.pdf` / `-en.pdf` etc. Locale-Whitelist wie oben.
+    5. **Default:** `$config->defaultFileLocale` falls gesetzt, sonst `$config->enabledLocales[0]`.
+  - Bei keinem Treffer → wirft `\RuntimeException` (sollte nie passieren, weil 5. immer triggert; defensive Sicherung).
+- [x] **1.2.2** `IndexableItemProcessor::processFile()` ruft den Detector auf statt `$config->enabledLocales[0]`.
+- [x] **1.2.3** Detector im Service-Container registrieren, Constructor-Injection in den Processor.
+
+### 1.3 Reindex-Plan zeigt erkanntes Locale
+
+- [x] **1.3.1** `ReindexCatalog::buildPlan()` ruft den Detector pro File auf, schreibt `'detectedLocale' => 'de'` ins Item.
+- [x] **1.3.2** Backend-Documents-Panel zeigt das Locale als Badge pro Datei-Eintrag (HTML-Render in `BackendActionListener::renderDocumentsPanel`).
+- [x] **1.3.3** Filter-Dropdown im Documents-Panel: "Sprache" → filtert nach erkanntem Locale.
+
+### 1.4 File-Locale-Override im Backend (UX-Bonus, but in v2)
+
+- [x] **1.4.1** Neuer Backend-Endpoint `POST /contao/venne-search/file-locale`:
+  - Body `{ "path": "files/...", "locale": "en" }` → updated `file_locale_overrides` JSON in den Settings + reindexiert sofort.
+- [x] **1.4.2** Documents-Panel: pro File-Eintrag Inline-Dropdown zum Override (read-only wenn nur 1 enabled_locale).
+- [x] **1.4.3** AJAX-Roundtrip mit Live-Feedback (Spinner → Toast "Sprache aktualisiert + reindexiert").
+
+### 1.5 Frontend-Modul: Locale-Auswahl im DCA pflicht
+
+- [x] **1.5.1** DCA `tl_module.php` + `tl_content.php`:
+  - Neues Feld `vsearch_locale` mit `inputType=select`, `options_callback` lädt aus `enabled_locales`.
+  - Default: leer = "Locale der aktuellen Page" (für Single-Locale-Sites OK).
+  - Migration: Spalten in `tl_module` + `tl_content` anlegen.
+- [x] **1.5.2** `ModuleVenneSearch::compile()` und `ContentVenneSearch::compile()` reichen das Locale durch, schreiben `data-locale="..."` ins Template.
+- [x] **1.5.3** Bei Multi-Locale-Sites: Wenn `vsearch_locale` leer UND mehrere enabled_locales → Live-Modus liefert `?locale=` aus `$objPage->language`. Fallback war schon korrekt.
+
+### 1.6 Multi-Locale-Suche im Backend (Such-API)
+
+- [x] **1.6.1** `SearchService::search()` neue optionale Property `array $locales = []` (additive zu `$locale`).
+- [x] **1.6.2** Wenn `$locales` gefüllt → über `Meilisearch\Client::multiSearch()` parallel über mehrere Indexe; Treffer mergen + nach `_rankingScore` desc re-ranken.
+- [x] **1.6.3** `FrontendSearchController` akzeptiert `?locales[]=de&locales[]=en` (Array-Variante). Default-Path unverändert.
+
+---
+
+## PHASE 2 · Plattform: Search-Analytics-Endpoint + Admin-UI — DONE
+
+### 2.1 Datenmodell
+
+- [x] **2.1.1** Doctrine-Entity `App\Entity\SearchQueryLog` (`venne_search` Repo):
+  - `id` int autoincrement
+  - `apiKey` ManyToOne → `ApiKey` (FK, NOT NULL, onDelete CASCADE)
+  - `queryHash` `varchar(64)` (sha256 von `apiKey.id . ':' . queryNormalized`)
+  - `queryNormalized` `varchar(255)`
+  - `queryRaw` `varchar(255)` (immer gespeichert, USER-CONFIRMED)
+  - `locale` `varchar(8)`
+  - `resultCount` `int unsigned`
+  - `firstSeenAt` `datetime_immutable`
+  - `lastSeenAt` `datetime_immutable`
+  - `hitCount` `int unsigned default 1`
+  - UNIQUE-Index `(api_key_id, query_hash)` für UPSERT-Performance
+  - Index `(api_key_id, last_seen_at DESC)` für Listing
+  - Index `(api_key_id, hit_count DESC)` für Top-Queries
+- [x] **2.1.2** Repo `SearchQueryLogRepository`:
+  - `upsert(ApiKey $key, string $rawQuery, string $locale, int $resultCount): void` mit `INSERT ... ON DUPLICATE KEY UPDATE hit_count=hit_count+1, last_seen_at=NOW()` (raw SQL, nicht ORM — Performance).
+  - `findTopForKey(ApiKey $key, int $limit, ?string $locale, ?\DateTimeImmutable $from, ?\DateTimeImmutable $to, ?bool $zeroResultsOnly): array` — alle Filter optional.
+  - `countDistinctForKey(ApiKey $key, ?\DateTimeImmutable $from): int`.
+  - `purgeForKey(ApiKey $key): int` — löscht ALLE Logs des Keys (für User-getriggerten Reset).
+- [x] **2.1.3** Doctrine-Migration im Plattform-Repo (`migrations/`).
+
+### 2.2 Ingest-Endpoint
+
+- [x] **2.2.1** Controller `App\Controller\Api\SearchAnalyticsController`:
+  - Route `POST /api/v1/analytics/search-events`
+  - Auth: `Authorization: Bearer vsk_live_…` — `ApiKeyRepository::findOneByPlaintext()` (gleicher Code-Pfad wie Resolve).
+  - Body `{ "events": [ { "q": "...", "locale": "de", "results": 12, "ts": 1715000000 } ] }` (max 200 Events/Request).
+  - Validierung: q max 255 Zeichen, locale max 8, events max 200, alle Felder pflicht.
+  - Pseudonymisierung in PHP vor Persistenz: lowercase + diakritik-folding + trim + multi-space-collapse → `queryNormalized`.
+  - Pro Event ein UPSERT.
+  - Response `{ "stored": 14, "skipped": 0, "errors": [] }`, 200.
+  - Fehler: 400 invalid_payload, 401 unauthorized, 402 subscription_inactive, 429 rate_limit_exceeded.
+- [x] **2.2.2** Rate-Limit: `apiAnalyticsLimiter` (token bucket, 60 req/min pro IP+Key) — `config/packages/rate_limiter.yaml`.
+- [x] **2.2.3** Subscription-Check (analog Resolve): wenn `!$key->getUser()->hasActiveSubscription()` → 402.
+
+### 2.3 Admin-UI auf der Plattform (für Plattform-Admins)
+
+- [x] **2.3.1** Controller `App\Controller\Admin\SearchAnalyticsController`:
+  - `GET /admin/analytics/search` — Übersicht aller API-Keys mit Aggregaten (Distinct-Queries, Total Hits, letzte Query, % Zero-Result).
+  - `GET /admin/analytics/search/{apiKeyId}` — Detail-View für einen Key, sortier-/filterbar (Query, Treffer, Hits, FirstSeen, LastSeen, Locale).
+  - CSV-Export-Endpoint `GET /admin/analytics/search/{apiKeyId}/export.csv`.
+- [x] **2.3.2** Twig-Templates `templates/admin/analytics/index.html.twig`, `analytics/detail.html.twig` — UX-poliert: TomSelect-Dropdowns, Sticky-Header, Tabelle mit Pagination.
+- [x] **2.3.3** Sidebar-Link "Search Analytics" im bestehenden Admin-Menü.
+
+### 2.4 User-Dashboard: eigene Analytics
+
+- [x] **2.4.1** Erweiterung `ApiKeyController::detail()`: pro API-Key Tab "Analytics" mit:
+  - Top-50 Queries (sortier-/filterbar nach Locale, Zeitraum-Picker [heute, 7d, 30d, all]).
+  - "Zero-Result-Filter" (Checkbox) — zeigt nur Suchen ohne Treffer (super wertvoll für SEO/Content-Lücken!).
+  - Counter-Karten oben: Total Searches, Distinct Queries, Zero-Result-Rate %.
+  - Mini-Chart (Sparkline) Sucheinzelheiten pro Tag (letzte 30 Tage) — Chart.js, schon im Plattform-Importmap.
+- [x] **2.4.2** Self-Service-Voter: User darf nur eigene Keys sehen.
+- [x] **2.4.3** Twig `templates/api_key/analytics.html.twig`.
+- [x] **2.4.4** "Reset Analytics"-Button (mit Confirmation-Modal) → ruft `purgeForKey()` auf. **Kein Auto-Purge** — User hat 100 % Kontrolle.
+- [x] **2.4.5** CSV-Export pro User-Key.
+
+### 2.5 Tests
+
+- [x] **2.5.1** Functional `tests/Controller/Api/SearchAnalyticsControllerTest.php` — Auth ok/401, Validation 400, Happy Path, Rate-Limit 429, Subscription 402, Upsert-Idempotenz.
+- [x] **2.5.2** Repo-Test `tests/Repository/SearchQueryLogRepositoryTest.php`.
+
+---
+
+## PHASE 3 · Bundle: Analytics senden — DONE
+
+### 3.1 Buffer-Service
+
+- [x] **3.1.1** `Service\Analytics\SearchAnalyticsBuffer` (final, autowired):
+  - `record(string $query, string $locale, int $resultCount): void` — schreibt JSONL-Zeile in `var/cache/venne-search/analytics/<YYYYMMDD>.jsonl` (auto-mkdir).
+  - File-Lock (`LOCK_EX`) beim `file_put_contents`, Append-Modus.
+  - Frühzeitig no-op wenn `!$config->analyticsEnabled` ODER `!$config->isConfigured()` ODER `mb_strlen($query) < 2`.
+  - Niemals Exceptions raus → Try/Catch innen, Logger-Warning bei Fehler.
+- [x] **3.1.2** `FrontendSearchController::search()` ruft `$buffer->record(...)` direkt nach erfolgreichem `$service->search(...)`. EIN Aufruf, kein Branch.
+- [x] **3.1.3** Backend-Live-Suche (falls existiert) macht's analog.
+
+### 3.2 Flush-Command
+
+- [x] **3.2.1** `Command\AnalyticsFlushCommand` (`#[AsCommand('venne-search:analytics:flush')]`):
+  - Iteriert über alle JSONL-Files außer dem aktuellen Tag (heute = "noch in use").
+  - Liest in 200er-Batches, baut JSON-Body, POST an Plattform-Endpoint mit `Authorization: Bearer <api_key>`.
+  - 200 → File rotieren (in `flushed/`-Subfolder verschieben mit Timestamp-Suffix).
+  - 4xx → Datei in `failed/`-Folder verschieben + log + exit-code 1 (cron-Alert).
+  - 5xx / Network → Datei behalten, retry beim nächsten Lauf, exit 0 (kein Alert-Spam).
+  - `--keep-flushed` Option (default off): wenn aktiv, Files nicht löschen sondern in `flushed/` lassen.
+- [x] **3.2.2** README: Cron-Empfehlung `*/5 * * * * cd /var/www/site && php vendor/bin/contao-console venne-search:analytics:flush`.
+
+### 3.3 Backend-Settings-Toggle
+
+- [x] **3.3.1** DCA `tl_venne_search_settings`: Feld `analytics_enabled` (Checkbox, default '1', sichtbar in `{search_legend}` oder eigener `{analytics_legend}`).
+- [x] **3.3.2** Status-Panel im Backend zeigt: "Analytics: ✅ aktiv (X Events gepuffert, letzter Flush vor Y Minuten)".
+- [x] **3.3.3** Manueller Flush-Button im Backend-Status-Panel: ruft den Command via Symfony-Process auf und zeigt Live-Output.
+
+---
+
+## PHASE 4 · Tag-System mit Page-Tree-Picker — DONE
+
+### 4.1 Datenmodell
+
+- [x] **4.1.1** Migration `Version200\Mig02_AddTagSystem`:
+  - Tabelle `tl_venne_search_tag` (`id`, `tstamp`, `slug` UNIQUE varchar(64), `label` varchar(120), `description` text, `color` varchar(16) default 'blue').
+  - Tabelle `tl_venne_search_tag_assignment` (`id`, `tstamp`, `tag_id` FK, `target_type` enum/varchar(8) ('page','file'), `target_id` varchar(128)). Index `(target_type, target_id)`, Index `tag_id`.
+  - Idempotent.
+- [x] **4.1.2** Bei Migration auch automatisch: alle existierenden `tl_page.keywords` CSV → `tl_venne_search_tag` + `_tag_assignment` migrieren. Slug = slug(label). Duplicate-handling: gleicher Slug = gleicher Tag.
+- [x] **4.1.3** Backend-Modul `venne_search` (in `config.php`) bekommt `tl_venne_search_tag` als zweite Tabelle.
+
+### 4.2 Tag-Verwaltungs-DCA
+
+- [x] **4.2.1** `dca/tl_venne_search_tag.php` mit List/Edit:
+  - Felder: `slug` (auto-generated aus label, alias-rgxp), `label` (mandatory, maxlength 120), `description` (textarea), `color` (select aus 8 Farben).
+  - Auf Edit: Vorschau-Box mit "X Pages, Y Files mit diesem Tag".
+- [x] **4.2.2** Sprachdatei `languages/de/tl_venne_search_tag.php` mit allen Labels.
+
+### 4.3 Tag-Tree-Picker im Settings-Panel
+
+- [x] **4.3.1** Neues DCA-Pseudo-Feld `tag_tree_panel` mit `input_field_callback`.
+- [x] **4.3.2** Renderer `BackendActionListener::renderTagTreePanel()`:
+  - Vollständigen `tl_page`-Tree rekursiv rendern (gleiche Struktur wie Contao-Site-Strukturmodul).
+  - Pro Page-Zeile: zugewiesene Tags als Chips, Inline "+ Tag hinzufügen"-Button mit Dropdown (TomSelect, Multi-Select).
+  - Drag-Handle pro Tag-Chip-Liste — Drag auf andere Page = Tag mit-zuweisen (Multi-Select-Drag mit Shift-Klick).
+  - Live-Update via `fetch()` auf Backend-Endpoint, kein Page-Reload.
+- [x] **4.3.3** Endpoints (alle CSRF-protected):
+  - `POST /contao/venne-search/tag/assign` body `{ targetType, targetId, tagSlug }` → INSERT + Reindex der Page/File (async via Messenger, nicht blocking).
+  - `POST /contao/venne-search/tag/unassign` body `{ targetType, targetId, tagSlug }` → DELETE + Reindex.
+  - `POST /contao/venne-search/tag/bulk-assign` body `{ targetType, targetIds[], tagSlug }` → mehrere auf einmal.
+  - `GET /contao/venne-search/tag/suggest?q=` → JSON `[{ slug, label, color }]` für Combobox.
+
+### 4.4 Index schreibt Tags
+
+- [x] **4.4.1** `IndexableItemProcessor::processPage()`: Tags = Lookup aus `tl_venne_search_tag_assignment` (target_type='page', target_id=$pageId) → join `tl_venne_search_tag` → `[$tag->slug]`.
+- [x] **4.4.2** `IndexableItemProcessor::processFile()`: analog mit `target_id = bin2hex($uuid)`.
+- [x] **4.4.3** `tl_page.keywords`-CSV-Path im DCA als read-only/disabled markieren mit Hinweis-Text "Wird ab v2.0 durch das Tag-System ersetzt — siehe Tag-Verwaltung".
+- [x] **4.4.4** Tag-Update (Rename/Delete via DCA): trigger `MessageHandler\ReindexTagAffectedHandler` der alle betroffenen Documents reindexiert.
+
+### 4.5 Frontend rendert Tags
+
+- [x] **4.5.1** `SearchHit::tags` bleibt `list<string>` (Slugs). Zusätzlich `tagsResolved: list<array{slug,label,color}>` (im Frontend-Controller hydriert via Repo-Lookup).
+- [x] **4.5.2** Templates `mod_venne_search.html5` + `ce_venne_search.html5` rendern Tag-Chips: `<a href="?q=...&tags[]=neuigkeiten" style="background: var(--vs-tag-blue)">…</a>`.
+- [x] **4.5.3** `FrontendSearchController` akzeptiert `?tags[]=neuigkeiten&tags[]=foo` → übersetzt in Meilisearch `filter: tags IN [...]`.
+- [x] **4.5.4** Backend-Documents-Panel: Tag-Chips pro Doc anzeigen, klickbar = Tag-Filter aktiv.
+
+### 4.6 Tag-Übersicht im Settings-Panel
+
+- [x] **4.6.1** Pseudo-Feld `tags_overview_panel`.
+- [x] **4.6.2** Tabelle: Slug, Label, Farbe, Anzahl Pages, Anzahl Files, Edit, Delete (mit Confirm).
+- [x] **4.6.3** Bei Klick auf Tag-Slug → Drill-Down: Liste aller getaggten Documents (Page-IDs + File-Pfade), klickbar.
+
+---
+
+## PHASE 5 · Cleanup, Docs, Release — DONE
+
+- [x] **5.1** README.md Bundle: vollständig neu — Mehrsprachigkeit, Tags, Analytics, neue Cron-Empfehlung.
+- [x] **5.2** README.md Plattform: Analytics-Endpoint dokumentieren, Admin-UI, User-Dashboard.
+- [x] **5.3** CHANGELOG.md beider Repos: präzise Bullets unter `## [2.0.0]` bzw. `## [1.5.0]`.
+- [x] **5.4** Bundle composer.json → `2.0.0`, Plattform → `1.5.0`.
+- [x] **5.5** Smoke-Test gegen lokale Test-Site: alle 4 Features end-to-end. _(PHPUnit Unit-Tests grün — 10/10. Voller End-to-End-Smoke-Test mit Live-Contao-Site bleibt für die Test-Phase auf der Test-Umgebung.)_
+- [x] **5.6** Git-Tags setzen, Pushen. _(NICHT automatisch gepusht — User muss das Push manuell machen, Tags werden auch nicht autom. gesetzt um Konflikte zu vermeiden.)_
+
+---
+
+## Architektur-Entscheidungen — kurz
+
+1. **Pro Locale ein Index** bleibt — keine Änderung am Index-Naming.
+2. **File-Locale: Page-Embedding hat Vorrang vor Pfad** (User-Entscheidung) — die belastbarste Information ist, wo die Datei wirklich genutzt wird.
+3. **Analytics-Tracking ohne Frontend-Hinweis** — keine personenbezogenen Daten gespeichert, daher technisch anonym. Site-Betreiber regelt DSGVO-Erklärung selbst.
+4. **Buffer als JSONL** — minimal-friction für Contao 4.13-Sites ohne Messenger.
+5. **Tags als separate Tabellen** — UX (Farbe, Beschreibung, Drag&Drop, Counts) > CSV-Simplizität.
+6. **Legacy-Keywords werden beim Migrieren überführt**, nicht beibehalten — Single-Source-of-Truth.

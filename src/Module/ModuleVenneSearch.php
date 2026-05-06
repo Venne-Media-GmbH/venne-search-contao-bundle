@@ -6,7 +6,6 @@ namespace VenneMedia\VenneSearchContaoBundle\Module;
 
 use Contao\BackendTemplate;
 use Contao\Module;
-use Contao\StringUtil;
 
 /**
  * Frontend-Modul: Suchfeld mit AJAX-Live-Vorschau.
@@ -64,6 +63,14 @@ class ModuleVenneSearch extends Module
 
     private function getLocale(): string
     {
+        // v2.0.0: explizit gesetztes Modul-Locale gewinnt — der Site-Betreiber
+        // legt im Backend fest, in welcher Sprache dieses Suchmodul sucht.
+        // Endnutzer sieht/wechselt die Sprache nie selbst.
+        $explicit = strtolower(substr((string) ($this->vsearch_locale ?? ''), 0, 2));
+        if ($explicit !== '') {
+            return $explicit;
+        }
+
         // Contao 5: aus Page-Model (currentRoot), Contao 4.13: TL_LANGUAGE.
         if (isset($GLOBALS['objPage']) && \is_object($GLOBALS['objPage']) && property_exists($GLOBALS['objPage'], 'language')) {
             $lang = (string) $GLOBALS['objPage']->language;

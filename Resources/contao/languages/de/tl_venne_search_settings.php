@@ -14,11 +14,25 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_legend'] = 'Index aktua
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['security_legend'] = 'Sicherheit & Zugriff';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['status_legend'] = 'Status';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['documents_legend'] = 'Indexierte Daten';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_legend'] = 'Suchanfragen-Analytics';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['tags_legend'] = 'Tags & Schlagwörter';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'] = ['Index aktualisieren', 'Erst Vorschau (was ist neu vs. schon im Index?), dann live indexieren.'];
 
 // Pseudo-Felder
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['status_panel'] = ['Index-Status', 'Live-Statistik aus dem Suchindex.'];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['documents_panel'] = ['Dokumente', 'Liste aller indexierten Seiten und Dateien mit Filter.'];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['tag_tree_panel'] = ['Seitenbaum-Tagging', 'Tags pro Seite/Datei zuweisen — per Klick oder Drag-&-Drop.'];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['tags_overview_panel'] = ['Tag-Übersicht', 'Alle Tags auf einen Blick mit Anzahl der zugewiesenen Inhalte.'];
+
+// Mehrsprachigkeit & Analytics
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['default_file_locale'] = [
+    'Standard-Sprache für Dateien',
+    'Wenn keine Sprach-Erkennung greift (Pfad/Filename/Einbindung), wird diese Sprache verwendet. Leer = erste Sprache aus „Aktive Sprachen".',
+];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_enabled'] = [
+    'Analytics',
+    'Jede Suche auf deiner Site wird anonym auf venne-search.de erfasst — keine IP, kein User-Agent, kein Personenbezug. Login dort, dann auf API-Keys → Analytics, um die Top-Suchen zu sehen.',
+];
 
 // Felder
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['api_key'] = [

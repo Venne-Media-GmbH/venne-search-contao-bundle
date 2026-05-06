@@ -10,12 +10,14 @@ use Symfony\Component\HttpFoundation\Request;
 // Route-Attribute werden bewusst NICHT importiert — wir registrieren die
 // Routes über Resources/config/routes.yaml, damit das Bundle sowohl unter
 // Symfony 5 (Contao 4.13) als auch Symfony 6/7 (Contao 5.x) funktioniert.
+use VenneMedia\VenneSearchContaoBundle\Service\Analytics\SearchAnalyticsBuffer;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveAuthException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveProvisioningException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveRateLimitException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveSubscriptionException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveTransportException;
 use VenneMedia\VenneSearchContaoBundle\Service\Search\SearchService;
+use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
 
 /**
  * Public Search-API für die Frontend-Live-Suche.
@@ -33,10 +35,18 @@ use VenneMedia\VenneSearchContaoBundle\Service\Search\SearchService;
  */
 final class FrontendSearchController extends AbstractController
 {
-    public function search(Request $request, SearchService $service): JsonResponse
-    {
+    public function search(
+        Request $request,
+        SearchService $service,
+        SearchAnalyticsBuffer $analytics,
+        TagRepository $tags,
+    ): JsonResponse {
         $query = trim((string) $request->query->get('q', ''));
-        if ($query === '') {
+        // Wenn Tag-Filter gesetzt sind, ist eine leere Volltext-Query OK
+        // (Browse-by-Tag-Modus: User klickt eine Tag-Pill, sieht alle Treffer).
+        $hasTagFilter = \is_array($request->query->all('tags') ?? null)
+            && \count($request->query->all('tags')) > 0;
+        if ($query === '' && !$hasTagFilter) {
             return new JsonResponse([
                 'hits' => [],
                 'totalHits' => 0,
@@ -49,10 +59,36 @@ final class FrontendSearchController extends AbstractController
         $limit = (int) $request->query->get('limit', 20);
         $offset = (int) $request->query->get('offset', 0);
 
+        // v2.0.0: optionales Multi-Locale via ?locales[]=de&locales[]=en
+        $localesParam = $request->query->all('locales');
+        $locales = [];
+        if (\is_array($localesParam)) {
+            foreach ($localesParam as $l) {
+                $clean = preg_replace('/[^a-z]/', '', (string) $l);
+                if ($clean !== '' && \strlen($clean) <= 5) {
+                    $locales[] = $clean;
+                }
+            }
+        }
+
         $filters = [];
         $type = (string) $request->query->get('type', '');
         if ($type !== '') {
             $filters['type'] = $type;
+        }
+        // v2.0.0: ?tags[]=spongebob&tags[]=krabbenburger
+        $tagsParam = $request->query->all('tags');
+        if (\is_array($tagsParam)) {
+            $cleanTags = [];
+            foreach ($tagsParam as $t) {
+                $clean = preg_replace('/[^a-z0-9-]/', '', (string) $t) ?? '';
+                if ($clean !== '' && \strlen($clean) <= 64) {
+                    $cleanTags[] = $clean;
+                }
+            }
+            if ($cleanTags !== []) {
+                $filters['tags'] = $cleanTags;
+            }
         }
 
         $userGroups = $this->resolveCurrentUserGroups();
@@ -65,6 +101,7 @@ final class FrontendSearchController extends AbstractController
                 limit: $limit,
                 offset: $offset,
                 userGroups: $userGroups,
+                locales: $locales,
             );
         } catch (ResolveAuthException) {
             return $this->errorResponse(401, 'unauthorized', 'Suche aktuell nicht verfügbar — der Site-Betreiber muss den Plattform-Schlüssel prüfen.');
@@ -81,24 +118,105 @@ final class FrontendSearchController extends AbstractController
             return $this->errorResponse(500, 'search_failed', 'Unerwarteter Fehler bei der Suche.');
         }
 
+        // v2.0.0: Anonymes Analytics-Tracking. Niemals den Such-Pfad blockieren.
+        try {
+            $analytics->record($query, $locale, $result->totalHits);
+        } catch (\Throwable) {
+        }
+
+        // v2.0.0: Tag-Daten anreichern. Im Index liegen pro Tag ZWEI Einträge —
+        // einmal der Slug, einmal das Label (damit Volltext-Suche das Label
+        // matcht). Hier deduplizieren wir per Slug ODER Label-Match auf
+        // eine bekannte Tag-Definition. Dateiendungen ("pdf"/"docx" etc.)
+        // sind keine "echten" Tags und werden ausgeblendet.
+        $allTags = $tags->findAll();
+        $bySlug = [];
+        $byLabelLower = [];
+        foreach ($allTags as $tag) {
+            $bySlug[$tag['slug']] = $tag;
+            $byLabelLower[mb_strtolower($tag['label'])] = $tag;
+        }
+        $extensions = ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'md'];
+
+        // Tag-Facets aus dem Meilisearch-facetDistribution: pro echtem Tag
+        // Slug+Label deduplizieren (im Index stehen beide), dann nur die
+        // mit höchstem Count behalten. Dateiendungen ausblenden.
+        $rawTagFacet = (array) ($result->facets['tags'] ?? []);
+        $tagFacetByTag = [];
+        foreach ($rawTagFacet as $token => $count) {
+            $count = (int) $count;
+            if ($token === '' || \in_array(strtolower((string) $token), $extensions, true)) {
+                continue;
+            }
+            $tag = $bySlug[$token] ?? $byLabelLower[mb_strtolower((string) $token)] ?? null;
+            if ($tag === null) {
+                // Legacy/Roh-Tag — als grauer Chip
+                $key = 'raw:' . mb_strtolower((string) $token);
+                if (!isset($tagFacetByTag[$key]) || $tagFacetByTag[$key]['count'] < $count) {
+                    $tagFacetByTag[$key] = [
+                        'slug' => (string) $token,
+                        'label' => (string) $token,
+                        'color' => 'gray',
+                        'count' => $count,
+                    ];
+                }
+                continue;
+            }
+            $key = $tag['slug'];
+            if (!isset($tagFacetByTag[$key]) || $tagFacetByTag[$key]['count'] < $count) {
+                $tagFacetByTag[$key] = [
+                    'slug' => $tag['slug'],
+                    'label' => $tag['label'],
+                    'color' => $tag['color'],
+                    'count' => $count,
+                ];
+            }
+        }
+        // Sortiert: häufigste Tags zuerst.
+        $tagFacetList = array_values($tagFacetByTag);
+        usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+
         $response = new JsonResponse([
             'hits' => array_map(
-                static fn ($h) => [
-                    'id' => $h->id,
-                    'type' => $h->type,
-                    'title' => $h->title,
-                    'url' => $h->url,
-                    'snippet' => $h->snippet,
-                    'tags' => $h->tags,
-                    'score' => $h->score,
-                    'isProtected' => $h->isProtected,
-                ],
+                static function ($h) use ($bySlug, $byLabelLower, $extensions): array {
+                    $resolvedById = [];
+                    foreach ($h->tags as $raw) {
+                        if ($raw === '' || \in_array(strtolower($raw), $extensions, true)) {
+                            continue;
+                        }
+                        // Treffer per Slug?
+                        if (isset($bySlug[$raw])) {
+                            $resolvedById[$bySlug[$raw]['slug']] = $bySlug[$raw];
+                            continue;
+                        }
+                        // Treffer per Label?
+                        $low = mb_strtolower($raw);
+                        if (isset($byLabelLower[$low])) {
+                            $resolvedById[$byLabelLower[$low]['slug']] = $byLabelLower[$low];
+                            continue;
+                        }
+                        // Legacy-Tag aus tl_page.keywords — als grauer Chip.
+                        $resolvedById['raw:' . $low] = ['slug' => $raw, 'label' => $raw, 'color' => 'gray'];
+                    }
+                    return [
+                        'id' => $h->id,
+                        'type' => $h->type,
+                        'title' => $h->title,
+                        'url' => $h->url,
+                        'snippet' => $h->snippet,
+                        'tags' => array_values($h->tags),
+                        'tagsResolved' => array_values($resolvedById),
+                        'score' => $h->score,
+                        'isProtected' => $h->isProtected,
+                    ];
+                },
                 $result->hits,
             ),
             'totalHits' => $result->totalHits,
             'offset' => $result->offset,
             'limit' => $result->limit,
             'facets' => $result->facets,
+            'tagFacets' => $tagFacetList,
             'queryTimeMs' => $result->queryTimeMs,
         ]);
 

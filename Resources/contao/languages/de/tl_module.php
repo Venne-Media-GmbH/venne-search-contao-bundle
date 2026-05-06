@@ -11,3 +11,4 @@ $GLOBALS['TL_LANG']['tl_module']['vsearch_button_label'] = ['Button-Label', 'Bes
 $GLOBALS['TL_LANG']['tl_module']['vsearch_min_chars'] = ['Mindest-Zeichen', 'Ab wie vielen eingegebenen Zeichen die Live-Suche startet (Standard: 3).'];
 $GLOBALS['TL_LANG']['tl_module']['vsearch_limit'] = ['Treffer pro Seite', 'Maximale Anzahl angezeigter Treffer (Standard: 10).'];
 $GLOBALS['TL_LANG']['tl_module']['vsearch_show_facets'] = ['Facetten anzeigen', 'Filter-Buttons (Seiten/Artikel/Dateien) über der Trefferliste anzeigen.'];
+$GLOBALS['TL_LANG']['tl_module']['vsearch_locale'] = ['Such-Sprache', 'In welcher Sprache dieses Modul sucht. Leer = Sprache der aktuellen Seite. Endnutzer wechseln die Sprache nicht selbst.'];

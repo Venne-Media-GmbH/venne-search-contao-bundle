@@ -59,6 +59,12 @@ class ContentVenneSearch extends ContentElement
 
     private function getLocale(): string
     {
+        // v2.0.0: explizit gesetztes Element-Locale gewinnt.
+        $explicit = strtolower(substr((string) ($this->vsearch_locale ?? ''), 0, 2));
+        if ($explicit !== '') {
+            return $explicit;
+        }
+
         if (isset($GLOBALS['objPage']) && \is_object($GLOBALS['objPage']) && property_exists($GLOBALS['objPage'], 'language')) {
             $lang = (string) $GLOBALS['objPage']->language;
             if ($lang !== '') {

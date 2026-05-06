@@ -61,6 +61,12 @@ final class SettingsConfig
         public readonly bool $autoIndexing = true,
         /** Such-Strenge (siehe STRICTNESS_* Konstanten). Default: balanced. */
         public readonly string $searchStrictness = self::STRICTNESS_BALANCED,
+        /** Default-Locale für Files wenn keine andere Strategie greift (leer = enabledLocales[0]). */
+        public readonly string $defaultFileLocale = '',
+        /** @var array<string,string> Pfad → Locale-Override (z.B. ['files/foo.pdf' => 'en']). */
+        public readonly array $fileLocaleOverrides = [],
+        /** Master-Toggle für Search-Analytics (Buffer + Flush). */
+        public readonly bool $analyticsEnabled = true,
     ) {
     }
 }

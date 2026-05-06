@@ -176,6 +176,25 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vsearch__facet:hover { border-color: var(--vs-accent) !important; color: var(--vs-accent) !important; background: var(--vs-bg) !important; }
     .vsearch__facet--active, .vsearch__facet--active:hover { background: var(--vs-accent) !important; color: #fff !important; border-color: var(--vs-accent) !important; }
 
+    .vsearch__facet-sep { display: inline-block; width: 1px; height: 18px; background: var(--vs-border); margin: 0 .15rem; align-self: center; }
+    .vsearch__facet--tag                 { background: #dbeafe !important; color: #1e40af !important; border-color: transparent !important; }
+    .vsearch__facet--tag[data-color="green"]  { background: #d1fae5 !important; color: #065f46 !important; }
+    .vsearch__facet--tag[data-color="red"]    { background: #fee2e2 !important; color: #991b1b !important; }
+    .vsearch__facet--tag[data-color="orange"] { background: #fed7aa !important; color: #9a3412 !important; }
+    .vsearch__facet--tag[data-color="purple"] { background: #e9d5ff !important; color: #6b21a8 !important; }
+    .vsearch__facet--tag[data-color="pink"]   { background: #fce7f3 !important; color: #9d174d !important; }
+    .vsearch__facet--tag[data-color="gray"]   { background: #e5e7eb !important; color: #374151 !important; }
+    .vsearch__facet--tag[data-color="teal"]   { background: #ccfbf1 !important; color: #115e59 !important; }
+    .vsearch__facet--tag:hover { filter: brightness(.96); }
+    .vsearch__facet--tag-active                 { background: #1e40af !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="green"]  { background: #065f46 !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="red"]    { background: #991b1b !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="orange"] { background: #9a3412 !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="purple"] { background: #6b21a8 !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="pink"]   { background: #9d174d !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="gray"]   { background: #374151 !important; color: #fff !important; }
+    .vsearch__facet--tag-active[data-color="teal"]   { background: #115e59 !important; color: #fff !important; }
+
     /* Liste */
     .vsearch__results { margin: 0; max-height: 60vh; overflow-y: auto; padding-right: .25rem; }
     .vsearch__list { list-style: none !important; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
@@ -208,6 +227,22 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vs-snippet { font-size: .88rem; color: var(--vs-text-muted); line-height: 1.5; margin: .2rem 0 0; }
     .vsearch__list mark { background: var(--vs-mark); color: var(--vs-text); padding: 0 2px; border-radius: 2px; font-weight: 600; }
+
+    /* Tag-Chips am Treffer */
+    .vs-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin: .35rem 0 0; }
+    .vs-tag {
+        display: inline-flex; align-items: center;
+        padding: .12rem .55rem; font-size: .72rem; font-weight: 500;
+        border-radius: 999px; background: #dbeafe; color: #1e40af;
+        line-height: 1.4; white-space: nowrap;
+    }
+    .vs-tag[data-color="green"]  { background: #d1fae5; color: #065f46; }
+    .vs-tag[data-color="red"]    { background: #fee2e2; color: #991b1b; }
+    .vs-tag[data-color="orange"] { background: #fed7aa; color: #9a3412; }
+    .vs-tag[data-color="purple"] { background: #e9d5ff; color: #6b21a8; }
+    .vs-tag[data-color="pink"]   { background: #fce7f3; color: #9d174d; }
+    .vs-tag[data-color="gray"]   { background: #e5e7eb; color: #374151; }
+    .vs-tag[data-color="teal"]   { background: #ccfbf1; color: #115e59; }
 
     /* Empty-State */
     .vsearch__empty { padding: 2.5rem 1rem; text-align: center; color: var(--vs-text-muted); }
@@ -244,6 +279,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         var lastQuery = '';
         var ctrl = null;
         var currentTypeFilter = '';
+        var currentTagFilters = [];
 
         // Modal
         if (mode === 'modal') {
@@ -264,6 +300,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 input.value = '';
                 lastQuery = '';
                 currentTypeFilter = '';
+                currentTagFilters = [];
             }
 
             trigger.addEventListener('click', openModal);
@@ -298,6 +335,9 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             ctrl = new AbortController();
             var url = apiUrl + '?q=' + encodeURIComponent(q) + '&locale=' + encodeURIComponent(locale) + '&limit=' + limit;
             if (currentTypeFilter) url += '&type=' + encodeURIComponent(currentTypeFilter);
+            currentTagFilters.forEach(function (slug) {
+                url += '&tags[]=' + encodeURIComponent(slug);
+            });
 
             resultsBox.hidden = false;
             resultsList.innerHTML = '<li class="vsearch__loading">Suche läuft…</li>';
@@ -317,7 +357,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             if (toolbar) toolbar.hidden = false;
             meta.textContent = (data.totalHits || 0) + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
 
-            if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, q);
+            if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, data.tagFacets || [], q);
 
             if (!data.hits || data.hits.length === 0) {
                 resultsList.innerHTML =
@@ -339,29 +379,54 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 var iconHtml = hit.type === 'file' ? iconFile() : iconPage();
                 var iconClass = hit.type === 'file' ? 'vs-icon vs-icon--file' : 'vs-icon';
                 var snippet = hit.snippet ? sanitizeWithMark(hit.snippet) : '';
+                var tagsHtml = '';
+                if (Array.isArray(hit.tagsResolved) && hit.tagsResolved.length) {
+                    var chips = hit.tagsResolved.map(function (t) {
+                        return '<span class="vs-tag" data-color="' + escapeHtml(t.color || 'gray') + '">' + escapeHtml(t.label || t.slug || '') + '</span>';
+                    });
+                    tagsHtml = '<span class="vs-tags">' + chips.join('') + '</span>';
+                }
                 a.innerHTML =
                     '<span class="' + iconClass + '">' + iconHtml + '</span>' +
                     '<span class="vs-body">' +
                         '<span class="vs-title">' + sanitizeWithMark(hit.title || '(ohne Titel)') + '</span>' +
                         (snippet ? '<span class="vs-snippet">' + snippet + '</span>' : '') +
+                        tagsHtml +
                     '</span>';
                 li.appendChild(a);
                 resultsList.appendChild(li);
             });
         }
 
-        function renderFacets(typeFacets, q) {
+        function renderFacets(typeFacets, tagFacets, q) {
             var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel' };
-            var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet="">Alle</button>';
+            var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">Alle</button>';
             Object.keys(typeFacets).forEach(function (type) {
                 var active = currentTypeFilter === type ? ' vsearch__facet--active' : '';
                 var label = labels[type] || type;
-                html += '<button type="button" class="vsearch__facet' + active + '" data-vsearch-facet="' + escapeHtml(type) + '">' + escapeHtml(label) + ' (' + typeFacets[type] + ')</button>';
+                html += '<button type="button" class="vsearch__facet' + active + '" data-vsearch-facet-type="' + escapeHtml(type) + '">' + escapeHtml(label) + ' (' + typeFacets[type] + ')</button>';
             });
+            if (Array.isArray(tagFacets) && tagFacets.length) {
+                html += '<span class="vsearch__facet-sep" aria-hidden="true"></span>';
+                tagFacets.forEach(function (t) {
+                    var active = currentTagFilters.indexOf(t.slug) !== -1 ? ' vsearch__facet--tag-active' : '';
+                    html += '<button type="button" class="vsearch__facet vsearch__facet--tag' + active + '" data-color="' + escapeHtml(t.color || 'gray') + '" data-vsearch-facet-tag="' + escapeHtml(t.slug) + '">'
+                         + escapeHtml(t.label) + ' (' + t.count + ')</button>';
+                });
+            }
             facetsBox.innerHTML = html;
-            Array.from(facetsBox.querySelectorAll('[data-vsearch-facet]')).forEach(function (btn) {
+            Array.from(facetsBox.querySelectorAll('[data-vsearch-facet-type]')).forEach(function (btn) {
                 btn.addEventListener('click', function () {
-                    currentTypeFilter = btn.dataset.vsearchFacet;
+                    currentTypeFilter = btn.dataset.vsearchFacetType;
+                    runSearch(q);
+                });
+            });
+            Array.from(facetsBox.querySelectorAll('[data-vsearch-facet-tag]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var slug = btn.dataset.vsearchFacetTag;
+                    var idx = currentTagFilters.indexOf(slug);
+                    if (idx === -1) currentTagFilters.push(slug);
+                    else currentTagFilters.splice(idx, 1);
                     runSearch(q);
                 });
             });

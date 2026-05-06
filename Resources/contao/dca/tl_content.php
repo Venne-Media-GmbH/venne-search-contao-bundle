@@ -14,13 +14,13 @@ declare(strict_types=1);
 \Contao\System::loadLanguageFile('tl_module');
 
 $GLOBALS['TL_DCA']['tl_content']['palettes']['venne_search'] = '{type_legend},type,headline'.
-    ';{config_legend},vsearch_display_mode,vsearch_trigger_label,vsearch_placeholder,vsearch_button_label,vsearch_min_chars,vsearch_limit,vsearch_show_facets'.
+    ';{config_legend},vsearch_display_mode,vsearch_locale,vsearch_trigger_label,vsearch_placeholder,vsearch_button_label,vsearch_min_chars,vsearch_limit,vsearch_show_facets'.
     ';{template_legend:hide},customTpl'.
     ';{protected_legend:hide},protected'.
     ';{expert_legend:hide},guests,cssID';
 
 // Felder werden auf tl_content gespiegelt, damit sie persistiert werden.
-foreach (['vsearch_display_mode', 'vsearch_trigger_label', 'vsearch_placeholder', 'vsearch_button_label', 'vsearch_min_chars', 'vsearch_limit', 'vsearch_show_facets'] as $field) {
+foreach (['vsearch_display_mode', 'vsearch_locale', 'vsearch_trigger_label', 'vsearch_placeholder', 'vsearch_button_label', 'vsearch_min_chars', 'vsearch_limit', 'vsearch_show_facets'] as $field) {
     if (!isset($GLOBALS['TL_DCA']['tl_content']['fields'][$field])
         && isset($GLOBALS['TL_DCA']['tl_module']['fields'][$field])
     ) {
@@ -76,5 +76,21 @@ if (!isset($GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_display_mode'])) 
         'inputType' => 'checkbox',
         'eval' => ['tl_class' => 'w50 m12'],
         'sql' => "char(1) NOT NULL default '1'",
+    ];
+    $GLOBALS['TL_DCA']['tl_content']['fields']['vsearch_locale'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_locale'],
+        'inputType' => 'select',
+        'options_callback' => static function (): array {
+            try {
+                $repo = \Contao\System::getContainer()
+                    ?->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Settings\\SettingsRepository');
+                $config = $repo?->load();
+                return array_combine($config->enabledLocales, $config->enabledLocales) ?: ['de' => 'de'];
+            } catch (\Throwable) {
+                return ['de' => 'de'];
+            }
+        },
+        'eval' => ['includeBlankOption' => true, 'tl_class' => 'w50', 'blankOptionLabel' => 'Sprache der aktuellen Seite'],
+        'sql' => "varchar(8) NOT NULL default ''",
     ];
 }

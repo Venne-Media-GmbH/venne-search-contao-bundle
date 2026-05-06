@@ -971,6 +971,38 @@ final class BackendActionListener
     }
 
     /**
+     * v2.0.0 — Tag-Tree-Picker. Delegiert an den dedizierten Tag-Listener
+     * (in Phase 4 geliefert), der TagRepository injiziert bekommt.
+     */
+    public static function renderTagTreePanel(): string
+    {
+        try {
+            $listener = \Contao\System::getContainer()->get(
+                'VenneMedia\\VenneSearchContaoBundle\\EventListener\\TagBackendListener'
+            );
+            return $listener?->renderTreePanel() ?? '';
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+    /**
+     * v2.0.0 — Tabellarische Tag-Übersicht.
+     */
+    public static function renderTagsOverviewPanel(): string
+    {
+        try {
+            $listener = \Contao\System::getContainer()->get(
+                'VenneMedia\\VenneSearchContaoBundle\\EventListener\\TagBackendListener'
+            );
+            return $listener?->renderOverviewPanel() ?? '';
+        } catch (\Throwable) {
+            return '';
+        }
+    }
+
+
+    /**
      * Einheitliche, klar lesbare Fehler-Box für Resolve-Probleme.
      * Wird im Status-Panel und in der Dokument-Tabelle gleich aussehen.
      */

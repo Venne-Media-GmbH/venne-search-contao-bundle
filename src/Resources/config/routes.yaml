@@ -90,3 +90,45 @@ venne_search_backend_reindex_single:
         _scope: backend
         _token_check: false
     methods: [POST]
+
+# v2.0.0: File-Locale-Override pro Datei setzen + sofort reindexieren.
+venne_search_backend_file_locale:
+    path: /contao/venne-search/file-locale
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\FileLocaleController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]
+
+# v2.0.0: Tag-System AJAX-Endpoints.
+venne_search_backend_tag_assign:
+    path: /contao/venne-search/tag/assign
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagAssignController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]
+
+venne_search_backend_tag_unassign:
+    path: /contao/venne-search/tag/unassign
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagUnassignController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]
+
+venne_search_backend_tag_bulk:
+    path: /contao/venne-search/tag/bulk-assign
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagBulkAssignController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]
+
+venne_search_backend_tag_suggest:
+    path: /contao/venne-search/tag/suggest
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagSuggestController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [GET]

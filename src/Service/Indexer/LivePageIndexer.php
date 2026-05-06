@@ -7,10 +7,12 @@ namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsRepository;
+use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
 use VenneMedia\VenneSearchContaoBundle\Service\Text\TextNormalizer;
 
 /**
@@ -28,6 +30,8 @@ final class LivePageIndexer
         private readonly PdfExtractor $pdfExtractor,
         private readonly SettingsRepository $settings,
         private readonly PermissionResolver $permissions,
+        private readonly FileLocaleDetector $localeDetector,
+        private readonly TagRepository $tags,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
@@ -123,7 +127,19 @@ final class LivePageIndexer
         // Sprach-Prefix, Tree-Pfad. Fallback auf simple alias-URL bei Fehler.
         $url = $this->resolvePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
-        $tags = array_values(array_filter(array_map('trim', explode(',', (string) ($pageRow['keywords'] ?? '')))));
+        // v2.0.0: Tag-System bevorzugt (Slug+Label = searchable); Fallback Legacy.
+        $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
+        $tags = [];
+        foreach ($tagObjects as $t) {
+            $tags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $tags[] = $t['label'];
+            }
+        }
+        if ($tags === []) {
+            $tags = array_values(array_filter(array_map('trim', explode(',', (string) ($pageRow['keywords'] ?? '')))));
+        }
+        $tags = array_values(array_unique($tags));
 
         $doc = new SearchDocument(
             id: 'page-'.$pageId,
@@ -223,14 +239,27 @@ final class LivePageIndexer
             ? 'file-'.bin2hex($uuidBin)
             : 'file-path-'.md5($relativePath);
 
+        $locale = $this->localeDetector->detect($relativePath, $config);
+
+        $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
+        $fileTags = [];
+        foreach ($tagObjects as $t) {
+            $fileTags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $fileTags[] = $t['label'];
+            }
+        }
+        $fileTags[] = $extension;
+        $fileTags = array_values(array_unique(array_filter($fileTags)));
+
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
-            locale: $config->enabledLocales[0] ?? 'de',
+            locale: $locale,
             title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
             url: '/'.$relativePath,
             content: $this->normalizer->normalize($text),
-            tags: [$extension],
+            tags: $fileTags,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
         );

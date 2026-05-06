@@ -61,7 +61,7 @@ final class TagBackendListener
         <div>
             <strong style="color:#1f2937;font-size:1rem;">Seiten taggen</strong>
             <div style="font-size:.8rem;color:#6b7280;margin-top:4px;">
-                Klicke auf "+" neben einer Seite. Drag-&-Drop: Tag-Chip auf eine andere Seite ziehen = mit-zuweisen.
+                Auf "+" klicken, um eine einzelne Seite zu taggen. Mehrere Seiten? Häkchen setzen → unten auswählen, was sie alle bekommen.
             </div>
         </div>
         <a href="contao?do=venne_search&amp;table=tl_venne_search_tag" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
@@ -69,10 +69,19 @@ final class TagBackendListener
     <div id="vsearch-tag-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;max-height:600px;overflow-y:auto;">
         {$treeHtml}
     </div>
+    <div id="vsearch-tag-bulk" style="margin-top:12px;display:none;align-items:center;gap:10px;padding:10px 14px;background:#3a7178;color:#fff;border-radius:6px;flex-wrap:wrap;">
+        <strong id="vsearch-tag-bulk-count">0 Seiten ausgewählt</strong>
+        <span style="opacity:.85;">→ Tag zuweisen:</span>
+        <input type="text" id="vsearch-tag-bulk-input" placeholder="Tag eingeben oder neu erstellen…" style="flex:1;min-width:200px;padding:5px 8px;border-radius:4px;border:0;color:#1f2937;">
+        <button type="button" id="vsearch-tag-bulk-apply" class="tl_submit" style="padding:5px 14px;border:0;border-radius:4px;background:#fff;color:#3a7178;cursor:pointer;font-weight:600;">Anwenden</button>
+        <button type="button" id="vsearch-tag-bulk-clear" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.4);padding:4px 10px;border-radius:4px;cursor:pointer;">Auswahl aufheben</button>
+    </div>
     <div id="vsearch-tag-toast" style="position:fixed;bottom:20px;right:20px;padding:10px 16px;background:#10b981;color:#fff;border-radius:6px;display:none;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.15);"></div>
 </div>
 <style>
 .vstag-row { display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #f3f4f6; }
+.vstag-select { cursor:pointer; }
+.vstag-select:disabled { cursor:not-allowed;opacity:.4; }
 .vstag-row:last-child { border-bottom:none; }
 .vstag-label { flex:1;font-size:.9rem;color:#1f2937;display:flex;align-items:center;gap:6px; }
 .vstag-label.vstag-locked { color:#94a3b8; }
@@ -228,6 +237,87 @@ final class TagBackendListener
             }
         });
     }
+
+    // === Multi-Select + Bulk-Apply ===
+    var bulkBar = document.getElementById('vsearch-tag-bulk');
+    var bulkCount = document.getElementById('vsearch-tag-bulk-count');
+    var bulkInput = document.getElementById('vsearch-tag-bulk-input');
+    var bulkApply = document.getElementById('vsearch-tag-bulk-apply');
+    var bulkClear = document.getElementById('vsearch-tag-bulk-clear');
+
+    function updateBulkBar() {
+        var checked = tree.querySelectorAll('.vstag-select:checked');
+        if (checked.length > 0) {
+            bulkBar.style.display = 'flex';
+            bulkCount.textContent = checked.length + (checked.length === 1 ? ' Seite ausgewählt' : ' Seiten ausgewählt');
+        } else {
+            bulkBar.style.display = 'none';
+        }
+    }
+    tree.addEventListener('change', function (e) {
+        if (e.target.classList.contains('vstag-select')) updateBulkBar();
+    });
+    bulkClear.addEventListener('click', function () {
+        tree.querySelectorAll('.vstag-select:checked').forEach(function (cb) { cb.checked = false; });
+        updateBulkBar();
+    });
+    bulkApply.addEventListener('click', function () {
+        var label = bulkInput.value.trim();
+        if (!label) {
+            bulkInput.focus();
+            return;
+        }
+        var ids = Array.from(tree.querySelectorAll('.vstag-select:checked')).map(function (cb) { return cb.dataset.id; });
+        if (ids.length === 0) return;
+
+        // Existing-Tag-Check (case-insensitive auf Label)
+        var lower = label.toLowerCase();
+        var existing = TAGS.find(function (t) { return t.label.toLowerCase() === lower; });
+        var slug = existing ? existing.slug : '';
+        var color = existing ? existing.color : 'blue';
+
+        bulkApply.disabled = true;
+        bulkApply.textContent = 'Wende an…';
+        api('/contao/venne-search/tag/bulk-assign', {
+            targetType: 'page',
+            targetIds: ids,
+            tagSlug: slug,
+            createLabel: label,
+            createColor: color,
+        }).then(function (d) {
+            if (d.ok) {
+                showToast(d.assigned + ' Zuweisungen, ' + d.reindexed + ' Seiten neu indexiert');
+                if (d.created && d.slug) TAGS.push({slug: d.slug, label: d.label || label, color: d.color || color});
+                // Zeilen-DOM aktualisieren
+                var resolvedSlug = (d.slug) || (existing && existing.slug);
+                if (resolvedSlug) {
+                    ids.forEach(function (pid) {
+                        var row = tree.querySelector('.vstag-row[data-id="' + pid + '"]');
+                        if (!row) return;
+                        if (row.querySelector('.vstag-chip[data-slug="' + resolvedSlug + '"]')) return;
+                        var chips = row.querySelector('.vstag-chips');
+                        var addBtn = chips.querySelector('.vstag-add');
+                        addBtn.insertAdjacentHTML('beforebegin', renderChip(resolvedSlug));
+                    });
+                }
+                bulkInput.value = '';
+                bulkClear.click();
+            } else {
+                showToast('Fehler: ' + (d.error || 'unbekannt'), true);
+            }
+        }).catch(function () {
+            showToast('Netzwerk-Fehler', true);
+        }).finally(function () {
+            bulkApply.disabled = false;
+            bulkApply.textContent = 'Anwenden';
+        });
+    });
+    bulkInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            bulkApply.click();
+        }
+    });
 
     // Drag & Drop: Chip auf andere Row droppen → Bulk-Assign
     var draggedSlug = null;
@@ -387,12 +477,19 @@ HTML;
         $titleHtml = htmlspecialchars($node['title'] ?: ('Seite #' . $node['id']));
         $iconChar = $isRoot ? '🌐' : ($node['children'] !== [] ? '📁' : '📄');
 
+        // Root-Pages bekommen keine Checkbox (nicht direkt indexierbar).
+        $checkbox = $isRoot
+            ? '<span style="width:16px;display:inline-block;"></span>'
+            : sprintf('<input type="checkbox" class="vstag-select" data-id="%d" aria-label="Diese Seite auswählen">', $node['id']);
+
         $html = sprintf(
             '<div class="%s" data-type="page" data-id="%d" style="padding-left:%dpx;">'
+            . '%s'
             . '<span class="vstag-label %s">%s %s</span>'
             . '<span class="vstag-chips">%s<button type="button" class="vstag-add">+ Tag</button></span>'
             . '</div>',
             $rowClass, $node['id'], $indent,
+            $checkbox,
             $isRoot ? 'vstag-locked' : '',
             $iconChar, $titleHtml, $chipsHtml,
         );

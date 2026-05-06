@@ -143,14 +143,26 @@ final class IndexableItemProcessor
 
         $url = $this->generatePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
-        // v2.0.0: Tags aus dem zentralen Tag-System (mit fallback auf Legacy-Keywords).
-        $tags = $this->tags->slugsForTarget('page', (string) $pageId);
+        // v2.0.0: Tags aus dem zentralen Tag-System.
+        // Wir schreiben sowohl Slug als auch Label ins Tag-Array, damit
+        // (a) der Slug für "?tags[]=neues"-Filter-Queries genutzt werden kann
+        //     und (b) das Label searchable ist (User tippt "neues" → Match).
+        $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
+        $tags = [];
+        foreach ($tagObjects as $t) {
+            $tags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $tags[] = $t['label'];
+            }
+        }
+        // Fallback: Legacy-Keywords-CSV wenn keine Tag-Zuweisungen.
         if ($tags === []) {
             $tags = array_values(array_filter(array_map(
                 'trim',
                 explode(',', (string) ($pageRow['keywords'] ?? ''))
             )));
         }
+        $tags = array_values(array_unique($tags));
 
         $doc = new SearchDocument(
             id: $docId,
@@ -212,8 +224,15 @@ final class IndexableItemProcessor
         $locale = $this->localeDetector->detect($relativePath, $config);
         $this->indexer->ensureIndex($locale);
 
-        // Tags aus dem Tag-System + Extension als built-in-Tag.
-        $fileTags = $this->tags->slugsForTarget('file', $relativePath);
+        // Tags aus dem Tag-System (Slug + Label, beides searchable) + Extension.
+        $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
+        $fileTags = [];
+        foreach ($tagObjects as $t) {
+            $fileTags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $fileTags[] = $t['label'];
+            }
+        }
         $fileTags[] = $ext;
         $fileTags = array_values(array_unique(array_filter($fileTags)));
 

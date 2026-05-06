@@ -42,14 +42,31 @@ final class TagBulkAssignController extends AbstractController
         $targetType = (string) ($payload['targetType'] ?? '');
         $targetIds = (array) ($payload['targetIds'] ?? []);
         $tagSlug = (string) ($payload['tagSlug'] ?? '');
+        $createLabel = (string) ($payload['createLabel'] ?? '');
+        $createColor = (string) ($payload['createColor'] ?? 'blue');
 
-        if (!\in_array($targetType, ['page', 'file'], true) || $targetIds === [] || $tagSlug === '') {
+        if (!\in_array($targetType, ['page', 'file'], true) || $targetIds === []) {
             return new JsonResponse(['ok' => false, 'error' => 'invalid_request'], 400);
         }
 
-        $tag = $this->tags->findBySlug($tagSlug);
+        // Tag-Lookup oder On-the-fly Erstellung wenn Label angegeben.
+        $created = false;
+        $tag = $tagSlug !== '' ? $this->tags->findBySlug($tagSlug) : null;
         if ($tag === null) {
-            return new JsonResponse(['ok' => false, 'error' => 'tag_not_found'], 404);
+            if ($createLabel === '') {
+                return new JsonResponse(['ok' => false, 'error' => 'tag_not_found'], 404);
+            }
+            $tagId = $this->tags->ensureTag($createLabel, $tagSlug !== '' ? $tagSlug : null, $createColor);
+            if ($tagId === 0) {
+                return new JsonResponse(['ok' => false, 'error' => 'create_failed'], 500);
+            }
+            $tag = $this->tags->findBySlug(
+                $tagSlug !== '' ? $tagSlug : \VenneMedia\VenneSearchContaoBundle\Migration\Version200\Mig02_AddTagSystem::slugify($createLabel),
+            );
+            $created = true;
+            if ($tag === null) {
+                return new JsonResponse(['ok' => false, 'error' => 'create_lookup_failed'], 500);
+            }
         }
 
         $assigned = 0;
@@ -92,6 +109,10 @@ final class TagBulkAssignController extends AbstractController
 
         return new JsonResponse([
             'ok' => true,
+            'created' => $created,
+            'slug' => $tag['slug'],
+            'label' => $tag['label'],
+            'color' => $tag['color'],
             'assigned' => $assigned,
             'reindexed' => $reindexed,
         ]);

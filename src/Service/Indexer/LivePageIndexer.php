@@ -127,11 +127,19 @@ final class LivePageIndexer
         // Sprach-Prefix, Tree-Pfad. Fallback auf simple alias-URL bei Fehler.
         $url = $this->resolvePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
-        // v2.0.0: Tag-System bevorzugt; Fallback auf Legacy-Keywords-CSV.
-        $tags = $this->tags->slugsForTarget('page', (string) $pageId);
+        // v2.0.0: Tag-System bevorzugt (Slug+Label = searchable); Fallback Legacy.
+        $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
+        $tags = [];
+        foreach ($tagObjects as $t) {
+            $tags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $tags[] = $t['label'];
+            }
+        }
         if ($tags === []) {
             $tags = array_values(array_filter(array_map('trim', explode(',', (string) ($pageRow['keywords'] ?? '')))));
         }
+        $tags = array_values(array_unique($tags));
 
         $doc = new SearchDocument(
             id: 'page-'.$pageId,
@@ -233,7 +241,14 @@ final class LivePageIndexer
 
         $locale = $this->localeDetector->detect($relativePath, $config);
 
-        $fileTags = $this->tags->slugsForTarget('file', $relativePath);
+        $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
+        $fileTags = [];
+        foreach ($tagObjects as $t) {
+            $fileTags[] = $t['slug'];
+            if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
+                $fileTags[] = $t['label'];
+            }
+        }
         $fileTags[] = $extension;
         $fileTags = array_values(array_unique(array_filter($fileTags)));
 

@@ -224,6 +224,22 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vs-snippet { font-size: .88rem; color: var(--vs-text-muted); line-height: 1.5; margin: .2rem 0 0; }
     .vsearch__list mark { background: var(--vs-mark); color: var(--vs-text); padding: 0 2px; border-radius: 2px; font-weight: 600; }
 
+    /* Tag-Chips am Treffer */
+    .vs-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin: .35rem 0 0; }
+    .vs-tag {
+        display: inline-flex; align-items: center;
+        padding: .12rem .55rem; font-size: .72rem; font-weight: 500;
+        border-radius: 999px; background: #dbeafe; color: #1e40af;
+        line-height: 1.4; white-space: nowrap;
+    }
+    .vs-tag[data-color="green"]  { background: #d1fae5; color: #065f46; }
+    .vs-tag[data-color="red"]    { background: #fee2e2; color: #991b1b; }
+    .vs-tag[data-color="orange"] { background: #fed7aa; color: #9a3412; }
+    .vs-tag[data-color="purple"] { background: #e9d5ff; color: #6b21a8; }
+    .vs-tag[data-color="pink"]   { background: #fce7f3; color: #9d174d; }
+    .vs-tag[data-color="gray"]   { background: #e5e7eb; color: #374151; }
+    .vs-tag[data-color="teal"]   { background: #ccfbf1; color: #115e59; }
+
     /* Empty-State */
     .vsearch__empty { padding: 2.5rem 1rem; text-align: center; color: var(--vs-text-muted); }
     .vsearch__empty-icon { color: rgba(0,0,0,.18); margin-bottom: .8rem; }
@@ -369,11 +385,21 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 var lockBadge = hit.isProtected
                     ? '<span class="vs-lock" title="Nur für Mitglieder sichtbar" aria-label="Geschützter Inhalt">' + iconLock() + '</span>'
                     : '';
+                // Tag-Chips: tagsResolved kommt vom Controller bereits
+                // dedupliziert + ohne Datei-Extensions zurück.
+                var tagsHtml = '';
+                if (Array.isArray(hit.tagsResolved) && hit.tagsResolved.length) {
+                    var chips = hit.tagsResolved.map(function (t) {
+                        return '<span class="vs-tag" data-color="' + escapeHtml(t.color || 'gray') + '">' + escapeHtml(t.label || t.slug || '') + '</span>';
+                    });
+                    tagsHtml = '<span class="vs-tags">' + chips.join('') + '</span>';
+                }
                 a.innerHTML =
                     '<span class="' + iconClass + '">' + iconHtml + '</span>' +
                     '<span class="vs-body">' +
                         '<span class="vs-title">' + sanitizeWithMark(hit.title || '(ohne Titel)') + lockBadge + '</span>' +
                         (snippet ? '<span class="vs-snippet">' + snippet + '</span>' : '') +
+                        tagsHtml +
                     '</span>';
                 li.appendChild(a);
                 resultsList.appendChild(li);

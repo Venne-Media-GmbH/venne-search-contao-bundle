@@ -120,34 +120,41 @@ final class FrontendSearchController extends AbstractController
         } catch (\Throwable) {
         }
 
-        // v2.0.0: Tag-Slugs in volle Tag-Objekte (label/color) hydrieren —
-        // Ein Lookup-Pass, alle Slugs aus den Hits einsammeln.
-        $allSlugs = [];
-        foreach ($result->hits as $h) {
-            foreach ($h->tags as $t) {
-                $allSlugs[$t] = true;
-            }
+        // v2.0.0: Tag-Daten anreichern. Im Index liegen pro Tag ZWEI Einträge —
+        // einmal der Slug, einmal das Label (damit Volltext-Suche das Label
+        // matcht). Hier deduplizieren wir per Slug ODER Label-Match auf
+        // eine bekannte Tag-Definition. Dateiendungen ("pdf"/"docx" etc.)
+        // sind keine "echten" Tags und werden ausgeblendet.
+        $allTags = $tags->findAll();
+        $bySlug = [];
+        $byLabelLower = [];
+        foreach ($allTags as $tag) {
+            $bySlug[$tag['slug']] = $tag;
+            $byLabelLower[mb_strtolower($tag['label'])] = $tag;
         }
-        $tagMap = [];
-        if ($allSlugs !== []) {
-            foreach ($tags->findAll() as $tag) {
-                if (isset($allSlugs[$tag['slug']])) {
-                    $tagMap[$tag['slug']] = $tag;
-                }
-            }
-        }
+        $extensions = ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'md'];
 
         $response = new JsonResponse([
             'hits' => array_map(
-                static function ($h) use ($tagMap): array {
-                    $tagsResolved = [];
-                    foreach ($h->tags as $slug) {
-                        if (isset($tagMap[$slug])) {
-                            $tagsResolved[] = $tagMap[$slug];
-                        } else {
-                            // Built-in / Legacy-Tag (z.B. "pdf", "shop").
-                            $tagsResolved[] = ['slug' => $slug, 'label' => $slug, 'color' => 'gray'];
+                static function ($h) use ($bySlug, $byLabelLower, $extensions): array {
+                    $resolvedById = [];
+                    foreach ($h->tags as $raw) {
+                        if ($raw === '' || \in_array(strtolower($raw), $extensions, true)) {
+                            continue;
                         }
+                        // Treffer per Slug?
+                        if (isset($bySlug[$raw])) {
+                            $resolvedById[$bySlug[$raw]['slug']] = $bySlug[$raw];
+                            continue;
+                        }
+                        // Treffer per Label?
+                        $low = mb_strtolower($raw);
+                        if (isset($byLabelLower[$low])) {
+                            $resolvedById[$byLabelLower[$low]['slug']] = $byLabelLower[$low];
+                            continue;
+                        }
+                        // Legacy-Tag aus tl_page.keywords — als grauer Chip.
+                        $resolvedById['raw:' . $low] = ['slug' => $raw, 'label' => $raw, 'color' => 'gray'];
                     }
                     return [
                         'id' => $h->id,
@@ -155,8 +162,8 @@ final class FrontendSearchController extends AbstractController
                         'title' => $h->title,
                         'url' => $h->url,
                         'snippet' => $h->snippet,
-                        'tags' => $h->tags,
-                        'tagsResolved' => $tagsResolved,
+                        'tags' => array_values($h->tags),
+                        'tagsResolved' => array_values($resolvedById),
                         'score' => $h->score,
                         'isProtected' => $h->isProtected,
                     ];

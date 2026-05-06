@@ -341,6 +341,29 @@ final class SettingsRepository
     }
 
     /**
+     * Plattform-URL: Override aus DCA → Container-Override → Default.
+     * Wird vom Analytics-Flusher genutzt, der nicht über den Resolve-Endpoint
+     * geht sondern direkt einen eigenen Endpoint anspricht.
+     */
+    public function getPlatformUrl(): string
+    {
+        if ($this->platformUrlOverride !== null && $this->platformUrlOverride !== '') {
+            return $this->platformUrlOverride;
+        }
+        try {
+            $row = $this->db->fetchAssociative(
+                \sprintf('SELECT platform_url FROM %s WHERE id = 1', self::TABLE),
+            );
+            $url = \is_array($row) ? (string) ($row['platform_url'] ?? '') : '';
+            if ($url !== '') {
+                return $url;
+            }
+        } catch (\Throwable) {
+        }
+        return self::DEFAULT_PLATFORM_URL;
+    }
+
+    /**
      * Löscht den API-Key + Resolve-Cache aus der DB.
      * Wird aufgerufen wenn die Plattform 401 zurückgibt (Key ungültig oder
      * widerrufen) — damit das Bundle danach „nicht konfiguriert" zeigt

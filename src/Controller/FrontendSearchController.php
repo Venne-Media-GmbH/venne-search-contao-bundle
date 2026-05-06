@@ -10,6 +10,7 @@ use Symfony\Component\HttpFoundation\Request;
 // Route-Attribute werden bewusst NICHT importiert — wir registrieren die
 // Routes über Resources/config/routes.yaml, damit das Bundle sowohl unter
 // Symfony 5 (Contao 4.13) als auch Symfony 6/7 (Contao 5.x) funktioniert.
+use VenneMedia\VenneSearchContaoBundle\Service\Analytics\SearchAnalyticsBuffer;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveAuthException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveProvisioningException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveRateLimitException;
@@ -33,7 +34,7 @@ use VenneMedia\VenneSearchContaoBundle\Service\Search\SearchService;
  */
 final class FrontendSearchController extends AbstractController
 {
-    public function search(Request $request, SearchService $service): JsonResponse
+    public function search(Request $request, SearchService $service, SearchAnalyticsBuffer $analytics): JsonResponse
     {
         $query = trim((string) $request->query->get('q', ''));
         if ($query === '') {
@@ -92,6 +93,12 @@ final class FrontendSearchController extends AbstractController
         } catch (\Throwable $e) {
             // Letzter Fallback für Meilisearch- oder unerwartete Fehler.
             return $this->errorResponse(500, 'search_failed', 'Unerwarteter Fehler bei der Suche.');
+        }
+
+        // v2.0.0: Anonymes Analytics-Tracking. Niemals den Such-Pfad blockieren.
+        try {
+            $analytics->record($query, $locale, $result->totalHits);
+        } catch (\Throwable) {
         }
 
         $response = new JsonResponse([

@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,index_pdfs,auto_indexing;{search_legend},search_strictness;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{documents_legend},documents_panel',
+        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing;{search_legend},search_strictness;{analytics_legend},analytics_enabled,analytics_panel;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -120,6 +120,48 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
             'default' => '1',
             'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
             'sql' => "char(1) NOT NULL default '1'",
+        ],
+        'default_file_locale' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['default_file_locale'],
+            'inputType' => 'select',
+            'options_callback' => static function (): array {
+                try {
+                    $repo = \Contao\System::getContainer()
+                        ?->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Settings\\SettingsRepository');
+                    $config = $repo?->load();
+                    $opts = array_combine($config->enabledLocales, $config->enabledLocales);
+                    return $opts ?: ['de' => 'de'];
+                } catch (\Throwable) {
+                    return ['de' => 'de'];
+                }
+            },
+            'eval' => ['includeBlankOption' => true, 'tl_class' => 'w50', 'blankOptionLabel' => 'Erste Sprache aus „Sprachen"'],
+            'sql' => "varchar(8) NOT NULL default ''",
+        ],
+        'analytics_enabled' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_enabled'],
+            'inputType' => 'checkbox',
+            'default' => '1',
+            'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
+            'sql' => "char(1) NOT NULL default '1'",
+        ],
+        'analytics_panel' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_panel'],
+            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderAnalyticsPanel'],
+            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
+        ],
+        'file_locale_overrides' => [
+            'sql' => 'longtext NULL',
+        ],
+        'tag_tree_panel' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['tag_tree_panel'],
+            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderTagTreePanel'],
+            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
+        ],
+        'tags_overview_panel' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['tags_overview_panel'],
+            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderTagsOverviewPanel'],
+            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
         ],
         'search_strictness' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness'],

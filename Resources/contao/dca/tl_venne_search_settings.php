@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing;{search_legend},search_strictness;{analytics_legend},analytics_enabled,analytics_panel;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
+        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -144,11 +144,6 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
             'default' => '1',
             'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
             'sql' => "char(1) NOT NULL default '1'",
-        ],
-        'analytics_panel' => [
-            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_panel'],
-            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderAnalyticsPanel'],
-            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
         ],
         'file_locale_overrides' => [
             'sql' => 'longtext NULL',

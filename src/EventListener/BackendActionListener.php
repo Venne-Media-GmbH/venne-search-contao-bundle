@@ -7,7 +7,6 @@ namespace VenneMedia\VenneSearchContaoBundle\EventListener;
 use Contao\CoreBundle\DependencyInjection\Attribute\AsCallback;
 use Doctrine\DBAL\Connection;
 use Meilisearch\Client;
-use VenneMedia\VenneSearchContaoBundle\Service\Analytics\SearchAnalyticsBuffer;
 use VenneMedia\VenneSearchContaoBundle\Service\Indexer\DocumentIndexer;
 use VenneMedia\VenneSearchContaoBundle\Service\Indexer\SiteCrawler;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsRepository;
@@ -38,7 +37,6 @@ final class BackendActionListener
         private readonly SettingsRepository $settings,
         private readonly Connection $db,
         private readonly DocumentIndexer $indexer,
-        private readonly SearchAnalyticsBuffer $analyticsBuffer,
     ) {
     }
 
@@ -973,16 +971,6 @@ final class BackendActionListener
     }
 
     /**
-     * v2.0.0 — Analytics-Status-Box mit "Jetzt flushen"-Button.
-     */
-    public static function renderAnalyticsPanel(): string
-    {
-        /** @var self $self */
-        $self = \Contao\System::getContainer()->get(self::class);
-        return $self->buildAnalyticsHtml();
-    }
-
-    /**
      * v2.0.0 — Tag-Tree-Picker. Delegiert an den dedizierten Tag-Listener
      * (in Phase 4 geliefert), der TagRepository injiziert bekommt.
      */
@@ -1013,27 +1001,6 @@ final class BackendActionListener
         }
     }
 
-    public function buildAnalyticsHtml(): string
-    {
-        try {
-            $config = $this->settings->isConfigured() ? $this->settings->load() : null;
-        } catch (\Throwable) {
-            $config = null;
-        }
-        $enabled = $config?->analyticsEnabled ?? true;
-
-        if (!$enabled) {
-            return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#78350f;font-size:.9rem;">'
-                . '<strong>Analytics ist aus.</strong> Aktiviere die Checkbox oben, damit du auf venne-search.de sehen kannst, was Besucher gesucht haben.'
-                . '</div>';
-        }
-
-        return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #a7f3d0;border-radius:8px;background:#ecfdf5;color:#065f46;font-size:.9rem;">'
-            . '<strong>Analytics ist an.</strong> Jede Suche auf deiner Site wird anonym auf '
-            . '<a href="https://venne-search.de" target="_blank" rel="noopener" style="color:#065f46;text-decoration:underline;">venne-search.de</a> '
-            . 'erfasst — keine IP, kein User-Agent, kein Personenbezug. Login dort, dann auf API-Keys → Analytics, um die Top-Suchen zu sehen.'
-            . '</div>';
-    }
 
     /**
      * Einheitliche, klar lesbare Fehler-Box für Resolve-Probleme.

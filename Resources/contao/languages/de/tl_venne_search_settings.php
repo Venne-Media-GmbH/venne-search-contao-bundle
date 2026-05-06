@@ -21,7 +21,6 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'] = ['Index aktu
 // Pseudo-Felder
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['status_panel'] = ['Index-Status', 'Live-Statistik aus dem Suchindex.'];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['documents_panel'] = ['Dokumente', 'Liste aller indexierten Seiten und Dateien mit Filter.'];
-$GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_panel'] = ['Analytics-Status', 'Anzahl gepufferter Such-Events, letzter Flush und Knopf zum manuellen Senden.'];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['tag_tree_panel'] = ['Seitenbaum-Tagging', 'Tags pro Seite/Datei zuweisen — per Klick oder Drag-&-Drop.'];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['tags_overview_panel'] = ['Tag-Übersicht', 'Alle Tags auf einen Blick mit Anzahl der zugewiesenen Inhalte.'];
 
@@ -31,8 +30,8 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['default_file_locale'] = [
     'Wenn keine Sprach-Erkennung greift (Pfad/Filename/Einbindung), wird diese Sprache verwendet. Leer = erste Sprache aus „Aktive Sprachen".',
 ];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_enabled'] = [
-    'Such-Analytics aktivieren',
-    'Erfasst anonym, wonach Besucher gesucht haben (kein IP, kein User-Agent, kein User-Bezug). Dashboard auf venne-search.de zeigt Top-Queries und Zero-Result-Rate.',
+    'Analytics',
+    'Jede Suche auf deiner Site wird anonym auf venne-search.de erfasst — keine IP, kein User-Agent, kein Personenbezug. Login dort, dann auf API-Keys → Analytics, um die Top-Suchen zu sehen.',
 ];
 
 // Felder

@@ -64,7 +64,7 @@ final class TagBackendListener
                 Klicke auf "+" neben einer Seite. Drag-&-Drop: Tag-Chip auf eine andere Seite ziehen = mit-zuweisen.
             </div>
         </div>
-        <a href="contao/main.php?do=venne_search&amp;table=tl_venne_search_tag" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
+        <a href="contao?do=venne_search&amp;table=tl_venne_search_tag" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
     </div>
     <div id="vsearch-tag-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;max-height:600px;overflow-y:auto;">
         {$treeHtml}
@@ -294,7 +294,7 @@ HTML;
             $label = htmlspecialchars($tag['label']);
             $slug = htmlspecialchars($tag['slug']);
             $count = $tag['count'];
-            $editUrl = 'contao/main.php?do=venne_search&amp;table=tl_venne_search_tag&amp;act=edit&amp;id=' . $tag['id'];
+            $editUrl = 'contao?do=venne_search&amp;table=tl_venne_search_tag&amp;act=edit&amp;id=' . $tag['id'];
             $rows .= sprintf(
                 '<tr style="border-bottom:1px solid #f3f4f6;">'
                 . '<td style="padding:8px 6px;"><span class="vstag-chip" data-color="%s">%s</span></td>'

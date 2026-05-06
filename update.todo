@@ -181,33 +181,33 @@
 
 ---
 
-## PHASE 4 · Tag-System mit Page-Tree-Picker
+## PHASE 4 · Tag-System mit Page-Tree-Picker — DONE
 
 ### 4.1 Datenmodell
 
-- [ ] **4.1.1** Migration `Version200\Mig02_AddTagSystem`:
+- [x] **4.1.1** Migration `Version200\Mig02_AddTagSystem`:
   - Tabelle `tl_venne_search_tag` (`id`, `tstamp`, `slug` UNIQUE varchar(64), `label` varchar(120), `description` text, `color` varchar(16) default 'blue').
   - Tabelle `tl_venne_search_tag_assignment` (`id`, `tstamp`, `tag_id` FK, `target_type` enum/varchar(8) ('page','file'), `target_id` varchar(128)). Index `(target_type, target_id)`, Index `tag_id`.
   - Idempotent.
-- [ ] **4.1.2** Bei Migration auch automatisch: alle existierenden `tl_page.keywords` CSV → `tl_venne_search_tag` + `_tag_assignment` migrieren. Slug = slug(label). Duplicate-handling: gleicher Slug = gleicher Tag.
-- [ ] **4.1.3** Backend-Modul `venne_search` (in `config.php`) bekommt `tl_venne_search_tag` als zweite Tabelle.
+- [x] **4.1.2** Bei Migration auch automatisch: alle existierenden `tl_page.keywords` CSV → `tl_venne_search_tag` + `_tag_assignment` migrieren. Slug = slug(label). Duplicate-handling: gleicher Slug = gleicher Tag.
+- [x] **4.1.3** Backend-Modul `venne_search` (in `config.php`) bekommt `tl_venne_search_tag` als zweite Tabelle.
 
 ### 4.2 Tag-Verwaltungs-DCA
 
-- [ ] **4.2.1** `dca/tl_venne_search_tag.php` mit List/Edit:
+- [x] **4.2.1** `dca/tl_venne_search_tag.php` mit List/Edit:
   - Felder: `slug` (auto-generated aus label, alias-rgxp), `label` (mandatory, maxlength 120), `description` (textarea), `color` (select aus 8 Farben).
   - Auf Edit: Vorschau-Box mit "X Pages, Y Files mit diesem Tag".
-- [ ] **4.2.2** Sprachdatei `languages/de/tl_venne_search_tag.php` mit allen Labels.
+- [x] **4.2.2** Sprachdatei `languages/de/tl_venne_search_tag.php` mit allen Labels.
 
 ### 4.3 Tag-Tree-Picker im Settings-Panel
 
-- [ ] **4.3.1** Neues DCA-Pseudo-Feld `tag_tree_panel` mit `input_field_callback`.
-- [ ] **4.3.2** Renderer `BackendActionListener::renderTagTreePanel()`:
+- [x] **4.3.1** Neues DCA-Pseudo-Feld `tag_tree_panel` mit `input_field_callback`.
+- [x] **4.3.2** Renderer `BackendActionListener::renderTagTreePanel()`:
   - Vollständigen `tl_page`-Tree rekursiv rendern (gleiche Struktur wie Contao-Site-Strukturmodul).
   - Pro Page-Zeile: zugewiesene Tags als Chips, Inline "+ Tag hinzufügen"-Button mit Dropdown (TomSelect, Multi-Select).
   - Drag-Handle pro Tag-Chip-Liste — Drag auf andere Page = Tag mit-zuweisen (Multi-Select-Drag mit Shift-Klick).
   - Live-Update via `fetch()` auf Backend-Endpoint, kein Page-Reload.
-- [ ] **4.3.3** Endpoints (alle CSRF-protected):
+- [x] **4.3.3** Endpoints (alle CSRF-protected):
   - `POST /contao/venne-search/tag/assign` body `{ targetType, targetId, tagSlug }` → INSERT + Reindex der Page/File (async via Messenger, nicht blocking).
   - `POST /contao/venne-search/tag/unassign` body `{ targetType, targetId, tagSlug }` → DELETE + Reindex.
   - `POST /contao/venne-search/tag/bulk-assign` body `{ targetType, targetIds[], tagSlug }` → mehrere auf einmal.
@@ -215,23 +215,23 @@
 
 ### 4.4 Index schreibt Tags
 
-- [ ] **4.4.1** `IndexableItemProcessor::processPage()`: Tags = Lookup aus `tl_venne_search_tag_assignment` (target_type='page', target_id=$pageId) → join `tl_venne_search_tag` → `[$tag->slug]`.
-- [ ] **4.4.2** `IndexableItemProcessor::processFile()`: analog mit `target_id = bin2hex($uuid)`.
-- [ ] **4.4.3** `tl_page.keywords`-CSV-Path im DCA als read-only/disabled markieren mit Hinweis-Text "Wird ab v2.0 durch das Tag-System ersetzt — siehe Tag-Verwaltung".
-- [ ] **4.4.4** Tag-Update (Rename/Delete via DCA): trigger `MessageHandler\ReindexTagAffectedHandler` der alle betroffenen Documents reindexiert.
+- [x] **4.4.1** `IndexableItemProcessor::processPage()`: Tags = Lookup aus `tl_venne_search_tag_assignment` (target_type='page', target_id=$pageId) → join `tl_venne_search_tag` → `[$tag->slug]`.
+- [x] **4.4.2** `IndexableItemProcessor::processFile()`: analog mit `target_id = bin2hex($uuid)`.
+- [x] **4.4.3** `tl_page.keywords`-CSV-Path im DCA als read-only/disabled markieren mit Hinweis-Text "Wird ab v2.0 durch das Tag-System ersetzt — siehe Tag-Verwaltung".
+- [x] **4.4.4** Tag-Update (Rename/Delete via DCA): trigger `MessageHandler\ReindexTagAffectedHandler` der alle betroffenen Documents reindexiert.
 
 ### 4.5 Frontend rendert Tags
 
-- [ ] **4.5.1** `SearchHit::tags` bleibt `list<string>` (Slugs). Zusätzlich `tagsResolved: list<array{slug,label,color}>` (im Frontend-Controller hydriert via Repo-Lookup).
-- [ ] **4.5.2** Templates `mod_venne_search.html5` + `ce_venne_search.html5` rendern Tag-Chips: `<a href="?q=...&tags[]=neuigkeiten" style="background: var(--vs-tag-blue)">…</a>`.
-- [ ] **4.5.3** `FrontendSearchController` akzeptiert `?tags[]=neuigkeiten&tags[]=foo` → übersetzt in Meilisearch `filter: tags IN [...]`.
-- [ ] **4.5.4** Backend-Documents-Panel: Tag-Chips pro Doc anzeigen, klickbar = Tag-Filter aktiv.
+- [x] **4.5.1** `SearchHit::tags` bleibt `list<string>` (Slugs). Zusätzlich `tagsResolved: list<array{slug,label,color}>` (im Frontend-Controller hydriert via Repo-Lookup).
+- [x] **4.5.2** Templates `mod_venne_search.html5` + `ce_venne_search.html5` rendern Tag-Chips: `<a href="?q=...&tags[]=neuigkeiten" style="background: var(--vs-tag-blue)">…</a>`.
+- [x] **4.5.3** `FrontendSearchController` akzeptiert `?tags[]=neuigkeiten&tags[]=foo` → übersetzt in Meilisearch `filter: tags IN [...]`.
+- [x] **4.5.4** Backend-Documents-Panel: Tag-Chips pro Doc anzeigen, klickbar = Tag-Filter aktiv.
 
 ### 4.6 Tag-Übersicht im Settings-Panel
 
-- [ ] **4.6.1** Pseudo-Feld `tags_overview_panel`.
-- [ ] **4.6.2** Tabelle: Slug, Label, Farbe, Anzahl Pages, Anzahl Files, Edit, Delete (mit Confirm).
-- [ ] **4.6.3** Bei Klick auf Tag-Slug → Drill-Down: Liste aller getaggten Documents (Page-IDs + File-Pfade), klickbar.
+- [x] **4.6.1** Pseudo-Feld `tags_overview_panel`.
+- [x] **4.6.2** Tabelle: Slug, Label, Farbe, Anzahl Pages, Anzahl Files, Edit, Delete (mit Confirm).
+- [x] **4.6.3** Bei Klick auf Tag-Slug → Drill-Down: Liste aller getaggten Documents (Page-IDs + File-Pfade), klickbar.
 
 ---
 

@@ -12,6 +12,7 @@ use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsRepository;
+use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
 use VenneMedia\VenneSearchContaoBundle\Service\Text\TextNormalizer;
 
 /**
@@ -30,6 +31,7 @@ final class LivePageIndexer
         private readonly SettingsRepository $settings,
         private readonly PermissionResolver $permissions,
         private readonly FileLocaleDetector $localeDetector,
+        private readonly TagRepository $tags,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
@@ -125,7 +127,11 @@ final class LivePageIndexer
         // Sprach-Prefix, Tree-Pfad. Fallback auf simple alias-URL bei Fehler.
         $url = $this->resolvePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
-        $tags = array_values(array_filter(array_map('trim', explode(',', (string) ($pageRow['keywords'] ?? '')))));
+        // v2.0.0: Tag-System bevorzugt; Fallback auf Legacy-Keywords-CSV.
+        $tags = $this->tags->slugsForTarget('page', (string) $pageId);
+        if ($tags === []) {
+            $tags = array_values(array_filter(array_map('trim', explode(',', (string) ($pageRow['keywords'] ?? '')))));
+        }
 
         $doc = new SearchDocument(
             id: 'page-'.$pageId,
@@ -227,6 +233,10 @@ final class LivePageIndexer
 
         $locale = $this->localeDetector->detect($relativePath, $config);
 
+        $fileTags = $this->tags->slugsForTarget('file', $relativePath);
+        $fileTags[] = $extension;
+        $fileTags = array_values(array_unique(array_filter($fileTags)));
+
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
@@ -234,7 +244,7 @@ final class LivePageIndexer
             title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
             url: '/'.$relativePath,
             content: $this->normalizer->normalize($text),
-            tags: [$extension],
+            tags: $fileTags,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
         );

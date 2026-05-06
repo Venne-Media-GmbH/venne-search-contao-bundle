@@ -117,3 +117,15 @@ services:
     # Public, damit DCA-input_field_callback ihn statisch über System::getContainer()->get() holen kann.
     VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener:
         public: true
+
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagBackendListener:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Analytics\SearchAnalyticsBuffer:
+        public: true
+
+    VenneMedia\VenneSearchContaoBundle\Service\Analytics\AnalyticsFlusher:
+        public: true

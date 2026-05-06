@@ -17,6 +17,7 @@ use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveRateLimitExceptio
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveSubscriptionException;
 use VenneMedia\VenneSearchContaoBundle\Service\Platform\ResolveTransportException;
 use VenneMedia\VenneSearchContaoBundle\Service\Search\SearchService;
+use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
 
 /**
  * Public Search-API für die Frontend-Live-Suche.
@@ -34,8 +35,12 @@ use VenneMedia\VenneSearchContaoBundle\Service\Search\SearchService;
  */
 final class FrontendSearchController extends AbstractController
 {
-    public function search(Request $request, SearchService $service, SearchAnalyticsBuffer $analytics): JsonResponse
-    {
+    public function search(
+        Request $request,
+        SearchService $service,
+        SearchAnalyticsBuffer $analytics,
+        TagRepository $tags,
+    ): JsonResponse {
         $query = trim((string) $request->query->get('q', ''));
         if ($query === '') {
             return new JsonResponse([
@@ -66,6 +71,20 @@ final class FrontendSearchController extends AbstractController
         $type = (string) $request->query->get('type', '');
         if ($type !== '') {
             $filters['type'] = $type;
+        }
+        // v2.0.0: ?tags[]=spongebob&tags[]=krabbenburger
+        $tagsParam = $request->query->all('tags');
+        if (\is_array($tagsParam)) {
+            $cleanTags = [];
+            foreach ($tagsParam as $t) {
+                $clean = preg_replace('/[^a-z0-9-]/', '', (string) $t) ?? '';
+                if ($clean !== '' && \strlen($clean) <= 64) {
+                    $cleanTags[] = $clean;
+                }
+            }
+            if ($cleanTags !== []) {
+                $filters['tags'] = $cleanTags;
+            }
         }
 
         $userGroups = $this->resolveCurrentUserGroups();
@@ -101,18 +120,47 @@ final class FrontendSearchController extends AbstractController
         } catch (\Throwable) {
         }
 
+        // v2.0.0: Tag-Slugs in volle Tag-Objekte (label/color) hydrieren —
+        // Ein Lookup-Pass, alle Slugs aus den Hits einsammeln.
+        $allSlugs = [];
+        foreach ($result->hits as $h) {
+            foreach ($h->tags as $t) {
+                $allSlugs[$t] = true;
+            }
+        }
+        $tagMap = [];
+        if ($allSlugs !== []) {
+            foreach ($tags->findAll() as $tag) {
+                if (isset($allSlugs[$tag['slug']])) {
+                    $tagMap[$tag['slug']] = $tag;
+                }
+            }
+        }
+
         $response = new JsonResponse([
             'hits' => array_map(
-                static fn ($h) => [
-                    'id' => $h->id,
-                    'type' => $h->type,
-                    'title' => $h->title,
-                    'url' => $h->url,
-                    'snippet' => $h->snippet,
-                    'tags' => $h->tags,
-                    'score' => $h->score,
-                    'isProtected' => $h->isProtected,
-                ],
+                static function ($h) use ($tagMap): array {
+                    $tagsResolved = [];
+                    foreach ($h->tags as $slug) {
+                        if (isset($tagMap[$slug])) {
+                            $tagsResolved[] = $tagMap[$slug];
+                        } else {
+                            // Built-in / Legacy-Tag (z.B. "pdf", "shop").
+                            $tagsResolved[] = ['slug' => $slug, 'label' => $slug, 'color' => 'gray'];
+                        }
+                    }
+                    return [
+                        'id' => $h->id,
+                        'type' => $h->type,
+                        'title' => $h->title,
+                        'url' => $h->url,
+                        'snippet' => $h->snippet,
+                        'tags' => $h->tags,
+                        'tagsResolved' => $tagsResolved,
+                        'score' => $h->score,
+                        'isProtected' => $h->isProtected,
+                    ];
+                },
                 $result->hits,
             ),
             'totalHits' => $result->totalHits,

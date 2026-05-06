@@ -9,6 +9,7 @@ use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
+use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
 use VenneMedia\VenneSearchContaoBundle\Service\Text\TextNormalizer;
 
 /**
@@ -29,6 +30,7 @@ final class IndexableItemProcessor
         private readonly PdfExtractor $pdfExtractor,
         private readonly PermissionResolver $permissions,
         private readonly FileLocaleDetector $localeDetector,
+        private readonly TagRepository $tags,
     ) {
     }
 
@@ -141,10 +143,14 @@ final class IndexableItemProcessor
 
         $url = $this->generatePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
-        $tags = array_values(array_filter(array_map(
-            'trim',
-            explode(',', (string) ($pageRow['keywords'] ?? ''))
-        )));
+        // v2.0.0: Tags aus dem zentralen Tag-System (mit fallback auf Legacy-Keywords).
+        $tags = $this->tags->slugsForTarget('page', (string) $pageId);
+        if ($tags === []) {
+            $tags = array_values(array_filter(array_map(
+                'trim',
+                explode(',', (string) ($pageRow['keywords'] ?? ''))
+            )));
+        }
 
         $doc = new SearchDocument(
             id: $docId,
@@ -206,6 +212,11 @@ final class IndexableItemProcessor
         $locale = $this->localeDetector->detect($relativePath, $config);
         $this->indexer->ensureIndex($locale);
 
+        // Tags aus dem Tag-System + Extension als built-in-Tag.
+        $fileTags = $this->tags->slugsForTarget('file', $relativePath);
+        $fileTags[] = $ext;
+        $fileTags = array_values(array_unique(array_filter($fileTags)));
+
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
@@ -213,7 +224,7 @@ final class IndexableItemProcessor
             title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
             url: '/' . ltrim($relativePath, '/'),
             content: $this->normalizer->normalize($text),
-            tags: [$ext],
+            tags: $fileTags,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
         );

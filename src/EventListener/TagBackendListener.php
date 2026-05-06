@@ -82,10 +82,9 @@ final class TagBackendListener
                 if ($info === null) {
                     continue;
                 }
-                $editUrl = sprintf(
-                    'contao?do=page&amp;act=edit&amp;id=%d',
-                    (int) $tid,
-                );
+                $editUrl = htmlspecialchars($this->buildBackendUrl(
+                    'do=page&act=edit&id=' . (int) $tid
+                ));
                 $rows .= sprintf(
                     '<tr style="border-bottom:1px solid #f3f4f6;">'
                     . '<td style="padding:8px 6px;width:24px;color:#6b7280;">%s</td>'
@@ -127,14 +126,32 @@ final class TagBackendListener
             }
         }
 
-        // Tag-Slug brauchen wir clientseitig fürs Unassign-API.
+        // Tag-Slug + Tag-Label/Farbe für die Hinzu-API-Calls.
         $tagSlug = '';
+        $tagLabel = '';
+        $tagColor = 'blue';
         try {
-            $row = $this->db->fetchAssociative('SELECT slug FROM tl_venne_search_tag WHERE id = ?', [$tagId]);
-            $tagSlug = \is_array($row) ? (string) ($row['slug'] ?? '') : '';
+            $row = $this->db->fetchAssociative('SELECT slug, label, color FROM tl_venne_search_tag WHERE id = ?', [$tagId]);
+            if (\is_array($row)) {
+                $tagSlug = (string) ($row['slug'] ?? '');
+                $tagLabel = (string) ($row['label'] ?? '');
+                $tagColor = (string) ($row['color'] ?? 'blue');
+            }
         } catch (\Throwable) {
         }
         $tagSlugJs = json_encode($tagSlug);
+        $tagLabelJs = json_encode($tagLabel);
+        $tagColorJs = json_encode($tagColor);
+
+        // Page-Tree für den Picker bauen, schon zugewiesene Pages markiert.
+        $assignedPageIds = array_map(static fn (array $t): int => (int) $t['targetId'],
+            array_filter($targets, static fn (array $t): bool => $t['targetType'] === 'page'));
+        $assignedSet = array_flip($assignedPageIds);
+        $tree = $this->buildPageTree();
+        $pickerTreeHtml = '';
+        foreach ($tree as $rootNode) {
+            $pickerTreeHtml .= $this->renderPickerNode($rootNode, $assignedSet, 0);
+        }
 
         return <<<HTML
 <div style="margin:14px 18px;padding:18px 22px;border:1px solid #d1d5db;border-radius:8px;background:#fff;">
@@ -150,13 +167,51 @@ final class TagBackendListener
             {$rows}
         </tbody>
     </table>
+
+    <div style="margin-top:18px;">
+        <button type="button" id="vstag-assign-toggle" class="tl_submit" style="background:#3a7178;color:#fff;border:0;padding:8px 16px;border-radius:5px;cursor:pointer;font-weight:500;">+ Seiten zuweisen</button>
+    </div>
+
+    <div id="vstag-assign-picker" style="display:none;margin-top:14px;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;padding:14px 16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+            <div>
+                <strong style="color:#1f2937;">Seiten auswählen</strong>
+                <div style="font-size:.8rem;color:#6b7280;margin-top:3px;">Schon zugewiesene Seiten sind ausgegraut.</div>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="button" id="vstag-picker-apply" class="tl_submit" style="background:#3a7178;color:#fff;border:0;padding:6px 14px;border-radius:5px;cursor:pointer;">Auswahl zuweisen</button>
+                <button type="button" id="vstag-picker-cancel" style="background:transparent;color:#6b7280;border:1px solid #d1d5db;padding:5px 12px;border-radius:5px;cursor:pointer;">Abbrechen</button>
+            </div>
+        </div>
+        <div id="vstag-picker-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:4px;padding:6px 10px;max-height:480px;overflow-y:auto;">
+            {$pickerTreeHtml}
+        </div>
+        <div id="vstag-picker-status" style="margin-top:8px;font-size:.85rem;color:#6b7280;"></div>
+    </div>
 </div>
+<style>
+.vstag-picker-row { display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f3f4f6;font-size:.88rem; }
+.vstag-picker-row:last-child { border-bottom:0; }
+.vstag-picker-row.vstag-picker-locked { opacity:.45;cursor:not-allowed; }
+.vstag-picker-row .vstag-picker-icon { color:#6b7280;display:inline-flex;flex-shrink:0; }
+.vstag-picker-row .vstag-picker-title { color:#1f2937; }
+.vstag-picker-row .vstag-picker-assigned { color:#10b981;font-size:.72rem;font-weight:600;margin-left:auto; }
+</style>
 <script>
 (function(){
     var TAG_SLUG = {$tagSlugJs};
+    var TAG_LABEL = {$tagLabelJs};
+    var TAG_COLOR = {$tagColorJs};
+
     var tbody = document.getElementById('vstag-assignments-tbody');
-    if (!tbody) return;
-    tbody.addEventListener('click', function (e) {
+    var toggleBtn = document.getElementById('vstag-assign-toggle');
+    var picker = document.getElementById('vstag-assign-picker');
+    var pickerCancel = document.getElementById('vstag-picker-cancel');
+    var pickerApply = document.getElementById('vstag-picker-apply');
+    var pickerStatus = document.getElementById('vstag-picker-status');
+
+    // Entfernen-Buttons (Bestand)
+    if (tbody) tbody.addEventListener('click', function (e) {
         var btn = e.target.closest('.vstag-unassign-btn');
         if (!btn) return;
         if (!confirm('Tag von diesem Eintrag entfernen?')) return;
@@ -172,18 +227,100 @@ final class TagBackendListener
                 tagSlug: TAG_SLUG,
             }),
         }).then(function (r) { return r.json(); }).then(function (d) {
+            if (d.ok) row.remove();
+            else { btn.disabled = false; btn.textContent = 'Entfernen'; alert('Fehler: ' + (d.error || 'unbekannt')); }
+        });
+    });
+
+    // Picker-Toggle
+    if (toggleBtn) toggleBtn.addEventListener('click', function () {
+        picker.style.display = picker.style.display === 'none' ? 'block' : 'none';
+        toggleBtn.textContent = picker.style.display === 'block' ? '− Picker schließen' : '+ Seiten zuweisen';
+    });
+    if (pickerCancel) pickerCancel.addEventListener('click', function () {
+        picker.style.display = 'none';
+        toggleBtn.textContent = '+ Seiten zuweisen';
+    });
+
+    // Auswahl anwenden
+    if (pickerApply) pickerApply.addEventListener('click', function () {
+        var ids = Array.from(picker.querySelectorAll('input.vstag-picker-cb:checked')).map(function (cb) { return cb.dataset.id; });
+        if (ids.length === 0) {
+            pickerStatus.style.color = '#dc2626';
+            pickerStatus.textContent = 'Mindestens eine Seite auswählen.';
+            return;
+        }
+        pickerApply.disabled = true;
+        pickerStatus.style.color = '#6b7280';
+        pickerStatus.textContent = 'Weise zu …';
+        fetch('/contao/venne-search/tag/bulk-assign', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+            body: JSON.stringify({
+                targetType: 'page',
+                targetIds: ids,
+                tagSlug: TAG_SLUG,
+                createLabel: TAG_LABEL,
+                createColor: TAG_COLOR,
+            }),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            pickerApply.disabled = false;
             if (d.ok) {
-                row.remove();
+                pickerStatus.style.color = '#10b981';
+                pickerStatus.textContent = '✓ ' + d.assigned + ' Seiten zugewiesen, ' + d.reindexed + ' neu indexiert. Seite wird neu geladen…';
+                setTimeout(function () { window.location.reload(); }, 900);
             } else {
-                btn.disabled = false;
-                btn.textContent = 'Entfernen';
-                alert('Fehler: ' + (d.error || 'unbekannt'));
+                pickerStatus.style.color = '#dc2626';
+                pickerStatus.textContent = '✗ ' + (d.error || 'unbekannter Fehler');
             }
+        }).catch(function () {
+            pickerApply.disabled = false;
+            pickerStatus.style.color = '#dc2626';
+            pickerStatus.textContent = '✗ Netzwerk-Fehler';
         });
     });
 })();
 </script>
 HTML;
+    }
+
+    /**
+     * Picker-Zeile (für das Tag-Edit-Panel) — nur Title + Checkbox,
+     * keine Tag-Chips. Schon zugewiesene Pages werden gelockt.
+     *
+     * @param array{id:int,title:string,type:string,children:list<array>} $node
+     * @param array<int,int> $assignedSet
+     */
+    private function renderPickerNode(array $node, array $assignedSet, int $depth): string
+    {
+        $isRoot = $node['type'] === 'root';
+        $hasKids = $node['children'] !== [];
+        $icon = $isRoot ? self::iconRoot() : ($hasKids ? self::iconFolder() : self::iconPage());
+        $titleHtml = htmlspecialchars($node['title'] ?: ('Seite #' . $node['id']));
+        $isAssigned = isset($assignedSet[$node['id']]);
+        $indent = $depth * 18;
+
+        if ($isRoot) {
+            $cb = '<span style="width:16px;display:inline-block;"></span>';
+            $rowClass = 'vstag-picker-row vstag-picker-locked';
+        } elseif ($isAssigned) {
+            $cb = '<input type="checkbox" disabled aria-label="Bereits zugewiesen">';
+            $rowClass = 'vstag-picker-row vstag-picker-locked';
+        } else {
+            $cb = sprintf('<input type="checkbox" class="vstag-picker-cb" data-id="%d">', $node['id']);
+            $rowClass = 'vstag-picker-row';
+        }
+
+        $assignedBadge = $isAssigned ? '<span class="vstag-picker-assigned">bereits zugewiesen</span>' : '';
+
+        $html = sprintf(
+            '<div class="%s" style="padding-left:%dpx;">%s<span class="vstag-picker-icon">%s</span><span class="vstag-picker-title">%s</span>%s</div>',
+            $rowClass, $indent, $cb, $icon, $titleHtml, $assignedBadge,
+        );
+        foreach ($node['children'] as $child) {
+            $html .= $this->renderPickerNode($child, $assignedSet, $depth + 1);
+        }
+        return $html;
     }
 
     /**
@@ -270,6 +407,10 @@ HTML;
             $allTags,
         ), \JSON_UNESCAPED_UNICODE);
 
+        // Contao 4.13/5.x: Backend-Links brauchen den Request-Token (rt-Parameter),
+        // sonst bringt Contao eine "Ungültiges Token"-Bestätigungsseite.
+        $manageUrl = $this->buildBackendUrl('do=venne_search&table=tl_venne_search_tag');
+
         return <<<HTML
 <div style="margin:14px 18px;padding:18px 22px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
@@ -279,7 +420,7 @@ HTML;
                 Auf "+" klicken, um eine einzelne Seite zu taggen. Mehrere Seiten? Häkchen setzen → unten auswählen, was sie alle bekommen.
             </div>
         </div>
-        <a href="contao?do=venne_search&amp;table=tl_venne_search_tag" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
+        <a href="{$manageUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
     </div>
     <div id="vsearch-tag-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;max-height:600px;overflow-y:auto;">
         {$treeHtml}
@@ -601,7 +742,9 @@ HTML;
             $label = htmlspecialchars($tag['label']);
             $slug = htmlspecialchars($tag['slug']);
             $count = $tag['count'];
-            $editUrl = 'contao?do=venne_search&amp;table=tl_venne_search_tag&amp;act=edit&amp;id=' . $tag['id'];
+            $editUrl = htmlspecialchars($this->buildBackendUrl(
+                'do=venne_search&table=tl_venne_search_tag&act=edit&id=' . $tag['id']
+            ));
             $rows .= sprintf(
                 '<tr style="border-bottom:1px solid #f3f4f6;">'
                 . '<td style="padding:8px 6px;"><span class="vstag-chip" data-color="%s">%s</span></td>'
@@ -730,6 +873,29 @@ HTML;
             $out = array_merge($out, $this->collectAllPageIds($node['children']));
         }
         return $out;
+    }
+
+    /**
+     * Baut einen Backend-Pfad mit Request-Token. Ohne den `rt`-Parameter
+     * zeigt Contao eine "Ungültiges Token"-Bestätigungsseite.
+     */
+    private function buildBackendUrl(string $params): string
+    {
+        $token = '';
+        try {
+            $container = \Contao\System::getContainer();
+            if ($container?->has('contao.csrf.token_manager')) {
+                $manager = $container->get('contao.csrf.token_manager');
+                $tokenName = $container->getParameter('contao.csrf_token_name') ?: 'contao_csrf_token';
+                $token = (string) $manager->getToken($tokenName)->getValue();
+            }
+        } catch (\Throwable) {
+        }
+        $url = 'contao?' . $params;
+        if ($token !== '') {
+            $url .= '&rt=' . urlencode($token);
+        }
+        return $url;
     }
 
     private static function iconRoot(): string

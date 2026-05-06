@@ -1,12 +1,15 @@
 # Venne Search · Contao Bundle
 
-Volltext-Suche für Contao. Findet Inhalte in Seiten, Artikeln, Content-Elementen und Dateien (PDF, DOCX, ODT, RTF, TXT, MD).
+Volltext-Suche für Contao. Findet Inhalte in Seiten, Artikeln, Content-Elementen und Dateien (PDF, DOCX, ODT, RTF, TXT, MD) — mehrsprachig, mit Tags und anonymen Such-Analytics.
 
 Die Plattform-Anbindung läuft über [venne-search.de](https://venne-search.de) — das Bundle holt sich beim ersten Request einen scoped Meilisearch-Token und schreibt direkt in den passenden Index. Pro Site ein API-Key, fertig.
 
 ## Was es kann
 
 - **Live-Indexing**: Wenn du eine Seite speicherst oder eine Datei hochlädst, ist sie kurze Zeit später in der Suche
+- **Mehrsprachig**: Pro Locale ein Index, automatische Sprach-Erkennung für Dateien (Pfad → Embedding → Filename) mit Override-Möglichkeit
+- **Tag-System mit Tree-Picker**: Seitenbaum öffnen, per Klick oder Drag-&-Drop Tags zuweisen — Tags erscheinen klickbar als Filter in den Such-Treffern
+- **Anonymes Search-Analytics**: Erfasst auf der Plattform welche Begriffe gesucht werden (kein IP, kein User-Agent, keine User-ID) — nützlich um Content-Lücken zu finden
 - **PDF-Inhalte durchsuchen**: Texte aus PDFs werden extrahiert und indexiert
 - **Tippfehler-Toleranz**: `Krabbnburger` findet `Krabbenburger`
 - **Diakritik-Folding**: `cafe` findet `café`, `Cafe`, `CAFÉ`
@@ -149,6 +152,53 @@ Diese Hooks sind aktiv, ohne dass du was tun musst:
 Im Backend gibt es einen **Toggle**, der das Auto-Indexing komplett abschaltet — falls du den Index lieber gebündelt manuell aktualisierst. Pro Eintrag in der Tabelle „Indexierte Daten" gibt es einen **Refresh-Knopf**, mit dem du einzelne Dokumente neu indexieren kannst, ohne den ganzen Lauf anzustoßen.
 
 Datei per FTP direkt auf den Server kopieren umgeht den Hook — dafür gibt's den **Vorschau & Indexieren**-Button im Backend, der die Datei dann beim nächsten Lauf erfasst.
+
+## Mehrsprachigkeit
+
+Das Bundle indexiert pro **Locale** in einen eigenen Index — eine Site mit `de,en,fr` als aktive Sprachen hat drei Indexe. Pages bringen ihre Sprache aus `tl_page.language` mit; **Dateien werden über fünf Strategien automatisch zugeordnet** (in dieser Reihenfolge, erste die liefert gewinnt):
+
+1. **Override** aus den Settings (`file_locale_overrides` JSON-Map)
+2. **Page-Embedding**: Wo ist die Datei in `tl_content.singleSRC` / `multiSRC` eingebunden? Dominante Sprache der Pages gewinnt.
+3. **Pfad-Hint**: `files/de/...`, `files/en_US/...`
+4. **Filename-Hint**: `manual_de.pdf`, `flyer-en.pdf`
+5. **Default**: `default_file_locale` aus den Settings, sonst erste aktive Locale
+
+Du kannst pro Datei direkt im Documents-Panel die Sprache überschreiben — der Eintrag wird sofort reindexiert.
+
+Beim Anlegen eines Frontend-Moduls oder Content-Elements vom Typ "Venne Search" wählst du **eine** feste Such-Sprache. Endnutzer wechseln die Sprache **nicht** selbst — sie sehen genau eine Suche, die zur aktuellen Seite passt.
+
+## Tag-System
+
+Im Backend unter **System → Venne Search** zwei neue Bereiche:
+
+- **Seitenbaum-Tagging**: Tree mit allen Seiten, pro Zeile aktuelle Tag-Chips. "+"-Button öffnet eine Combobox mit Live-Search; nicht existierende Tags lassen sich on-the-fly anlegen. Drag-&-Drop: Chip auf eine andere Page-Zeile ziehen = Tag mit-zuweisen. Jede Änderung triggert sofortiges Reindexing.
+- **Tag-Verwaltung**: Eigene Tabelle `tl_venne_search_tag` mit Slug, Label, Beschreibung, Farbe (8 vorgegebene Farben). Pro Tag wird die Anzahl der Zuweisungen direkt angezeigt.
+- **Tag-Übersicht**: Tabellarisch alle Tags mit Counts, Farb-Chips und Edit-Link.
+
+Im Frontend werden Tag-Chips an jeden Treffer gehängt (`tagsResolved` mit `slug`, `label`, `color`). Klickbar als Filter via `?tags[]=spongebob&tags[]=krabbenburger`. Mehrere Tags = AND-Verknüpfung (Meilisearch `IN`).
+
+Die Migration übernimmt einmalig vorhandene `tl_page.keywords`-CSVs ins neue System — gleicher Slug = gleicher Tag.
+
+## Search-Analytics
+
+Standardmäßig aktiv (`analytics_enabled = 1`). Jeder Such-Request wird **anonym** in einen JSONL-Tagespuffer geschrieben:
+
+```jsonl
+{"q":"spongebob","locale":"de","results":12,"ts":1715000000}
+```
+
+**Was wird gespeichert**: Suchbegriff, Locale, Treffer-Anzahl, Timestamp.
+**Was wird NICHT gespeichert**: IP-Adresse, User-Agent, Cookies, Session-IDs, User-Account-Bezug.
+
+Ein Cron-Worker schickt die Tagespuffer (außer dem heutigen, der noch in use ist) regelmäßig zur Plattform:
+
+```cron
+*/5 * * * *  cd /var/www/site && php vendor/bin/contao-console venne-search:analytics:flush
+```
+
+Auf [venne-search.de](https://venne-search.de) gibt's pro API-Key ein **Analytics-Dashboard**: Top-Queries, Zero-Result-Rate (super wertvoll für SEO), Sparkline letzte 30 Tage, CSV-Export, **Reset-Button** (User-getriggertes Löschen). Kein Auto-Purge — die Logs bleiben so lange du willst.
+
+Im Backend unter **System → Venne Search → Analytics-Status** siehst du den Buffer-Stand und kannst manuell flushen.
 
 ## Lizenz
 

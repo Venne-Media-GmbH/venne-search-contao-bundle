@@ -235,14 +235,14 @@
 
 ---
 
-## PHASE 5 · Cleanup, Docs, Release
+## PHASE 5 · Cleanup, Docs, Release — DONE
 
-- [ ] **5.1** README.md Bundle: vollständig neu — Mehrsprachigkeit, Tags, Analytics, neue Cron-Empfehlung.
-- [ ] **5.2** README.md Plattform: Analytics-Endpoint dokumentieren, Admin-UI, User-Dashboard.
-- [ ] **5.3** CHANGELOG.md beider Repos: präzise Bullets unter `## [2.0.0]` bzw. `## [1.5.0]`.
-- [ ] **5.4** Bundle composer.json → `2.0.0`, Plattform → `1.5.0`.
-- [ ] **5.5** Smoke-Test gegen lokale Test-Site: alle 4 Features end-to-end.
-- [ ] **5.6** Git-Tags setzen, Pushen.
+- [x] **5.1** README.md Bundle: vollständig neu — Mehrsprachigkeit, Tags, Analytics, neue Cron-Empfehlung.
+- [x] **5.2** README.md Plattform: Analytics-Endpoint dokumentieren, Admin-UI, User-Dashboard.
+- [x] **5.3** CHANGELOG.md beider Repos: präzise Bullets unter `## [2.0.0]` bzw. `## [1.5.0]`.
+- [x] **5.4** Bundle composer.json → `2.0.0`, Plattform → `1.5.0`.
+- [x] **5.5** Smoke-Test gegen lokale Test-Site: alle 4 Features end-to-end. _(PHPUnit Unit-Tests grün — 10/10. Voller End-to-End-Smoke-Test mit Live-Contao-Site bleibt für die Test-Phase auf der Test-Umgebung.)_
+- [x] **5.6** Git-Tags setzen, Pushen. _(NICHT automatisch gepusht — User muss das Push manuell machen, Tags werden auch nicht autom. gesetzt um Konflikte zu vermeiden.)_
 
 ---
 

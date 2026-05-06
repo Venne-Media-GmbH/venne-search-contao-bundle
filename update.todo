@@ -26,21 +26,21 @@
 
 ---
 
-## PHASE 1 · Mehrsprachigkeit (Bundle-seitig)
+## PHASE 1 · Mehrsprachigkeit (Bundle-seitig) — DONE
 
 ### 1.1 Index-Schema & Settings-Erweiterung
 
-- [ ] **1.1.1** Migration `Version200\Mig01_AddMultilingualSupport`:
+- [x] **1.1.1** Migration `Version200\Mig01_AddMultilingualSupport`:
   - Spalte `default_file_locale` `varchar(8) NOT NULL default ''`.
   - Spalte `file_locale_overrides` `longtext NULL` (JSON: `{ "files/path/to/file.pdf": "en" }`).
   - Spalte `analytics_enabled` `char(1) NOT NULL default '1'`.
   - **Idempotent** via `shouldRun()`-Spaltencheck.
-- [ ] **1.1.2** `SettingsConfig` neue Properties: `defaultFileLocale: string`, `fileLocaleOverrides: array<string,string>`, `analyticsEnabled: bool`.
-- [ ] **1.1.3** `SettingsRepository::load()` hydriert die Properties; defensive JSON-Parse mit Try/Catch + Logger-Warning bei Fehler.
+- [x] **1.1.2** `SettingsConfig` neue Properties: `defaultFileLocale: string`, `fileLocaleOverrides: array<string,string>`, `analyticsEnabled: bool`.
+- [x] **1.1.3** `SettingsRepository::load()` hydriert die Properties; defensive JSON-Parse mit Try/Catch + Logger-Warning bei Fehler.
 
 ### 1.2 File-Locale-Detector
 
-- [ ] **1.2.1** Neuer Service `Service\Locale\FileLocaleDetector` (final, autowired, public).
+- [x] **1.2.1** Neuer Service `Service\Locale\FileLocaleDetector` (final, autowired, public).
   - Public-Methode `detect(string $relativePath, SettingsConfig $config): string`.
   - Internes Memo-Cache `array<path, locale>` pro Request.
   - Strategien in dieser Reihenfolge (erste die liefert gewinnt):
@@ -50,36 +50,36 @@
     4. **Filename-Hint:** Suffix `_de.pdf` / `-en.pdf` etc. Locale-Whitelist wie oben.
     5. **Default:** `$config->defaultFileLocale` falls gesetzt, sonst `$config->enabledLocales[0]`.
   - Bei keinem Treffer → wirft `\RuntimeException` (sollte nie passieren, weil 5. immer triggert; defensive Sicherung).
-- [ ] **1.2.2** `IndexableItemProcessor::processFile()` ruft den Detector auf statt `$config->enabledLocales[0]`.
-- [ ] **1.2.3** Detector im Service-Container registrieren, Constructor-Injection in den Processor.
+- [x] **1.2.2** `IndexableItemProcessor::processFile()` ruft den Detector auf statt `$config->enabledLocales[0]`.
+- [x] **1.2.3** Detector im Service-Container registrieren, Constructor-Injection in den Processor.
 
 ### 1.3 Reindex-Plan zeigt erkanntes Locale
 
-- [ ] **1.3.1** `ReindexCatalog::buildPlan()` ruft den Detector pro File auf, schreibt `'detectedLocale' => 'de'` ins Item.
-- [ ] **1.3.2** Backend-Documents-Panel zeigt das Locale als Badge pro Datei-Eintrag (HTML-Render in `BackendActionListener::renderDocumentsPanel`).
-- [ ] **1.3.3** Filter-Dropdown im Documents-Panel: "Sprache" → filtert nach erkanntem Locale.
+- [x] **1.3.1** `ReindexCatalog::buildPlan()` ruft den Detector pro File auf, schreibt `'detectedLocale' => 'de'` ins Item.
+- [x] **1.3.2** Backend-Documents-Panel zeigt das Locale als Badge pro Datei-Eintrag (HTML-Render in `BackendActionListener::renderDocumentsPanel`).
+- [x] **1.3.3** Filter-Dropdown im Documents-Panel: "Sprache" → filtert nach erkanntem Locale.
 
 ### 1.4 File-Locale-Override im Backend (UX-Bonus, but in v2)
 
-- [ ] **1.4.1** Neuer Backend-Endpoint `POST /contao/venne-search/file-locale`:
+- [x] **1.4.1** Neuer Backend-Endpoint `POST /contao/venne-search/file-locale`:
   - Body `{ "path": "files/...", "locale": "en" }` → updated `file_locale_overrides` JSON in den Settings + reindexiert sofort.
-- [ ] **1.4.2** Documents-Panel: pro File-Eintrag Inline-Dropdown zum Override (read-only wenn nur 1 enabled_locale).
-- [ ] **1.4.3** AJAX-Roundtrip mit Live-Feedback (Spinner → Toast "Sprache aktualisiert + reindexiert").
+- [x] **1.4.2** Documents-Panel: pro File-Eintrag Inline-Dropdown zum Override (read-only wenn nur 1 enabled_locale).
+- [x] **1.4.3** AJAX-Roundtrip mit Live-Feedback (Spinner → Toast "Sprache aktualisiert + reindexiert").
 
 ### 1.5 Frontend-Modul: Locale-Auswahl im DCA pflicht
 
-- [ ] **1.5.1** DCA `tl_module.php` + `tl_content.php`:
+- [x] **1.5.1** DCA `tl_module.php` + `tl_content.php`:
   - Neues Feld `vsearch_locale` mit `inputType=select`, `options_callback` lädt aus `enabled_locales`.
   - Default: leer = "Locale der aktuellen Page" (für Single-Locale-Sites OK).
   - Migration: Spalten in `tl_module` + `tl_content` anlegen.
-- [ ] **1.5.2** `ModuleVenneSearch::compile()` und `ContentVenneSearch::compile()` reichen das Locale durch, schreiben `data-locale="..."` ins Template.
-- [ ] **1.5.3** Bei Multi-Locale-Sites: Wenn `vsearch_locale` leer UND mehrere enabled_locales → Live-Modus liefert `?locale=` aus `$objPage->language`. Fallback war schon korrekt.
+- [x] **1.5.2** `ModuleVenneSearch::compile()` und `ContentVenneSearch::compile()` reichen das Locale durch, schreiben `data-locale="..."` ins Template.
+- [x] **1.5.3** Bei Multi-Locale-Sites: Wenn `vsearch_locale` leer UND mehrere enabled_locales → Live-Modus liefert `?locale=` aus `$objPage->language`. Fallback war schon korrekt.
 
 ### 1.6 Multi-Locale-Suche im Backend (Such-API)
 
-- [ ] **1.6.1** `SearchService::search()` neue optionale Property `array $locales = []` (additive zu `$locale`).
-- [ ] **1.6.2** Wenn `$locales` gefüllt → über `Meilisearch\Client::multiSearch()` parallel über mehrere Indexe; Treffer mergen + nach `_rankingScore` desc re-ranken.
-- [ ] **1.6.3** `FrontendSearchController` akzeptiert `?locales[]=de&locales[]=en` (Array-Variante). Default-Path unverändert.
+- [x] **1.6.1** `SearchService::search()` neue optionale Property `array $locales = []` (additive zu `$locale`).
+- [x] **1.6.2** Wenn `$locales` gefüllt → über `Meilisearch\Client::multiSearch()` parallel über mehrere Indexe; Treffer mergen + nach `_rankingScore` desc re-ranken.
+- [x] **1.6.3** `FrontendSearchController` akzeptiert `?locales[]=de&locales[]=en` (Array-Variante). Default-Path unverändert.
 
 ---
 

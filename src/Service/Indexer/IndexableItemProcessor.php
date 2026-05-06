@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 
 use Doctrine\DBAL\Connection;
+use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
@@ -27,6 +28,7 @@ final class IndexableItemProcessor
         private readonly TextNormalizer $normalizer,
         private readonly PdfExtractor $pdfExtractor,
         private readonly PermissionResolver $permissions,
+        private readonly FileLocaleDetector $localeDetector,
     ) {
     }
 
@@ -200,7 +202,8 @@ final class IndexableItemProcessor
             ];
         }
 
-        $locale = $config->enabledLocales[0] ?? 'de';
+        // v2.0.0: File-Locale per Detector statt einfach erste enabled_locale.
+        $locale = $this->localeDetector->detect($relativePath, $config);
         $this->indexer->ensureIndex($locale);
 
         $doc = new SearchDocument(

@@ -49,6 +49,18 @@ final class FrontendSearchController extends AbstractController
         $limit = (int) $request->query->get('limit', 20);
         $offset = (int) $request->query->get('offset', 0);
 
+        // v2.0.0: optionales Multi-Locale via ?locales[]=de&locales[]=en
+        $localesParam = $request->query->all('locales');
+        $locales = [];
+        if (\is_array($localesParam)) {
+            foreach ($localesParam as $l) {
+                $clean = preg_replace('/[^a-z]/', '', (string) $l);
+                if ($clean !== '' && \strlen($clean) <= 5) {
+                    $locales[] = $clean;
+                }
+            }
+        }
+
         $filters = [];
         $type = (string) $request->query->get('type', '');
         if ($type !== '') {
@@ -65,6 +77,7 @@ final class FrontendSearchController extends AbstractController
                 limit: $limit,
                 offset: $offset,
                 userGroups: $userGroups,
+                locales: $locales,
             );
         } catch (ResolveAuthException) {
             return $this->errorResponse(401, 'unauthorized', 'Suche aktuell nicht verfügbar — der Site-Betreiber muss den Plattform-Schlüssel prüfen.');

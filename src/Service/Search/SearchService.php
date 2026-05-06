@@ -27,6 +27,8 @@ final class SearchService
      * @param array<string, mixed> $filters    z.B. ['type' => 'page', 'tags' => ['shop']]
      * @param list<int>            $userGroups tl_member_group-IDs des aktuellen Frontend-Users.
      *                                          Leeres Array = anonymer Besucher → nur public docs.
+     * @param list<string>         $locales    v2.0.0: Multi-Locale-Suche. Wenn nicht-leer
+     *                                          → über mehrere Indexe parallel; $locale wird ignoriert.
      */
     public function search(
         string $query,
@@ -35,8 +37,25 @@ final class SearchService
         int $limit = 20,
         int $offset = 0,
         array $userGroups = [],
+        array $locales = [],
     ): SearchResult {
         $config = $this->settings->load();
+
+        // Multi-Locale-Pfad: parallele Suche, Treffer mergen + nach Score re-ranken.
+        if ($locales !== []) {
+            $sanitized = array_values(array_filter(array_map(
+                static fn (string $l): string => strtolower(preg_replace('/[^a-z]/', '', $l) ?? ''),
+                $locales,
+            ), static fn (string $l): bool => $l !== ''));
+            if (\count($sanitized) > 1) {
+                return $this->searchMultiLocale($query, $sanitized, $filters, $limit, $offset, $userGroups, $config);
+            }
+            // Fallthrough: genau 1 Locale → Single-Path
+            if ($sanitized !== []) {
+                $locale = $sanitized[0];
+            }
+        }
+
         $indexUid = \sprintf('%s_%s', $config->indexPrefix, $locale);
 
         $params = [
@@ -158,6 +177,75 @@ final class SearchService
     }
 
 /**
+     * Multi-Locale-Pfad: pro Locale ein Search-Call, Treffer mergen + nach
+     * _rankingScore desc neu sortieren. Pagination wird auf den gemergten
+     * Trefferpool angewendet.
+     *
+     * @param array<string, mixed> $filters
+     * @param list<int>            $userGroups
+     * @param list<string>         $locales
+     */
+    private function searchMultiLocale(
+        string $query,
+        array $locales,
+        array $filters,
+        int $limit,
+        int $offset,
+        array $userGroups,
+        \VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig $config,
+    ): SearchResult {
+        $allHits = [];
+        $facets = [];
+        $totalHits = 0;
+        $queryTime = 0;
+
+        // Pro Locale eine Suche absetzen mit großzügigem Limit, damit das
+        // Re-Ranking sinnvoll ist (Top-50 aus jedem Index).
+        $perLocaleLimit = max($limit + $offset, 50);
+
+        foreach ($locales as $loc) {
+            try {
+                $r = $this->search(
+                    query: $query,
+                    locale: $loc,
+                    filters: $filters,
+                    limit: $perLocaleLimit,
+                    offset: 0,
+                    userGroups: $userGroups,
+                    locales: [], // wichtig: rekursiver Single-Locale-Pfad
+                );
+            } catch (\Throwable) {
+                continue;
+            }
+            foreach ($r->hits as $h) {
+                $allHits[] = $h;
+            }
+            $totalHits += $r->totalHits;
+            $queryTime += $r->queryTimeMs;
+            foreach ($r->facets as $facetName => $values) {
+                if (!isset($facets[$facetName])) {
+                    $facets[$facetName] = [];
+                }
+                foreach ((array) $values as $v => $cnt) {
+                    $facets[$facetName][$v] = ($facets[$facetName][$v] ?? 0) + (int) $cnt;
+                }
+            }
+        }
+
+        usort($allHits, static fn ($a, $b): int => $b->score <=> $a->score);
+        $paged = \array_slice($allHits, $offset, $limit);
+
+        return new SearchResult(
+            hits: $paged,
+            totalHits: $totalHits,
+            offset: $offset,
+            limit: $limit,
+            facets: $facets,
+            queryTimeMs: $queryTime,
+        );
+    }
+
+    /**
      * Umgibt kurze Tokens (≤3 Zeichen) mit Quotes, damit Meilisearch sie als
      * Phrase versteht — kein Prefix-Match, kein Tippfehler. Längere Tokens
      * bleiben unangetastet, damit der "Vegane Rezepte"-Treffer für "vegane"

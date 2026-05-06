@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Meilisearch\Client;
 use Meilisearch\Contracts\DocumentsQuery;
 use Symfony\Component\HttpKernel\KernelInterface;
+use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
 
@@ -38,6 +39,7 @@ final class ReindexCatalog
         private readonly Client $meilisearch,
         private readonly KernelInterface $kernel,
         private readonly PermissionResolver $permissions,
+        private readonly FileLocaleDetector $localeDetector,
     ) {
     }
 
@@ -108,6 +110,9 @@ final class ReindexCatalog
         $indexedIds = $this->loadIndexedIds($indexUid);
 
         // ===== PAGES =====
+        // Page-Locale lookup: tl_page.language gilt nur auf Root-Pages, deshalb
+        // wandern wir bei Bedarf nach oben zur Root und nehmen deren Sprache.
+        $pageLocaleCache = [];
         foreach ($pageRows as $row) {
             $pageId = (int) $row['id'];
             $alias = (string) ($row['alias'] ?? '');
@@ -138,6 +143,7 @@ final class ReindexCatalog
                 excludedCount: $excludedCount,
                 publicCount: $publicCount,
                 protectedCount: $protectedCount,
+                detectedLocale: $this->resolvePageLocale($pageId, $pageLocaleCache, $config),
             );
         }
 
@@ -170,6 +176,8 @@ final class ReindexCatalog
             $perm = $this->permissions->resolveFilePermissions($relativePath, $skipAcl);
             $decision = $this->decidePermission('file', $relativePath, $perm['isProtected'], $config);
 
+            $detectedLocale = $this->localeDetector->detect($relativePath, $config);
+
             $items[] = $this->buildItemEntry(
                 docId: $docId,
                 type: 'file',
@@ -184,6 +192,7 @@ final class ReindexCatalog
                 excludedCount: $excludedCount,
                 publicCount: $publicCount,
                 protectedCount: $protectedCount,
+                detectedLocale: $detectedLocale,
             );
         }
 
@@ -274,6 +283,7 @@ final class ReindexCatalog
         int &$excludedCount,
         int &$publicCount,
         int &$protectedCount,
+        ?string $detectedLocale = null,
     ): array {
         $alreadyIndexed = isset($indexedIds[$docId]);
 
@@ -305,7 +315,50 @@ final class ReindexCatalog
             'permission' => $permLabel,
             'allowedGroups' => $perm['allowedGroups'],
             'excludedReason' => $decision['reason'],
+            'detectedLocale' => $detectedLocale,
         ];
+    }
+
+    /**
+     * Findet das Locale einer Page, indem nach oben zur Root gewandert wird.
+     * Cached pro Run.
+     *
+     * @param array<int,string> $cache
+     */
+    private function resolvePageLocale(int $pageId, array &$cache, SettingsConfig $config): string
+    {
+        if (isset($cache[$pageId])) {
+            return $cache[$pageId];
+        }
+        $current = $pageId;
+        $locale = '';
+        for ($depth = 0; $depth < 50 && $current > 0; $depth++) {
+            try {
+                $row = $this->db->fetchAssociative(
+                    'SELECT pid, type, language FROM tl_page WHERE id = ?',
+                    [$current],
+                );
+            } catch (\Throwable) {
+                break;
+            }
+            if (!\is_array($row)) {
+                break;
+            }
+            $lang = strtolower(trim((string) ($row['language'] ?? '')));
+            if ($lang !== '') {
+                $locale = $lang;
+                break;
+            }
+            if (($row['type'] ?? '') === 'root') {
+                break;
+            }
+            $current = (int) ($row['pid'] ?? 0);
+        }
+        if ($locale === '' || !\in_array($locale, $config->enabledLocales, true)) {
+            $locale = $config->enabledLocales[0] ?? 'de';
+        }
+        $cache[$pageId] = $locale;
+        return $locale;
     }
 
     /**

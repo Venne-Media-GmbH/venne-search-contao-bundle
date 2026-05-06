@@ -7,6 +7,7 @@ namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
+use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
@@ -28,6 +29,7 @@ final class LivePageIndexer
         private readonly PdfExtractor $pdfExtractor,
         private readonly SettingsRepository $settings,
         private readonly PermissionResolver $permissions,
+        private readonly FileLocaleDetector $localeDetector,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
@@ -223,10 +225,12 @@ final class LivePageIndexer
             ? 'file-'.bin2hex($uuidBin)
             : 'file-path-'.md5($relativePath);
 
+        $locale = $this->localeDetector->detect($relativePath, $config);
+
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
-            locale: $config->enabledLocales[0] ?? 'de',
+            locale: $locale,
             title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
             url: '/'.$relativePath,
             content: $this->normalizer->normalize($text),

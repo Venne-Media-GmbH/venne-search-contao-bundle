@@ -94,10 +94,6 @@ services:
         public: true
         tags: ['controller.service_arguments']
 
-    VenneMedia\VenneSearchContaoBundle\Controller\Backend\AnalyticsFlushController:
-        public: true
-        tags: ['controller.service_arguments']
-
     VenneMedia\VenneSearchContaoBundle\Controller\Backend\TagAssignController:
         public: true
         tags: ['controller.service_arguments']
@@ -125,7 +121,4 @@ services:
         public: true
 
     VenneMedia\VenneSearchContaoBundle\Service\Analytics\SearchAnalyticsBuffer:
-        public: true
-
-    VenneMedia\VenneSearchContaoBundle\Service\Analytics\AnalyticsFlusher:
         public: true

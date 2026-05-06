@@ -1021,60 +1021,18 @@ final class BackendActionListener
             $config = null;
         }
         $enabled = $config?->analyticsEnabled ?? true;
-        $stats = $this->analyticsBuffer->stats();
-        $lastFlush = $stats['lastFlushAt'] !== null
-            ? date('d.m.Y H:i', $stats['lastFlushAt'])
-            : 'noch nie';
 
-        $statusColor = $enabled ? '#10b981' : '#9ca3af';
-        $statusLabel = $enabled ? 'Aktiv' : 'Deaktiviert';
-
-        $disabledNote = '';
         if (!$enabled) {
-            $disabledNote = '<div style="margin-top:8px;font-size:.85rem;color:#92400e;background:#fef3c7;padding:8px 12px;border-radius:6px;">'
-                . 'Analytics ist deaktiviert. Aktiviere die Checkbox oben, um Such-Anfragen anonym zu erfassen.'
+            return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#78350f;font-size:.9rem;">'
+                . '<strong>Analytics ist aus.</strong> Aktiviere die Checkbox oben, damit du auf venne-search.de sehen kannst, was Besucher gesucht haben.'
                 . '</div>';
         }
 
-        return sprintf(
-            '<div style="margin:14px 18px;padding:18px 22px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">'
-            . '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">'
-            . '<span style="display:inline-block;width:10px;height:10px;border-radius:50%%;background:%s;"></span>'
-            . '<strong style="color:#1f2937;">Search-Analytics: %s</strong>'
-            . '</div>'
-            . '<div style="display:flex;flex-wrap:wrap;gap:14px;font-size:.9rem;color:#374151;">'
-            . '<div><strong>%s</strong> Events gepuffert</div>'
-            . '<div><strong>%s</strong> Datei(en) wartet auf Versand</div>'
-            . '<div><strong>%s</strong> Failed-Dateien</div>'
-            . '<div>Letzter Flush: <strong>%s</strong></div>'
-            . '</div>'
-            . '<div style="margin-top:14px;display:flex;gap:10px;align-items:center;">'
-            . '<button type="button" id="vsearch-analytics-flush-btn" class="tl_submit" style="background:#3a7178;color:#fff;border:none;padding:7px 14px;border-radius:5px;cursor:pointer;">Jetzt flushen</button>'
-            . '<span id="vsearch-analytics-flush-status" style="color:#6b7280;font-size:.85rem;"></span>'
-            . '</div>'
-            . '<div style="margin-top:10px;font-size:.78rem;color:#6b7280;">'
-            . 'Empfohlen: Cron alle 5 Minuten — <code>php vendor/bin/contao-console venne-search:analytics:flush</code>'
-            . '</div>'
-            . '%s'
-            . '</div>'
-            . '<script>'
-            . '(function(){var btn=document.getElementById("vsearch-analytics-flush-btn");if(!btn)return;'
-            . 'btn.addEventListener("click",function(){var s=document.getElementById("vsearch-analytics-flush-status");'
-            . 's.textContent="Sende…";btn.disabled=true;'
-            . 'fetch("/contao/venne-search/analytics-flush",{method:"POST",headers:{"X-Requested-With":"XMLHttpRequest"}})'
-            . '.then(function(r){return r.json();}).then(function(d){'
-            . 'if(d.ok){s.style.color="#10b981";s.textContent="✓ "+d.processedEvents+" Events versendet ("+d.processedFiles+" Dateien). Seite neu laden für aktuellen Stand.";}'
-            . 'else{s.style.color="#dc2626";s.textContent="✗ "+(d.error||"unbekannter Fehler");}'
-            . 'btn.disabled=false;}).catch(function(){s.style.color="#dc2626";s.textContent="✗ Netzwerk-Fehler";btn.disabled=false;});});})();'
-            . '</script>',
-            $statusColor,
-            htmlspecialchars($statusLabel),
-            number_format($stats['totalEvents'], 0, ',', '.'),
-            (string) $stats['pendingFiles'],
-            (string) $stats['failedFiles'],
-            htmlspecialchars($lastFlush),
-            $disabledNote,
-        );
+        return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #a7f3d0;border-radius:8px;background:#ecfdf5;color:#065f46;font-size:.9rem;">'
+            . '<strong>Analytics ist an.</strong> Jede Suche auf deiner Site wird anonym auf '
+            . '<a href="https://venne-search.de" target="_blank" rel="noopener" style="color:#065f46;text-decoration:underline;">venne-search.de</a> '
+            . 'erfasst — keine IP, kein User-Agent, kein Personenbezug. Login dort, dann auf API-Keys → Analytics, um die Top-Suchen zu sehen.'
+            . '</div>';
     }
 
     /**

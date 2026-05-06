@@ -181,24 +181,12 @@ Die Migration übernimmt einmalig vorhandene `tl_page.keywords`-CSVs ins neue Sy
 
 ## Search-Analytics
 
-Standardmäßig aktiv (`analytics_enabled = 1`). Jeder Such-Request wird **anonym** in einen JSONL-Tagespuffer geschrieben:
+Standardmäßig aktiv. Jede Suche auf deiner Site wird sofort und unsichtbar an [venne-search.de](https://venne-search.de) geschickt — kein Cron, kein Worker, kein zusätzliches Setup. Du logst dich auf venne-search.de ein, gehst zu deinen API-Keys → Analytics und siehst Top-Suchen, Zero-Result-Rate (sehr wertvoll für SEO) und einen 30-Tage-Verlauf.
 
-```jsonl
-{"q":"spongebob","locale":"de","results":12,"ts":1715000000}
-```
-
-**Was wird gespeichert**: Suchbegriff, Locale, Treffer-Anzahl, Timestamp.
+**Was wird gespeichert**: Suchbegriff, Sprache, Treffer-Anzahl, Zeitstempel.
 **Was wird NICHT gespeichert**: IP-Adresse, User-Agent, Cookies, Session-IDs, User-Account-Bezug.
 
-Ein Cron-Worker schickt die Tagespuffer (außer dem heutigen, der noch in use ist) regelmäßig zur Plattform:
-
-```cron
-*/5 * * * *  cd /var/www/site && php vendor/bin/contao-console venne-search:analytics:flush
-```
-
-Auf [venne-search.de](https://venne-search.de) gibt's pro API-Key ein **Analytics-Dashboard**: Top-Queries, Zero-Result-Rate (super wertvoll für SEO), Sparkline letzte 30 Tage, CSV-Export, **Reset-Button** (User-getriggertes Löschen). Kein Auto-Purge — die Logs bleiben so lange du willst.
-
-Im Backend unter **System → Venne Search → Analytics-Status** siehst du den Buffer-Stand und kannst manuell flushen.
+Wenn du Analytics nicht möchtest, deaktivierst du im Backend unter **System → Venne Search** die Checkbox „Such-Analytics aktivieren". Der Such-Request läuft auch dann unverändert durch — nur ohne Tracking.
 
 ## Lizenz
 

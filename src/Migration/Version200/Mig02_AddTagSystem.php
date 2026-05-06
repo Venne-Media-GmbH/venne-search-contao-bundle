@@ -39,6 +39,9 @@ final class Mig02_AddTagSystem extends AbstractMigration
         $schema = $this->connection->createSchemaManager();
         $created = [];
 
+        // WICHTIG: Index-Namen müssen mit den DCA-Definitionen matchen, damit
+        // Contao beim Schema-Diff keine "ALTER TABLE … RENAME INDEX" mehr
+        // vorschlägt. Pattern: Index-Name = Spalten-Name(n) (Contao-Konvention).
         if (!$schema->tablesExist(['tl_venne_search_tag'])) {
             $this->connection->executeStatement(<<<'SQL'
                 CREATE TABLE tl_venne_search_tag (
@@ -49,24 +52,27 @@ final class Mig02_AddTagSystem extends AbstractMigration
                     description TEXT NULL,
                     color VARCHAR(16) NOT NULL DEFAULT 'blue',
                     PRIMARY KEY (id),
-                    UNIQUE KEY uniq_slug (slug)
+                    UNIQUE KEY slug (slug)
                 ) DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci ENGINE=InnoDB
             SQL);
             $created[] = 'tl_venne_search_tag';
         }
 
         if (!$schema->tablesExist(['tl_venne_search_tag_assignment'])) {
+            // Index-Namen MÜSSEN dem Contao-Pattern Spalte_Spalte entsprechen,
+            // sonst schlägt Contao "ALTER TABLE … RENAME INDEX" beim nächsten
+            // Schema-Diff vor.
             $this->connection->executeStatement(<<<'SQL'
                 CREATE TABLE tl_venne_search_tag_assignment (
                     id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
                     tstamp INT(10) UNSIGNED NOT NULL DEFAULT 0,
-                    tag_id INT(10) UNSIGNED NOT NULL,
-                    target_type VARCHAR(8) NOT NULL,
-                    target_id VARCHAR(128) NOT NULL,
+                    tag_id INT(10) UNSIGNED NOT NULL DEFAULT 0,
+                    target_type VARCHAR(8) NOT NULL DEFAULT '',
+                    target_id VARCHAR(128) NOT NULL DEFAULT '',
                     PRIMARY KEY (id),
-                    UNIQUE KEY uniq_assign (tag_id, target_type, target_id),
-                    KEY idx_target (target_type, target_id),
-                    KEY idx_tag (tag_id)
+                    UNIQUE KEY tag_id_target_type_target_id (tag_id, target_type, target_id),
+                    KEY target_type_target_id (target_type, target_id),
+                    KEY tag_id (tag_id)
                 ) DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci ENGINE=InnoDB
             SQL);
             $created[] = 'tl_venne_search_tag_assignment';

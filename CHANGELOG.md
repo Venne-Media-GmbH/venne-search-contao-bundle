@@ -12,7 +12,7 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 ### Added
 - **Mehrsprachigkeit:** File-Locale-Detection mit fünf Strategien (Override → Page-Embedding → Pfad-Hint → Filename-Hint → Default). Pro Frontend-Modul/-Element konfigurierbares Locale; mehrere Locales gleichzeitig durchsuchbar via `multi-search`.
 - **Tag-System:** Eigenständige Tabellen `tl_venne_search_tag` + `tl_venne_search_tag_assignment` mit Backend-Tree-Picker, Drag-and-Drop-Massentagging, Inline-Combobox, Farbe + Beschreibung pro Tag. Tags landen mit dem Index und sind frontendseitig als Filter-Chips klickbar.
-- **Search-Analytics:** Anonyme Aggregation aller Suchanfragen pro API-Key via Plattform-Endpoint `POST /api/v1/analytics/search-events`. Buffer als JSONL, Flush per Cron oder Button. Plattform-Dashboard mit Top-Queries, Zero-Result-Filter, Sparkline und CSV-Export.
+- **Search-Analytics:** Anonyme Aggregation aller Suchanfragen pro API-Key via Plattform-Endpoint `POST /api/v1/analytics/search-events`. **Direkter Send pro Such-Request** (fire-and-forget, 2 s Timeout) — kein Cron, kein Buffer, kein User-Setup nötig. Plattform-Dashboard mit Top-Queries, Zero-Result-Filter, Sparkline und CSV-Export.
 - **File-Locale-Override-UI:** Pro Datei direkt aus dem Documents-Panel die Sprache übersteuern.
 - **Backend:** Neuer Status-Block "Analytics" mit Live-Buffer-Stand und manuellem Flush-Button.
 

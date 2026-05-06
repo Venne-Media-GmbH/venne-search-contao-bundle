@@ -100,15 +100,6 @@ venne_search_backend_file_locale:
         _token_check: false
     methods: [POST]
 
-# v2.0.0: Manuelles Triggern des Analytics-Flushs aus dem Backend.
-venne_search_backend_analytics_flush:
-    path: /contao/venne-search/analytics-flush
-    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\AnalyticsFlushController
-    defaults:
-        _scope: backend
-        _token_check: false
-    methods: [POST]
-
 # v2.0.0: Tag-System AJAX-Endpoints.
 venne_search_backend_tag_assign:
     path: /contao/venne-search/tag/assign

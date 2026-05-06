@@ -134,6 +134,44 @@ final class FrontendSearchController extends AbstractController
         }
         $extensions = ['pdf', 'docx', 'doc', 'odt', 'rtf', 'txt', 'md'];
 
+        // Tag-Facets aus dem Meilisearch-facetDistribution: pro echtem Tag
+        // Slug+Label deduplizieren (im Index stehen beide), dann nur die
+        // mit höchstem Count behalten. Dateiendungen ausblenden.
+        $rawTagFacet = (array) ($result->facets['tags'] ?? []);
+        $tagFacetByTag = [];
+        foreach ($rawTagFacet as $token => $count) {
+            $count = (int) $count;
+            if ($token === '' || \in_array(strtolower((string) $token), $extensions, true)) {
+                continue;
+            }
+            $tag = $bySlug[$token] ?? $byLabelLower[mb_strtolower((string) $token)] ?? null;
+            if ($tag === null) {
+                // Legacy/Roh-Tag — als grauer Chip
+                $key = 'raw:' . mb_strtolower((string) $token);
+                if (!isset($tagFacetByTag[$key]) || $tagFacetByTag[$key]['count'] < $count) {
+                    $tagFacetByTag[$key] = [
+                        'slug' => (string) $token,
+                        'label' => (string) $token,
+                        'color' => 'gray',
+                        'count' => $count,
+                    ];
+                }
+                continue;
+            }
+            $key = $tag['slug'];
+            if (!isset($tagFacetByTag[$key]) || $tagFacetByTag[$key]['count'] < $count) {
+                $tagFacetByTag[$key] = [
+                    'slug' => $tag['slug'],
+                    'label' => $tag['label'],
+                    'color' => $tag['color'],
+                    'count' => $count,
+                ];
+            }
+        }
+        // Sortiert: häufigste Tags zuerst.
+        $tagFacetList = array_values($tagFacetByTag);
+        usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+
         $response = new JsonResponse([
             'hits' => array_map(
                 static function ($h) use ($bySlug, $byLabelLower, $extensions): array {
@@ -174,6 +212,7 @@ final class FrontendSearchController extends AbstractController
             'offset' => $result->offset,
             'limit' => $result->limit,
             'facets' => $result->facets,
+            'tagFacets' => $tagFacetList,
             'queryTimeMs' => $result->queryTimeMs,
         ]);
 

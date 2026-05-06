@@ -28,6 +28,221 @@ final class TagBackendListener
     ) {
     }
 
+    /**
+     * Wird vom DCA `tl_venne_search_tag.assignments_panel` aufgerufen,
+     * wenn der User einen Tag bearbeitet. Zeigt alle Seiten/Dateien die
+     * diesen Tag tragen — mit Entfernen-Knopf pro Eintrag.
+     */
+    public static function renderAssignmentsPanel(): string
+    {
+        $container = \Contao\System::getContainer();
+        if ($container === null) {
+            return '';
+        }
+        try {
+            $listener = $container->get(self::class);
+        } catch (\Throwable) {
+            return '';
+        }
+        $tagId = (int) (\Contao\Input::get('id') ?? 0);
+        return $listener?->buildAssignmentsHtml($tagId) ?? '';
+    }
+
+    public function buildAssignmentsHtml(int $tagId): string
+    {
+        if ($tagId <= 0 || !$this->tags->tablesExist()) {
+            return '';
+        }
+
+        $targets = $this->tags->targetsForTag($tagId);
+        if ($targets === []) {
+            return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;color:#6b7280;font-size:.9rem;">'
+                . 'Diesem Tag ist noch nichts zugewiesen. Geh zurück auf "Venne Search" und nutze den Seitenbaum, um Seiten zu taggen.'
+                . '</div>';
+        }
+
+        // Page-Pfade auflösen für die Anzeige (Breadcrumb).
+        $pageIds = [];
+        $filePaths = [];
+        foreach ($targets as $t) {
+            if ($t['targetType'] === 'page') {
+                $pageIds[] = (int) $t['targetId'];
+            } elseif ($t['targetType'] === 'file') {
+                $filePaths[] = (string) $t['targetId'];
+            }
+        }
+        $pageInfo = $this->resolvePageBreadcrumbs($pageIds);
+
+        $rows = '';
+        foreach ($targets as $t) {
+            $type = $t['targetType'];
+            $tid = $t['targetId'];
+            if ($type === 'page') {
+                $info = $pageInfo[(int) $tid] ?? null;
+                if ($info === null) {
+                    continue;
+                }
+                $editUrl = sprintf(
+                    'contao?do=page&amp;act=edit&amp;id=%d',
+                    (int) $tid,
+                );
+                $rows .= sprintf(
+                    '<tr style="border-bottom:1px solid #f3f4f6;">'
+                    . '<td style="padding:8px 6px;width:24px;color:#6b7280;">%s</td>'
+                    . '<td style="padding:8px 6px;">'
+                    . '<a href="%s" style="color:#1f2937;text-decoration:none;font-weight:500;">%s</a>'
+                    . '<div style="color:#94a3b8;font-size:.78rem;margin-top:2px;">%s</div>'
+                    . '</td>'
+                    . '<td style="padding:8px 6px;text-align:right;width:140px;">'
+                    . '<button type="button" class="vstag-unassign-btn" data-type="page" data-id="%d" data-tag-id="%d" '
+                    . 'style="background:transparent;border:1px solid #fca5a5;color:#b91c1c;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.8rem;">Entfernen</button>'
+                    . '</td>'
+                    . '</tr>',
+                    self::iconPage(),
+                    $editUrl,
+                    htmlspecialchars($info['title']),
+                    htmlspecialchars($info['breadcrumb']),
+                    (int) $tid,
+                    $tagId,
+                );
+            } elseif ($type === 'file') {
+                $rows .= sprintf(
+                    '<tr style="border-bottom:1px solid #f3f4f6;">'
+                    . '<td style="padding:8px 6px;width:24px;color:#6b7280;">%s</td>'
+                    . '<td style="padding:8px 6px;">'
+                    . '<span style="color:#1f2937;font-weight:500;">%s</span>'
+                    . '<div style="color:#94a3b8;font-size:.78rem;margin-top:2px;font-family:monospace;">%s</div>'
+                    . '</td>'
+                    . '<td style="padding:8px 6px;text-align:right;width:140px;">'
+                    . '<button type="button" class="vstag-unassign-btn" data-type="file" data-id="%s" data-tag-id="%d" '
+                    . 'style="background:transparent;border:1px solid #fca5a5;color:#b91c1c;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:.8rem;">Entfernen</button>'
+                    . '</td>'
+                    . '</tr>',
+                    self::iconFile(),
+                    htmlspecialchars(basename($tid)),
+                    htmlspecialchars($tid),
+                    htmlspecialchars($tid),
+                    $tagId,
+                );
+            }
+        }
+
+        // Tag-Slug brauchen wir clientseitig fürs Unassign-API.
+        $tagSlug = '';
+        try {
+            $row = $this->db->fetchAssociative('SELECT slug FROM tl_venne_search_tag WHERE id = ?', [$tagId]);
+            $tagSlug = \is_array($row) ? (string) ($row['slug'] ?? '') : '';
+        } catch (\Throwable) {
+        }
+        $tagSlugJs = json_encode($tagSlug);
+
+        return <<<HTML
+<div style="margin:14px 18px;padding:18px 22px;border:1px solid #d1d5db;border-radius:8px;background:#fff;">
+    <table style="width:100%;border-collapse:collapse;font-size:.9rem;">
+        <thead>
+            <tr style="border-bottom:1px solid #d1d5db;">
+                <th style="text-align:left;padding:8px 6px;font-weight:600;color:#6b7280;text-transform:uppercase;font-size:.7rem;letter-spacing:.05em;"></th>
+                <th style="text-align:left;padding:8px 6px;font-weight:600;color:#6b7280;text-transform:uppercase;font-size:.7rem;letter-spacing:.05em;">Inhalt</th>
+                <th style="text-align:right;padding:8px 6px;"></th>
+            </tr>
+        </thead>
+        <tbody id="vstag-assignments-tbody">
+            {$rows}
+        </tbody>
+    </table>
+</div>
+<script>
+(function(){
+    var TAG_SLUG = {$tagSlugJs};
+    var tbody = document.getElementById('vstag-assignments-tbody');
+    if (!tbody) return;
+    tbody.addEventListener('click', function (e) {
+        var btn = e.target.closest('.vstag-unassign-btn');
+        if (!btn) return;
+        if (!confirm('Tag von diesem Eintrag entfernen?')) return;
+        var row = btn.closest('tr');
+        btn.disabled = true;
+        btn.textContent = '...';
+        fetch('/contao/venne-search/tag/unassign', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest'},
+            body: JSON.stringify({
+                targetType: btn.dataset.type,
+                targetId: btn.dataset.id,
+                tagSlug: TAG_SLUG,
+            }),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+            if (d.ok) {
+                row.remove();
+            } else {
+                btn.disabled = false;
+                btn.textContent = 'Entfernen';
+                alert('Fehler: ' + (d.error || 'unbekannt'));
+            }
+        });
+    });
+})();
+</script>
+HTML;
+    }
+
+    /**
+     * Liefert pro Page-ID ein Pfad-Display "Root → Eltern → Page".
+     *
+     * @param list<int> $pageIds
+     * @return array<int, array{title:string, breadcrumb:string}>
+     */
+    private function resolvePageBreadcrumbs(array $pageIds): array
+    {
+        if ($pageIds === []) {
+            return [];
+        }
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                'SELECT id, pid, title, alias FROM tl_page',
+            );
+        } catch (\Throwable) {
+            return [];
+        }
+        $byId = [];
+        foreach ($rows as $r) {
+            $byId[(int) $r['id']] = [
+                'pid' => (int) $r['pid'],
+                'title' => (string) ($r['title'] ?? ''),
+                'alias' => (string) ($r['alias'] ?? ''),
+            ];
+        }
+
+        $out = [];
+        foreach ($pageIds as $pid) {
+            if (!isset($byId[$pid])) {
+                continue;
+            }
+            $chain = [];
+            $current = $pid;
+            $depth = 0;
+            while ($current > 0 && $depth < 30) {
+                if (!isset($byId[$current])) {
+                    break;
+                }
+                $node = $byId[$current];
+                $chain[] = $node['title'] !== '' ? $node['title'] : ('#' . $current);
+                $current = $node['pid'];
+                $depth++;
+            }
+            $chain = array_reverse($chain);
+            $title = end($chain) ?: '';
+            $bcrumb = \count($chain) > 1
+                ? implode(' › ', \array_slice($chain, 0, -1))
+                : '';
+            $out[$pid] = [
+                'title' => (string) $title,
+                'breadcrumb' => $bcrumb,
+            ];
+        }
+        return $out;
+    }
+
     public function renderTreePanel(): string
     {
         if (!$this->tags->tablesExist()) {
@@ -83,7 +298,9 @@ final class TagBackendListener
 .vstag-select { cursor:pointer; }
 .vstag-select:disabled { cursor:not-allowed;opacity:.4; }
 .vstag-row:last-child { border-bottom:none; }
-.vstag-label { flex:1;font-size:.9rem;color:#1f2937;display:flex;align-items:center;gap:6px; }
+.vstag-label { flex:1;font-size:.9rem;color:#1f2937;display:flex;align-items:center;gap:8px; }
+.vstag-icon { display:inline-flex;color:#6b7280;flex-shrink:0; }
+.vstag-locked .vstag-icon { color:#94a3b8; }
 .vstag-label.vstag-locked { color:#94a3b8; }
 .vstag-chips { display:flex;flex-wrap:wrap;gap:4px;align-items:center; }
 .vstag-chip { display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:.78rem;background:#dbeafe;color:#1e40af;cursor:grab;user-select:none; }
@@ -475,7 +692,8 @@ HTML;
         $isRoot = $node['type'] === 'root';
         $rowClass = $isRoot ? 'vstag-row vstag-locked' : 'vstag-row';
         $titleHtml = htmlspecialchars($node['title'] ?: ('Seite #' . $node['id']));
-        $iconChar = $isRoot ? '🌐' : ($node['children'] !== [] ? '📁' : '📄');
+        $hasKids = $node['children'] !== [];
+        $icon = $isRoot ? self::iconRoot() : ($hasKids ? self::iconFolder() : self::iconPage());
 
         // Root-Pages bekommen keine Checkbox (nicht direkt indexierbar).
         $checkbox = $isRoot
@@ -485,13 +703,13 @@ HTML;
         $html = sprintf(
             '<div class="%s" data-type="page" data-id="%d" style="padding-left:%dpx;">'
             . '%s'
-            . '<span class="vstag-label %s">%s %s</span>'
+            . '<span class="vstag-label %s"><span class="vstag-icon">%s</span>%s</span>'
             . '<span class="vstag-chips">%s<button type="button" class="vstag-add">+ Tag</button></span>'
             . '</div>',
             $rowClass, $node['id'], $indent,
             $checkbox,
             $isRoot ? 'vstag-locked' : '',
-            $iconChar, $titleHtml, $chipsHtml,
+            $icon, $titleHtml, $chipsHtml,
         );
 
         foreach ($node['children'] as $child) {
@@ -512,6 +730,37 @@ HTML;
             $out = array_merge($out, $this->collectAllPageIds($node['children']));
         }
         return $out;
+    }
+
+    private static function iconRoot(): string
+    {
+        return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            . '<circle cx="12" cy="12" r="10"/>'
+            . '<line x1="2" y1="12" x2="22" y2="12"/>'
+            . '<path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>'
+            . '</svg>';
+    }
+    private static function iconFolder(): string
+    {
+        return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            . '<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'
+            . '</svg>';
+    }
+    private static function iconPage(): string
+    {
+        return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            . '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>'
+            . '<polyline points="14 2 14 8 20 8"/>'
+            . '<line x1="8" y1="13" x2="16" y2="13"/>'
+            . '<line x1="8" y1="17" x2="13" y2="17"/>'
+            . '</svg>';
+    }
+    private static function iconFile(): string
+    {
+        return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+            . '<path d="M13 2H6a2 2 0 0 0-2 2v16c0 1.1.9 2 2 2h12a2 2 0 0 0 2-2V9z"/>'
+            . '<polyline points="13 2 13 9 20 9"/>'
+            . '</svg>';
     }
 
     private function infoBox(string $title, string $hint): string

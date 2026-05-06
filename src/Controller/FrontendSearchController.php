@@ -195,8 +195,12 @@ final class FrontendSearchController extends AbstractController
                             $resolvedById[$byLabelLower[$low]['slug']] = $byLabelLower[$low];
                             continue;
                         }
-                        // Legacy-Tag aus tl_page.keywords — als grauer Chip.
-                        $resolvedById['raw:' . $low] = ['slug' => $raw, 'label' => $raw, 'color' => 'gray'];
+                        // Unbekannter Tag (Legacy aus tl_page.keywords ODER Tag aus
+                        // einem anderen Tenant der den gleichen Index nutzt) — als
+                        // grauer Chip, Slug ist die normalisierte Form.
+                        $rawSlug = preg_replace('/[^a-z0-9]+/', '-', $low) ?? $low;
+                        $rawSlug = trim((string) $rawSlug, '-');
+                        $resolvedById['raw:' . $low] = ['slug' => $rawSlug !== '' ? $rawSlug : $raw, 'label' => $raw, 'color' => 'gray'];
                     }
                     return [
                         'id' => $h->id,

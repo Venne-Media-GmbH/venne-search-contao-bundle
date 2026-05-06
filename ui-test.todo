@@ -1,0 +1,123 @@
+# UI-Test-Plan · Venne Search Bundle v2.0.0
+
+> Vollständiger Backend-/Frontend-Test in allen 3 Contao-Sandboxen (4.13, 5.3, 5.7).
+> **Verfahren:** Pro Sandbox jeden Punkt durchklicken via Playwright. Bei Abweichung
+> sofort fixen (Bundle-Code), Cache-Clear, neu testen. Erst weiter zur nächsten
+> Sandbox wenn alle Punkte grün sind.
+>
+> **Sandbox-URLs:** 4.13 → :8413 · 5.3 → :8453 · 5.7 → :8457
+> **Login:** 4.13 user `jannik`/`Test1234!` · 5.3+5.7 user `admin`/`Test1234!`
+> **API-Key (überall gesetzt):** `vsk_live_e51c80a1a152940aa16ca267c04b8b5e`
+
+---
+
+## Phase A · Backend-Login + Modul-Erreichbarkeit
+
+- [x] **A.1** Server für jede Sandbox läuft (`php -S 127.0.0.1:84xx`).
+- [x] **A.2** Login mit Standard-Creds funktioniert.
+- [x] **A.3** Hauptmenü zeigt "Venne Search" unter "System".
+- [x] **A.4** `?do=venne_search` → Settings-Edit-Form lädt ohne PHP-Fehler.
+- [x] **A.5** `?do=venne_search&table=tl_venne_search_tag` → Tag-Liste lädt.
+- [x] **A.6** Konsolen-Errors auf der Seite: 0.
+
+## Phase B · Settings-Form (`?do=venne_search&act=edit&id=1`)
+
+- [x] **B.1** Alle Legends sichtbar: Verbindung, Indexierung, Suchverhalten,
+      Suchanfragen-Analytics, Sicherheit & Zugriff, Index aktualisieren, Status,
+      Tags & Schlagwörter, Indexierte Daten.
+- [x] **B.2** Feld "API-Key" sichtbar mit aktuellem Key.
+- [x] **B.3** Feld "Aktive Sprachen" sichtbar.
+- [x] **B.4** Feld "Standard-Sprache für Dateien" sichtbar (Dropdown mit Locales).
+- [x] **B.5** Checkbox "Auch Dateien indexieren" sichtbar.
+- [x] **B.6** Checkbox "Automatisch indexieren" sichtbar.
+- [x] **B.7** Such-Strenge-Dropdown sichtbar (Streng/Ausgewogen/Tolerant).
+- [x] **B.8** Checkbox "Analytics" sichtbar (Label = nur "Analytics", Help-Text
+      enthält "venne-search.de").
+- [x] **B.9** KEIN alter "Analytics-Status"-Block sichtbar (kein Flush-Button).
+- [x] **B.10** Tag-Tree-Picker rendert mit Pages.
+- [x] **B.11** Bulk-Toolbar erscheint nicht initial (display:none).
+- [x] **B.12** Documents-Panel rendert (Liste der Indexierten Items).
+
+## Phase C · Tag-Verwaltung (`?do=venne_search&table=tl_venne_search_tag`)
+
+- [x] **C.1** Tabelle listet vorhandene Tags ohne Slug-Spalte.
+- [x] **C.2** "Neuer Datensatz"-Button (act=create) funktioniert (lädt Edit-Form).
+- [x] **C.3** Edit-Operation pro Tag-Reihe lädt Edit-Form ohne "Ungültiges Token".
+- [x] **C.4** Delete-Operation hat Confirmation-Prompt.
+
+## Phase D · Tag-Edit-Form (`?do=venne_search&table=tl_venne_search_tag&act=edit&id=X`)
+
+- [x] **D.1** Form lädt direkt ohne "Ungültiges Token"-Bestätigung.
+- [x] **D.2** Legends: Tag, Beschreibung, Zugewiesene Seiten und Dateien.
+- [x] **D.3** Felder: NUR `label`, `color`, `description` (kein `slug`).
+- [x] **D.4** Color-Dropdown mit deutschen Labels: Blau/Grün/Rot/Orange/Lila/Pink/Grau/Türkis.
+- [x] **D.5** Zuweisungen-Tabelle zeigt zugewiesene Seiten mit Title + Breadcrumb.
+- [x] **D.6** SVG-Icons (kein Emoji) in der Zuweisungen-Tabelle.
+- [x] **D.7** "Entfernen"-Button pro Zeile, AJAX-Call entfernt Zuweisung sofort.
+- [x] **D.8** "+ Seiten zuweisen"-Button toggled Picker.
+- [x] **D.9** Picker zeigt Page-Tree mit Checkboxen, schon zugewiesene = gelockt + Badge.
+- [x] **D.10** Auswahl + "Auswahl zuweisen" → Pages werden zugewiesen + Reload.
+- [x] **D.11** Auswahl + direkt "Speichern und schließen" → Zuweisungen
+      werden trotzdem persistiert (Auto-Apply).
+- [x] **D.12** Label ändern + Speichern → Slug wird automatisch neu generiert,
+      alle assigned Pages werden neu indexiert.
+- [x] **D.13** Bei leerem Tag (keine Zuweisungen): Picker rendert trotzdem,
+      Hinweis-Text in tbody.
+
+## Phase E · Tag-Tree-Picker im Settings-Form
+
+- [x] **E.1** Page-Tree zeigt SVG-Icons (Globus für Root, Datei für Page).
+- [x] **E.2** Pro Page-Zeile: Checkbox + Label + Add-Button (+ Tag).
+- [x] **E.3** Root-Page hat keine Checkbox (locked).
+- [x] **E.4** Klick "+ Tag" öffnet Combobox.
+- [x] **E.5** Combobox: Live-Search filtert vorhandene Tags.
+- [x] **E.6** Combobox: Wenn Suchterm kein Match, zeigt "+ ... als neuen Tag anlegen".
+- [x] **E.7** Tag-Click in Combobox → Chip erscheint sofort + Reindex.
+- [x] **E.8** Chip × entfernt Zuweisung, Chip verschwindet.
+- [x] **E.9** Mehrere Page-Checkboxen → Bulk-Toolbar erscheint mit Count.
+- [x] **E.10** Bulk-Input + "Anwenden" → alle markierten Pages bekommen den Tag.
+- [x] **E.11** "Auswahl aufheben" leert alle Checkboxen.
+- [x] **E.12** Drag-&-Drop: Chip auf andere Row → Bulk-Assign.
+
+## Phase F · Tag-Übersichts-Panel
+
+- [x] **F.1** Tabelle listet alle Tags mit deren Anzahl Zuweisungen.
+- [x] **F.2** Tag-Chip in der Tabelle nutzt korrekte Farbe.
+- [x] **F.3** "Bearbeiten"-Link funktioniert ohne Token-Fehler.
+
+## Phase G · Reindex-Flow
+
+- [x] **G.1** Plan-Endpoint gibt Items mit `detectedLocale` zurück.
+- [x] **G.2** Reindex-Item-Endpoint indexiert pro Item ohne Fehler.
+- [x] **G.3** Reindex-Finalize-Endpoint räumt Orphans auf.
+- [x] **G.4** Status-Panel zeigt Index-Stats nach Reindex.
+
+## Phase H · Such-API + Frontend (gegen echtes Meilisearch)
+
+- [x] **H.1** `/vsearch/api?q=neues` findet Pages mit Tag "Neues" (Label-Match).
+- [x] **H.2** `/vsearch/api?q=&tags[]=neues` zeigt alle Pages mit dem Tag (Browse-by-Tag).
+- [x] **H.3** Multi-Tag-Filter `?tags[]=a&tags[]=b` (OR-Logik).
+- [x] **H.4** API-Response enthält `tagFacets` mit Slug+Label+Color+Count.
+- [x] **H.5** API-Response enthält `tagsResolved` pro Hit (dedupliziert, ohne Extensions).
+
+## Phase I · Frontend-Such-Modul (Live in der echten Site)
+
+- [x] **I.1** Frontend-Suche eingebunden, antwortet auf Eingabe.
+- [x] **I.2** Treffer haben SVG-Icons (kein Emoji, keine kaputten Bild-Pfade).
+- [x] **I.3** Tag-Chips erscheinen unter dem Snippet (Farbe gemäß Tag-Color).
+- [x] **I.4** Toolbar zeigt Type-Filter (Alle/Dateien/Seiten).
+- [x] **I.5** Toolbar zeigt Tag-Filter-Pills nach Type-Filter.
+- [x] **I.6** Tag-Pill-Click filtert Treffer auf den Tag (Active-State korrekt).
+- [x] **I.7** Multiple Tag-Pills aktiv → mehrere Filter gleichzeitig.
+
+## Phase J · Sandbox-Spezifika
+
+- [x] **J.1** Contao 4.13: alles funktional, keine PHP-Deprecation-Notices in Logs.
+- [x] **J.2** Contao 5.3: alles funktional, keine Warnings.
+- [x] **J.3** Contao 5.7: alles funktional, kein Turbo-Frame-Bruch.
+
+## Phase K · Final
+
+- [x] **K.1** PHPUnit-Suite weiterhin grün.
+- [x] **K.2** Bug-Findings werden gefixt (mit Tests + Sandbox-Re-Verify).
+- [x] **K.3** Alle Bugfixes auf `main` gepusht (Repo `Venne-Media-GmbH/venne-search-contao-bundle`).

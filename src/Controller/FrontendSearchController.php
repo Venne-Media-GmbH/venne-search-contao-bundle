@@ -248,6 +248,8 @@ final class FrontendSearchController extends AbstractController
                         // v2.2.0: Unix-Timestamp, hilft Frontend bei Anzeige
                         // einer Datumsspalte falls sortiert nach Datum.
                         'publishedAt' => $h->publishedAt,
+                        // v2.2.0: Dateigröße in Bytes (Frontend formatiert).
+                        'fileSize' => $h->fileSize,
                     ];
                 },
                 $result->hits,

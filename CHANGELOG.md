@@ -5,9 +5,20 @@ Alle nennenswerten Änderungen am Venne-Search-Contao-Bundle.
 Format orientiert an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 
-## [Unreleased] — 2.2.0-dev (Cover & Type-Sort)
+## [Unreleased] — 2.2.0-dev (Cover & Type-Sort + komplettes Template-Refactor)
 
-### Added
+### Added — Template (v0.23)
+- **Komplettes Layout-Refactor der Trefferliste.** Card-Style mit klarer dreizeiliger Hierarchie: Titel-Zeile (Titel + Tags + Schloss) / Meta-Zeile (Typ-Badge + Datum + Größe + URL) / Snippet (max 2 Zeilen mit `-webkit-line-clamp`).
+- **Meta-Zeile:** Pro Treffer Typ-Badge (farblich passend zum Dateityp — PDF rot, DOCX blau, XLSX grün, …), Veröffentlichungsdatum (`dd.mm.yyyy`), Dateigröße (KB/MB lesbar formatiert), URL/Pfad. URL ist jetzt **sichtbar** statt nur als `title=`-Tooltip.
+- **Skeleton-Loading:** 3 animierte Placeholder-Karten mit Shimmer-Effekt während des Such-Requests — kein „Suche läuft…"-Plaintext mehr.
+- **Empty-State mit Tag-Vorschlägen:** Bei 0 Treffern werden bis zu 6 verfügbare Tags als klickbare Pills angezeigt („Vielleicht meinst du …") — Klick filtert die Suche auf den Tag.
+- **Tag-Chips kompakt rechts neben dem Titel** (max 3 sichtbar), nicht mehr als eigene Zeile unter dem Snippet.
+- **Clear-Button im Suchfeld** (X rechts), erscheint sobald Eingabe nicht leer ist.
+- **Hover-Verhalten:** Card hebt sich um 1px an, dezenter Shadow in Accent-Farbe.
+- **Mobile-Breakpoints (≤600px):** Kleinere Cover/Icons (44×44 statt 56×56), Snippet bis 3 Zeilen, URL ausgeblendet, Titel umbricht statt zu trunkieren, Padding reduziert.
+- **`SearchDocument.file_size` + `SearchHit.fileSize`:** Dateigröße in Bytes wird beim Indexieren mitgeschrieben und im Frontend lesbar formatiert (KB/MB/GB).
+
+### Added — Index / Sort (wie bisher in v2.2.0-dev)
 - **Dokument-Cover in der Trefferliste:** Datei-Treffer werden mit einem echten Vorschaubild gerendert statt nur dem generischen SVG-Icon. Strategie: (a) Bilddateien zeigen sich selbst, (b) für PDF/DOCX/… wird ein gleichnamiges Bild im selben Verzeichnis als Cover genommen (`flyer.pdf` → `flyer.jpg`/`.png`/`.webp`, auch in Großschreibung), (c) sonst Fallback auf das Icon. Das `<img>` bekommt einen echten `alt=`-Attribut (ALT-Text aus `tl_files.meta` → Titel → „Vorschaubild") — barrierefrei und SEO-sauber, kein Hover-Tooltip-Hack mehr.
 - **Sortier-Modus „Nach Dokumentenart" (`sort=type_asc`):** Sortiert lexikographisch nach `content_type` — Pages zuerst, dann Dateien gruppiert nach Extension (docx, pdf, xlsx, …). Innerhalb der Gruppe Tie-Break über `weight DESC`, damit Tag-geboostete Items innerhalb der Dateigruppe oben stehen. Im Frontend-Dropdown als vierte Option verfügbar.
 - **`SearchDocument.cover_url`** + **`SearchDocument.content_type`** als Index-Felder. `content_type` ist filterable und sortable; `cover_url` ist nur Anzeige-Metadata.

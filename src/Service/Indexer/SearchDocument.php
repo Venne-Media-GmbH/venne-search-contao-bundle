@@ -31,6 +31,9 @@ final class SearchDocument implements \JsonSerializable
      *                                    für `type_asc`-Sort (z.B. `page`, `pdf`,
      *                                    `docx`, `xlsx`). Pages nehmen `page`,
      *                                    Files nehmen die Extension (lowercase).
+     * @param int    $fileSize            v2.2.0: Dateigröße in Bytes (nur Files,
+     *                                    0 für Pages). Wird im Frontend lesbar
+     *                                    formatiert (KB/MB).
      */
     public function __construct(
         public readonly string $id,
@@ -47,6 +50,7 @@ final class SearchDocument implements \JsonSerializable
         public readonly string $altText = '',
         public readonly string $coverUrl = '',
         public readonly string $contentType = '',
+        public readonly int $fileSize = 0,
     ) {
     }
 
@@ -67,6 +71,7 @@ final class SearchDocument implements \JsonSerializable
             'alt_text' => $this->altText,
             'cover_url' => $this->coverUrl,
             'content_type' => $this->contentType !== '' ? $this->contentType : $this->type,
+            'file_size' => $this->fileSize,
             'indexed_at' => time(),
         ];
     }

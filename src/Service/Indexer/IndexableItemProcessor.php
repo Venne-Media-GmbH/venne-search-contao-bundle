@@ -281,6 +281,9 @@ final class IndexableItemProcessor
             $fileTstamp = @filemtime($absolute) ?: 0;
         }
 
+        // v2.2.0: Dateigröße für lesbare Anzeige im Frontend.
+        $fileSize = @filesize($absolute) ?: 0;
+
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
@@ -296,6 +299,7 @@ final class IndexableItemProcessor
             altText: $meta['alt'],
             coverUrl: $coverUrl,
             contentType: $ext !== '' ? $ext : 'file',
+            fileSize: (int) $fileSize,
         );
         $this->indexer->upsert($doc);
 

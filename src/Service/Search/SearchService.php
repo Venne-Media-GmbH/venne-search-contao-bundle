@@ -176,6 +176,7 @@ final class SearchService
                 coverUrl: (string) ($hit['cover_url'] ?? ''),
                 contentType: (string) ($hit['content_type'] ?? ($hit['type'] ?? '')),
                 publishedAt: (int) ($hit['published_at'] ?? 0),
+                fileSize: (int) ($hit['file_size'] ?? 0),
             );
         }
 

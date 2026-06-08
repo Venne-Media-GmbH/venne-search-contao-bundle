@@ -25,6 +25,8 @@ final class SearchHit
      * @param int          $publishedAt v2.2.0: Unix-Timestamp für stabile Date-
      *                              Sortierung im Multi-Locale-Merge. 0 wenn
      *                              unbekannt.
+     * @param int          $fileSize v2.2.0: Dateigröße in Bytes für Files;
+     *                              0 für Pages.
      */
     public function __construct(
         public readonly string $id,
@@ -40,6 +42,7 @@ final class SearchHit
         public readonly string $coverUrl = '',
         public readonly string $contentType = '',
         public readonly int $publishedAt = 0,
+        public readonly int $fileSize = 0,
     ) {
     }
 }

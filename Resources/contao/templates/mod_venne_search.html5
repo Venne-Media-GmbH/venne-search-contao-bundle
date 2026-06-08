@@ -266,22 +266,25 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vs-icon--odt { background: #e0e7ff; color: #4338ca; }
     .vs-icon--rtf { background: #f3e8ff; color: #7e22ce; }
     .vs-icon--txt, .vs-icon--md { background: #f3f4f6; color: #374151; }
-    /* v2.2.0: Cover-Bilder von PDFs sind im Portrait-Format (A4). Wir
-       skalieren den Container auf 4:5-Ratio damit das Cover nicht beschnitten
-       wird sondern als vollständige Seitenvorschau lesbar bleibt. */
+    /* Cover-Visual: groß + ranzen-randlos. PDFs (Portrait) bekommen 4:5,
+       gecrawlte Pages (Querformat-Hero) bekommen Quadrat. Beide füllen
+       die Karten-Höhe vom oberen bis unteren Rand sichtbar aus. */
     .vs-icon--cover {
         background: #f3f4f6;
         padding: 0; overflow: hidden;
-        width: 56px; height: 72px;
-        border: 1px solid var(--vs-border);
+        width: 96px; height: 96px;
+        border: 0;
+        border-radius: 14px;
+        align-self: stretch;
     }
     .vs-cover-img {
         width: 100%; height: 100%;
-        object-fit: cover; object-position: top center;
+        object-fit: cover; object-position: center;
         display: block; border-radius: inherit;
     }
+    .vsearch__list a { align-items: stretch; }
     @media (max-width: 600px) {
-        .vs-icon--cover { width: 44px; height: 56px; }
+        .vs-icon--cover { width: 72px; height: 72px; border-radius: 12px; }
     }
 
     /* Body */
@@ -320,6 +323,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         border: 1px solid var(--vs-border);
     }
     .vs-badge--page { background: var(--vs-accent-soft); color: var(--vs-accent-strong); border-color: transparent; }
+    .vs-badge--crawled { background: #ede9fe; color: #5b21b6; border-color: transparent; }
     .vs-badge--pdf { background: #fee2e2; color: #b91c1c; border-color: transparent; }
     .vs-badge--docx, .vs-badge--doc { background: #dbeafe; color: #1d4ed8; border-color: transparent; }
     .vs-badge--xlsx, .vs-badge--xls { background: #d1fae5; color: #047857; border-color: transparent; }
@@ -476,7 +480,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         ];
 
         var TYPE_LABELS = {
-            page: 'Seite', file: 'Datei', article: 'Artikel',
+            page: 'Seite', file: 'Datei', article: 'Artikel', crawled: 'Webseite',
             pdf: 'PDF', docx: 'DOCX', doc: 'DOC',
             xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT',
             odt: 'ODT', rtf: 'RTF', txt: 'TXT', md: 'MD'
@@ -810,7 +814,10 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     : '';
 
                 // Meta-Zeile
-                var typeKey = hit.type === 'file' ? (ext || 'file') : 'page';
+                var typeKey;
+                if (hit.type === 'file') typeKey = ext || 'file';
+                else if (hit.type === 'crawled') typeKey = 'crawled';
+                else typeKey = 'page';
                 var typeLabel = TYPE_LABELS[typeKey] || typeKey.toUpperCase();
                 var metaParts = ['<span class="vs-badge vs-badge--' + escapeHtml(typeKey) + '">' + escapeHtml(typeLabel) + '</span>'];
                 if (hit.publishedAt && hit.publishedAt > 0) {
@@ -887,7 +894,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         }
 
         function renderFacets(typeFacets, tagFacets, q) {
-            var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel' };
+            var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel', crawled: 'Websiteinhalte' };
             var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">Alle</button>';
             Object.keys(typeFacets).forEach(function (type) {
                 var active = currentTypeFilter === type ? ' vsearch__facet--active' : '';

@@ -94,7 +94,7 @@ final class SearchService
             'highlightPostTag' => '</mark>',
             // Snippet aus dem Content um den Treffer herum (max 30 Worte).
             'attributesToCrop' => ['content'],
-            'cropLength' => 30,
+            'cropLength' => 25,
             'cropMarker' => '…',
             // Facets für UI ("12 Treffer in Pages, 3 in Dateien").
             // v2.2.0: content_type für dynamische Dateityp-Filter-Pills mit Counts.

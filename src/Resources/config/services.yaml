@@ -35,6 +35,13 @@ services:
         arguments:
             $logger: '@?logger'
 
+    # v2.2.0: PDF-Thumbnail-Generator. Wird nur aufgerufen wenn das Setting
+    # `generate_pdf_thumbnails` aktiv ist. Ruft auf dem Server `gs`
+    # (Ghostscript) auf, Fallback auf Imagick wenn `gs` nicht installiert.
+    VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfThumbnailGenerator:
+        arguments:
+            $logger: '@?logger'
+
     # Meilisearch-Client als Singleton — gebaut von der Factory, die das
     # Endpoint+Key aus den DCA-Settings (tl_venne_search_settings) holt.
     Meilisearch\Client:

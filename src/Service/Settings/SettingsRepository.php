@@ -118,6 +118,10 @@ final class SettingsRepository
         // Seiten sind drin. User stellt im Backend um, wenn er sie ausschließen will.
         $indexHiddenPages = (string) ($row['index_hidden_pages'] ?? '1') === '1';
 
+        // v2.2.0: PDF-Thumbnails generieren? Default '0' (aus), weil Ghostscript-
+        // Aufrufe pro PDF 100-500ms kosten — User soll bewusst einschalten.
+        $generatePdfThumbnails = (string) ($row['generate_pdf_thumbnails'] ?? '0') === '1';
+
         // Default-Blacklist: wenn der User noch nichts ausgewählt hat,
         // schützen wir konventionell die typischen Admin-Verzeichnisse.
         if ($excludedPaths === []) {
@@ -145,6 +149,7 @@ final class SettingsRepository
                 fileLocaleOverrides: $fileLocaleOverrides,
                 analyticsEnabled: $analyticsEnabled,
                 indexHiddenPages: $indexHiddenPages,
+                generatePdfThumbnails: $generatePdfThumbnails,
             );
         }
 
@@ -168,6 +173,7 @@ final class SettingsRepository
             fileLocaleOverrides: $fileLocaleOverrides,
             analyticsEnabled: $analyticsEnabled,
             indexHiddenPages: $indexHiddenPages,
+            generatePdfThumbnails: $generatePdfThumbnails,
         );
     }
 

@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing,index_hidden_pages;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
+        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing,index_hidden_pages,generate_pdf_thumbnails;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -153,6 +153,39 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
                                 }
                             } catch (\Throwable) {
                             }
+                        }
+                    }
+                    return $value;
+                },
+            ],
+        ],
+        // v2.2.0: Pro PDF ein JPG-Thumbnail der ersten Seite generieren und
+        // im Frontend als Cover anzeigen. Default '0' (aus), weil pro PDF
+        // 100-500ms zusätzliche Indexing-Zeit (Ghostscript-Aufruf) anfallen.
+        'generate_pdf_thumbnails' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['generate_pdf_thumbnails'],
+            'inputType' => 'checkbox',
+            'default' => '0',
+            'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
+            'sql' => "char(1) NOT NULL default '0'",
+            'save_callback' => [
+                static function ($value, $dc) {
+                    if (\is_object($dc)) {
+                        try {
+                            $container = \Contao\System::getContainer();
+                            $db = $container?->get('database_connection');
+                            if ($db !== null) {
+                                $old = (string) ($db->fetchOne(
+                                    'SELECT generate_pdf_thumbnails FROM tl_venne_search_settings WHERE id = 1',
+                                ) ?: '0');
+                                $new = (string) $value === '1' ? '1' : '';
+                                if ($old !== $new) {
+                                    \Contao\Message::addInfo(
+                                        'Hinweis: PDF-Thumbnail-Setting geändert. Bitte einen Reindex durchführen, damit Cover für vorhandene PDFs generiert werden.',
+                                    );
+                                }
+                            }
+                        } catch (\Throwable) {
                         }
                     }
                     return $value;

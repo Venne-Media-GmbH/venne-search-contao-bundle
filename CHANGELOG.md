@@ -18,6 +18,13 @@ Versionierung folgt [Semantic Versioning](https://semver.org/lang/de/).
 - **Mobile-Breakpoints (≤600px):** Kleinere Cover/Icons (44×44 statt 56×56), Snippet bis 3 Zeilen, URL ausgeblendet, Titel umbricht statt zu trunkieren, Padding reduziert.
 - **`SearchDocument.file_size` + `SearchHit.fileSize`:** Dateigröße in Bytes wird beim Indexieren mitgeschrieben und im Frontend lesbar formatiert (KB/MB/GB).
 
+### Added — PDF-Auto-Thumbnails
+- **Neuer Service `PdfThumbnailGenerator`:** Generiert pro PDF ein JPG-Thumbnail der ersten Seite. Strategie: erst Ghostscript via `proc_open` (`gs`), Fallback auf PHP-Imagick wenn `gs` nicht installiert. 96 DPI, max 400px Breite, JPEG-Qualität 80 → ~30-80KB pro Thumbnail.
+- **Setting `generate_pdf_thumbnails`** (Default off): Pro PDF wird beim Indexieren ein Cover generiert und unter `files/_vsearch_covers/<sha1>.jpg` gecached. Cache-Key = `sha1(absolutePath + mtime)` — beim Replace einer PDF ändert sich der mtime → neues Cover.
+- **DCA-Checkbox** „PDF-Vorschaubilder" im Backend unter System → Venne Search → Indexierung. Save-Callback zeigt Hinweis auf nötigen Reindex.
+- **Migration `Version220\Mig01_AddPdfThumbnails`** — Spalte `generate_pdf_thumbnails CHAR(1) NOT NULL DEFAULT '0'`.
+- **Hard-Timeout 20s** für den Ghostscript-Aufruf, atomares Rename (.tmp → final), damit kaputte/abgebrochene Generationen keinen Müll-Cache hinterlassen.
+
 ### Added — Index / Sort (wie bisher in v2.2.0-dev)
 - **Dokument-Cover in der Trefferliste:** Datei-Treffer werden mit einem echten Vorschaubild gerendert statt nur dem generischen SVG-Icon. Strategie: (a) Bilddateien zeigen sich selbst, (b) für PDF/DOCX/… wird ein gleichnamiges Bild im selben Verzeichnis als Cover genommen (`flyer.pdf` → `flyer.jpg`/`.png`/`.webp`, auch in Großschreibung), (c) sonst Fallback auf das Icon. Das `<img>` bekommt einen echten `alt=`-Attribut (ALT-Text aus `tl_files.meta` → Titel → „Vorschaubild") — barrierefrei und SEO-sauber, kein Hover-Tooltip-Hack mehr.
 - **Sortier-Modus „Nach Dokumentenart" (`sort=type_asc`):** Sortiert lexikographisch nach `content_type` — Pages zuerst, dann Dateien gruppiert nach Extension (docx, pdf, xlsx, …). Innerhalb der Gruppe Tie-Break über `weight DESC`, damit Tag-geboostete Items innerhalb der Dateigruppe oben stehen. Im Frontend-Dropdown als vierte Option verfügbar.

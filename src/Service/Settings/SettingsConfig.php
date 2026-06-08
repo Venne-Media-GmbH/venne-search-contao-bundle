@@ -74,6 +74,14 @@ final class SettingsConfig
          * Re-Index erforderlich nach Änderung.
          */
         public readonly bool $indexHiddenPages = true,
+        /**
+         * v2.2.0: Wenn true, generiert der Indexer pro PDF ein JPG-Thumbnail
+         * der ersten Seite und schreibt die URL als cover_url ins Document.
+         * Voraussetzung: Ghostscript (`gs`) oder PHP-Imagick auf dem Server.
+         * Default false weil Generation pro PDF 100-500ms kostet — User
+         * soll bewusst aktivieren.
+         */
+        public readonly bool $generatePdfThumbnails = false,
     ) {
     }
 }

@@ -7,6 +7,7 @@ namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 use Doctrine\DBAL\Connection;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
+use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfThumbnailGenerator;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
 use VenneMedia\VenneSearchContaoBundle\Service\Tag\TagRepository;
@@ -31,6 +32,7 @@ final class IndexableItemProcessor
         private readonly PermissionResolver $permissions,
         private readonly FileLocaleDetector $localeDetector,
         private readonly TagRepository $tags,
+        private readonly PdfThumbnailGenerator $pdfThumbnails,
     ) {
     }
 
@@ -271,8 +273,14 @@ final class IndexableItemProcessor
         // v2.2.0: Cover-URL ermitteln. Bilder = sich selbst; bei anderen
         // Dateitypen schauen wir, ob im selben Verzeichnis ein gleichnamiges
         // Bild liegt (z.B. `flyer.pdf` + `flyer.jpg` als Cover, Contao-Übliches
-        // Pattern). Nichts gefunden → leer, Frontend rendert das SVG-Icon.
+        // Pattern). PDFs bekommen optional ein generiertes Thumbnail.
         $coverUrl = $this->resolveCoverUrl($relativePath, $absolute, $ext, $projectDir);
+        if ($coverUrl === '' && $ext === 'pdf' && $config->generatePdfThumbnails) {
+            $generated = $this->pdfThumbnails->generate($absolute, $projectDir);
+            if (\is_string($generated) && $generated !== '') {
+                $coverUrl = '/' . ltrim($generated, '/');
+            }
+        }
 
         // v2.2.0: publishedAt aus tl_files.tstamp (Upload/Änderungszeit) für
         // stabile Date-Sortierung — vorher fehlend, fiel auf 0 zurück.

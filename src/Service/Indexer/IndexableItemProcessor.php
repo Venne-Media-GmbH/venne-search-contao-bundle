@@ -6,6 +6,7 @@ namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 
 use Doctrine\DBAL\Connection;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
+use VenneMedia\VenneSearchContaoBundle\Service\Metadata\FileDateExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfThumbnailGenerator;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
@@ -36,6 +37,8 @@ final class IndexableItemProcessor
         // (alte Cache-Variante, ausstehender composer dump-autoload usw.),
         // bauen wir trotzdem durch. PDF-Thumbnails fallen dann einfach weg.
         private readonly ?PdfThumbnailGenerator $pdfThumbnails = null,
+        // v2.2.0: optional, Container-resistent wie pdfThumbnails.
+        private readonly ?FileDateExtractor $fileDateExtractor = null,
     ) {
     }
 
@@ -290,9 +293,21 @@ final class IndexableItemProcessor
             }
         }
 
-        // v2.2.0: publishedAt aus tl_files.tstamp (Upload/Änderungszeit) für
-        // stabile Date-Sortierung — vorher fehlend, fiel auf 0 zurück.
-        $fileTstamp = $this->fetchFileTstamp($relativePath);
+        // v2.2.0: publishedAt priorisiert aus Datei-Metadaten (PDF CreationDate,
+        // DOCX dcterms:created, ODT meta:creation-date, EXIF DateTimeOriginal,
+        // PNG-Text Creation Time). Fallback-Kette wenn keine Metadaten:
+        // tl_files.tstamp → filectime(min mtime) → 0.
+        $fileTstamp = 0;
+        if ($this->fileDateExtractor !== null) {
+            try {
+                $fileTstamp = $this->fileDateExtractor->extract($absolute, $ext);
+            } catch (\Throwable) {
+                $fileTstamp = 0;
+            }
+        }
+        if ($fileTstamp === 0) {
+            $fileTstamp = $this->fetchFileTstamp($relativePath);
+        }
         if ($fileTstamp === 0) {
             $fileTstamp = @filemtime($absolute) ?: 0;
         }

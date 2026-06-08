@@ -42,6 +42,12 @@ services:
         arguments:
             $logger: '@?logger'
 
+    # v2.2.0: Datei-Erstellungsdatum aus Metadaten lesen (PDF/DOCX/ODT/EXIF/PNG-Text).
+    # Liefert Unix-Timestamp, fällt auf filectime/filemtime zurück.
+    VenneMedia\VenneSearchContaoBundle\Service\Metadata\FileDateExtractor:
+        arguments:
+            $logger: '@?logger'
+
     # Meilisearch-Client als Singleton — gebaut von der Factory, die das
     # Endpoint+Key aus den DCA-Settings (tl_venne_search_settings) holt.
     Meilisearch\Client:

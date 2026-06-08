@@ -32,7 +32,10 @@ final class IndexableItemProcessor
         private readonly PermissionResolver $permissions,
         private readonly FileLocaleDetector $localeDetector,
         private readonly TagRepository $tags,
-        private readonly PdfThumbnailGenerator $pdfThumbnails,
+        // v2.2.0: optional. Wenn der Container den Service noch nicht kennt
+        // (alte Cache-Variante, ausstehender composer dump-autoload usw.),
+        // bauen wir trotzdem durch. PDF-Thumbnails fallen dann einfach weg.
+        private readonly ?PdfThumbnailGenerator $pdfThumbnails = null,
     ) {
     }
 
@@ -275,10 +278,15 @@ final class IndexableItemProcessor
         // Bild liegt (z.B. `flyer.pdf` + `flyer.jpg` als Cover, Contao-Übliches
         // Pattern). PDFs bekommen optional ein generiertes Thumbnail.
         $coverUrl = $this->resolveCoverUrl($relativePath, $absolute, $ext, $projectDir);
-        if ($coverUrl === '' && $ext === 'pdf' && $config->generatePdfThumbnails) {
-            $generated = $this->pdfThumbnails->generate($absolute, $projectDir);
-            if (\is_string($generated) && $generated !== '') {
-                $coverUrl = '/' . ltrim($generated, '/');
+        if ($coverUrl === '' && $ext === 'pdf' && $config->generatePdfThumbnails && $this->pdfThumbnails !== null) {
+            try {
+                $generated = $this->pdfThumbnails->generate($absolute, $projectDir);
+                if (\is_string($generated) && $generated !== '') {
+                    $coverUrl = '/' . ltrim($generated, '/');
+                }
+            } catch (\Throwable) {
+                // PDF-Thumbnail-Fehler dürfen NIEMALS das Indexieren blockieren.
+                // Im Worst Case fehlt halt das Cover für diese eine PDF.
             }
         }
 

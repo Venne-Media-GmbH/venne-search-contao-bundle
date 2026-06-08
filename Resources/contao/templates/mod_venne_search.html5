@@ -266,8 +266,23 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vs-icon--odt { background: #e0e7ff; color: #4338ca; }
     .vs-icon--rtf { background: #f3e8ff; color: #7e22ce; }
     .vs-icon--txt, .vs-icon--md { background: #f3f4f6; color: #374151; }
-    .vs-icon--cover { background: #f3f4f6; padding: 0; overflow: hidden; }
-    .vs-cover-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+    /* v2.2.0: Cover-Bilder von PDFs sind im Portrait-Format (A4). Wir
+       skalieren den Container auf 4:5-Ratio damit das Cover nicht beschnitten
+       wird sondern als vollständige Seitenvorschau lesbar bleibt. */
+    .vs-icon--cover {
+        background: #f3f4f6;
+        padding: 0; overflow: hidden;
+        width: 56px; height: 72px;
+        border: 1px solid var(--vs-border);
+    }
+    .vs-cover-img {
+        width: 100%; height: 100%;
+        object-fit: cover; object-position: top center;
+        display: block; border-radius: inherit;
+    }
+    @media (max-width: 600px) {
+        .vs-icon--cover { width: 44px; height: 56px; }
+    }
 
     /* Body */
     .vs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .25rem; }
@@ -692,15 +707,26 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             resultsList.innerHTML = html;
         }
 
-        function renderExtFilters() {
+        function renderExtFilters(contentTypeFacets) {
             if (!extFiltersBox || !showFiletypeFilter) return;
             var visible = currentTypeFilter === '' || currentTypeFilter === 'file';
-            extFiltersBox.hidden = !visible;
-            if (!visible) { extFiltersBox.innerHTML = ''; return; }
+            // Counts pro Extension aus facets.content_type (Server liefert {pdf:3, docx:1, ...}).
+            var counts = contentTypeFacets || {};
+            // Nur Pills für Gruppen, deren Extensions mind. 1 Treffer haben.
+            // Aktive Filter bleiben sichtbar auch wenn Count 0, sonst kann der User sie nicht mehr ausschalten.
+            var available = FILETYPE_GROUPS.map(function (grp) {
+                var sum = 0;
+                grp.exts.forEach(function (e) { sum += (counts[e] || 0); });
+                return {grp: grp, count: sum, active: currentExtGroups.indexOf(grp.key) !== -1};
+            }).filter(function (x) { return x.count > 0 || x.active; });
+
+            extFiltersBox.hidden = !visible || available.length === 0;
+            if (extFiltersBox.hidden) { extFiltersBox.innerHTML = ''; return; }
             var html = '<span class="vsearch__sort-label" style="margin-right:.4rem;">Dateityp</span>';
-            FILETYPE_GROUPS.forEach(function (grp) {
-                var active = currentExtGroups.indexOf(grp.key) !== -1 ? ' vsearch__ext-filter--active' : '';
-                html += '<button type="button" class="vsearch__ext-filter' + active + '" data-vsearch-ext-group="' + escapeHtml(grp.key) + '">' + escapeHtml(grp.label) + '</button>';
+            available.forEach(function (x) {
+                var activeCls = x.active ? ' vsearch__ext-filter--active' : '';
+                var countSuffix = x.count > 0 ? ' (' + x.count + ')' : '';
+                html += '<button type="button" class="vsearch__ext-filter' + activeCls + '" data-vsearch-ext-group="' + escapeHtml(x.grp.key) + '">' + escapeHtml(x.grp.label) + countSuffix + '</button>';
             });
             extFiltersBox.innerHTML = html;
             Array.from(extFiltersBox.querySelectorAll('[data-vsearch-ext-group]')).forEach(function (btn) {
@@ -722,7 +748,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             meta.textContent = (data.totalHits || 0) + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
 
             if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, lastTagFacets, q);
-            renderExtFilters();
+            renderExtFilters((data.facets && data.facets.content_type) || {});
 
             if (!data.hits || data.hits.length === 0) {
                 resultsList.innerHTML = renderEmptyState(q, lastTagFacets);
@@ -755,7 +781,9 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 // Cover ODER Icon
                 var visualHtml;
                 if (hit.coverUrl) {
-                    var coverAlt = hit.altText || hit.title || 'Vorschaubild';
+                    // Title kann <mark>-Tags vom Server enthalten — für alt= nehmen wir Plain-Text.
+                    var titleNoTags = (hit.title || '').replace(/<[^>]+>/g, '');
+                    var coverAlt = hit.altText || titleNoTags || 'Vorschaubild';
                     visualHtml = '<span class="vs-icon vs-icon--cover">' +
                         '<img class="vs-cover-img" src="' + escapeHtml(hit.coverUrl) + '" alt="' + escapeHtml(coverAlt) + '" loading="lazy" ' +
                         'onerror="var p=this.parentNode;p.parentNode.removeChild(p);">' +

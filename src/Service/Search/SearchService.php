@@ -97,7 +97,8 @@ final class SearchService
             'cropLength' => 30,
             'cropMarker' => '…',
             // Facets für UI ("12 Treffer in Pages, 3 in Dateien").
-            'facets' => ['type', 'tags', 'locale'],
+            // v2.2.0: content_type für dynamische Dateityp-Filter-Pills mit Counts.
+            'facets' => ['type', 'tags', 'locale', 'content_type'],
             // Mit Score zurückliefern, damit das Frontend Relevanz-Sortierung nutzen kann.
             'showRankingScore' => true,
             // Sort-Reihenfolge je nach Mode (v2.1.0).

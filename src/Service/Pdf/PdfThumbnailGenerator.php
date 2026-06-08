@@ -301,19 +301,48 @@ final class PdfThumbnailGenerator
      */
     private function findGhostscriptBinary(): ?string
     {
-        // Verbreiteter Pfad auf Linux/Mac.
-        foreach (['/usr/bin/gs', '/usr/local/bin/gs', '/opt/homebrew/bin/gs'] as $candidate) {
+        $isWindows = \DIRECTORY_SEPARATOR === '\\';
+
+        // Verbreitete absolute Pfade pro Plattform.
+        $candidates = $isWindows
+            ? [
+                'C:\\Program Files\\gs\\gs10.07.1\\bin\\gswin64c.exe',
+                'C:\\Program Files\\gs\\gs10.07\\bin\\gswin64c.exe',
+                'C:\\Program Files (x86)\\gs\\bin\\gswin32c.exe',
+            ]
+            : [
+                '/usr/bin/gs',
+                '/usr/local/bin/gs',
+                '/opt/homebrew/bin/gs',
+            ];
+        foreach ($candidates as $candidate) {
             if (is_executable($candidate)) {
                 return $candidate;
             }
         }
-        // Fallback: which/where via shell_exec, falls erlaubt.
+
+        // Fallback: PATH-Lookup via where/command -v.
         if (\function_exists('shell_exec')) {
-            $found = @shell_exec('command -v gs 2>/dev/null');
+            $cmd = $isWindows ? 'where gs 2>nul' : 'command -v gs 2>/dev/null';
+            $found = @shell_exec($cmd);
             if (\is_string($found)) {
-                $found = trim($found);
-                if ($found !== '' && is_executable($found)) {
-                    return $found;
+                // `where` kann mehrere Zeilen liefern — erste nehmen.
+                $lines = preg_split('/\r?\n/', trim($found)) ?: [];
+                foreach ($lines as $line) {
+                    $line = trim($line);
+                    if ($line !== '' && is_executable($line)) {
+                        return $line;
+                    }
+                }
+            }
+            // Auf Windows zusätzlich gswin64c (typischer Konsolen-Name)
+            if ($isWindows) {
+                $found = @shell_exec('where gswin64c 2>nul');
+                if (\is_string($found)) {
+                    $line = trim(preg_split('/\r?\n/', trim($found))[0] ?? '');
+                    if ($line !== '' && is_executable($line)) {
+                        return $line;
+                    }
                 }
             }
         }

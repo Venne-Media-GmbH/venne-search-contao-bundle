@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
+        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing,index_hidden_pages;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -120,6 +120,44 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
             'default' => '1',
             'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
             'sql' => "char(1) NOT NULL default '1'",
+        ],
+        // v2.1.0: Steuert ob Seiten mit gesetztem `tl_page.hide`-Flag
+        // („Im Menü nicht anzeigen") in den Such-Index aufgenommen werden.
+        // Default '1' = bisheriges Verhalten (vor v2.1) beibehalten — versteckte
+        // Seiten WERDEN indexiert. User stellt um, wenn er sie ausschließen will.
+        // Re-Index nach Änderung erforderlich.
+        'index_hidden_pages' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['index_hidden_pages'],
+            'inputType' => 'checkbox',
+            'default' => '1',
+            'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
+            'sql' => "char(1) NOT NULL default '1'",
+            'save_callback' => [
+                static function ($value, $dc) {
+                    // Hint im Backend anzeigen, dass nach Umschalten ein
+                    // Reindex sinnvoll ist — sonst greift der Filter erst
+                    // beim nächsten Live-Indexier-Trigger (Page-Save etc.).
+                    if (\is_object($dc)) {
+                        $container = \Contao\System::getContainer();
+                        $db = $container?->get('database_connection');
+                        if ($db !== null) {
+                            try {
+                                $old = (string) ($db->fetchOne(
+                                    'SELECT index_hidden_pages FROM tl_venne_search_settings WHERE id = 1',
+                                ) ?: '1');
+                                $new = (string) $value === '1' ? '1' : '';
+                                if ($old !== $new) {
+                                    \Contao\Message::addInfo(
+                                        'Hinweis: Setting „Versteckte Seiten" wurde geändert. Bitte führen Sie einen Reindex durch, damit der Filter auf bereits indexierte Seiten wirkt.',
+                                    );
+                                }
+                            } catch (\Throwable) {
+                            }
+                        }
+                    }
+                    return $value;
+                },
+            ],
         ],
         'default_file_locale' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['default_file_locale'],

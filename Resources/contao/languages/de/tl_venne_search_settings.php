@@ -51,6 +51,10 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['auto_indexing'] = [
     'Automatisch indexieren',
     'Reindex bei jedem Save und nach Datei-Upload/-Löschen.',
 ];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['index_hidden_pages'] = [
+    'Versteckte Seiten indexieren',
+    'Seiten mit gesetztem „Im Menü nicht anzeigen"-Status werden in die Suche aufgenommen. Deaktivieren, um sie aus der Suche auszuschließen. Geschützte Inhaltselemente werden weiterhin nicht durchsucht (Contao-Standard). Reindex erforderlich nach Änderung.',
+];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness'] = [
     'Suchstärke',
     'Wie tolerant soll die Suche bei Tippfehlern sein? <strong>Streng</strong>: kurze Suchbegriffe wie „Di" oder „vegan" matchen nur exakt — verhindert false positives. <strong>Ausgewogen</strong>: empfohlen für die meisten Sites. <strong>Tolerant</strong>: findet auch grobe Vertipper, kann aber bei kurzen Begriffen ungewollte Treffer liefern.',

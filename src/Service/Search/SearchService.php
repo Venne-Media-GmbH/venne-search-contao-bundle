@@ -24,11 +24,32 @@ final class SearchService
     }
 
     /**
+     * Erlaubte Sort-Modes (v2.1.0). Whitelist verhindert dass Frontend-User
+     * beliebige Sort-Strings durchschmuggeln.
+     */
+    public const SORT_RELEVANCE = 'relevance';
+    public const SORT_DATE_DESC = 'date_desc';
+    public const SORT_DATE_ASC = 'date_asc';
+    /** v2.2.0: Sortierung nach Dokumentenart — Pages zuerst, dann Files
+     *  gruppiert nach Extension (pdf, docx, …). Innerhalb der Gruppe sortiert
+     *  Meilisearch nach Relevanz (BM25), weil weiteres explicit sort fehlt. */
+    public const SORT_TYPE_ASC = 'type_asc';
+
+    private const SORT_MODES = [
+        self::SORT_RELEVANCE,
+        self::SORT_DATE_DESC,
+        self::SORT_DATE_ASC,
+        self::SORT_TYPE_ASC,
+    ];
+
+    /**
      * @param array<string, mixed> $filters    z.B. ['type' => 'page', 'tags' => ['shop']]
      * @param list<int>            $userGroups tl_member_group-IDs des aktuellen Frontend-Users.
      *                                          Leeres Array = anonymer Besucher → nur public docs.
      * @param list<string>         $locales    v2.0.0: Multi-Locale-Suche. Wenn nicht-leer
      *                                          → über mehrere Indexe parallel; $locale wird ignoriert.
+     * @param string               $sort       v2.1.0: 'relevance' (Default, mit weight-Boost),
+     *                                          'date_desc' (Neueste), 'date_asc' (Älteste).
      */
     public function search(
         string $query,
@@ -38,8 +59,14 @@ final class SearchService
         int $offset = 0,
         array $userGroups = [],
         array $locales = [],
+        string $sort = self::SORT_RELEVANCE,
     ): SearchResult {
         $config = $this->settings->load();
+
+        // Sort-Mode-Whitelist: alles Unbekannte fällt auf "relevance" zurück.
+        if (!\in_array($sort, self::SORT_MODES, true)) {
+            $sort = self::SORT_RELEVANCE;
+        }
 
         // Multi-Locale-Pfad: parallele Suche, Treffer mergen + nach Score re-ranken.
         if ($locales !== []) {
@@ -48,7 +75,7 @@ final class SearchService
                 $locales,
             ), static fn (string $l): bool => $l !== ''));
             if (\count($sanitized) > 1) {
-                return $this->searchMultiLocale($query, $sanitized, $filters, $limit, $offset, $userGroups, $config);
+                return $this->searchMultiLocale($query, $sanitized, $filters, $limit, $offset, $userGroups, $config, $sort);
             }
             // Fallthrough: genau 1 Locale → Single-Path
             if ($sanitized !== []) {
@@ -73,10 +100,11 @@ final class SearchService
             'facets' => ['type', 'tags', 'locale'],
             // Mit Score zurückliefern, damit das Frontend Relevanz-Sortierung nutzen kann.
             'showRankingScore' => true,
-            // Sekundaer-Sortierung nach Indexierungs-Zeit (neueste zuerst).
-            // Meilisearch sortiert primaer nach Relevance, Ties dann nach
-            // indexed_at desc — User sieht aktuelle Inhalte oben.
-            'sort' => ['indexed_at:desc'],
+            // Sort-Reihenfolge je nach Mode (v2.1.0).
+            //   relevance: weight DESC, indexed_at DESC — geboostete oben, dann neuste
+            //   date_desc: published_at DESC — Neueste oben (Relevanz nur Tie-Breaker via BM25)
+            //   date_asc:  published_at ASC  — Älteste oben
+            'sort' => $this->buildSortClause($sort),
         ];
 
         // Strenge Such-Strategie: bei "strict" zwingen wir Meilisearch dazu,
@@ -116,11 +144,18 @@ final class SearchService
 
         try {
             $response = $this->meilisearch->index($indexUid)->search($query, $params);
-        } catch (\Throwable $e) {
-            // Falls indexed_at noch nicht als sortable konfiguriert ist (alter
-            // Index aus aelterer Bundle-Version), Sort weglassen und retry.
-            unset($params['sort']);
-            $response = $this->meilisearch->index($indexUid)->search($query, $params);
+        } catch (\Throwable) {
+            // Defensiv gegen alte Indexe ohne sortable-Felder. Wir fallen
+            // schrittweise auf einen weniger anspruchsvollen Sort zurück:
+            //   1) nur indexed_at (kein weight, kein published_at)
+            //   2) komplett ohne Sort
+            $params['sort'] = ['indexed_at:desc'];
+            try {
+                $response = $this->meilisearch->index($indexUid)->search($query, $params);
+            } catch (\Throwable) {
+                unset($params['sort']);
+                $response = $this->meilisearch->index($indexUid)->search($query, $params);
+            }
         }
         $raw = $response->toArray();
 
@@ -137,6 +172,10 @@ final class SearchService
                 tags: array_values((array) ($hit['tags'] ?? [])),
                 score: (float) ($hit['_rankingScore'] ?? 0.0),
                 isProtected: (bool) ($hit['is_protected'] ?? false),
+                altText: (string) ($hit['alt_text'] ?? ''),
+                coverUrl: (string) ($hit['cover_url'] ?? ''),
+                contentType: (string) ($hit['content_type'] ?? ($hit['type'] ?? '')),
+                publishedAt: (int) ($hit['published_at'] ?? 0),
             );
         }
 
@@ -178,8 +217,8 @@ final class SearchService
 
 /**
      * Multi-Locale-Pfad: pro Locale ein Search-Call, Treffer mergen + nach
-     * _rankingScore desc neu sortieren. Pagination wird auf den gemergten
-     * Trefferpool angewendet.
+     * Sort-Mode neu sortieren. Pagination wird auf den gemergten Trefferpool
+     * angewendet.
      *
      * @param array<string, mixed> $filters
      * @param list<int>            $userGroups
@@ -193,6 +232,7 @@ final class SearchService
         int $offset,
         array $userGroups,
         \VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig $config,
+        string $sort = self::SORT_RELEVANCE,
     ): SearchResult {
         $allHits = [];
         $facets = [];
@@ -213,6 +253,7 @@ final class SearchService
                     offset: 0,
                     userGroups: $userGroups,
                     locales: [], // wichtig: rekursiver Single-Locale-Pfad
+                    sort: $sort,
                 );
             } catch (\Throwable) {
                 continue;
@@ -232,7 +273,31 @@ final class SearchService
             }
         }
 
-        usort($allHits, static fn ($a, $b): int => $b->score <=> $a->score);
+        // Re-Ranking nach Sort-Mode. Im Multi-Locale-Pfad mergen wir Treffer
+        // aus mehreren Indexen — Meilisearch hat sie pro Locale schon
+        // sortiert, der globale Merge muss aber den gleichen Sort-Key benutzen.
+        // v2.2.0: SearchHit trägt publishedAt + contentType — wir können
+        // jetzt korrekt global sortieren statt nur die Pro-Locale-Reihenfolge
+        // beizubehalten.
+        if ($sort === self::SORT_DATE_DESC) {
+            usort($allHits, static fn ($a, $b): int => $b->publishedAt <=> $a->publishedAt);
+        } elseif ($sort === self::SORT_DATE_ASC) {
+            usort($allHits, static function ($a, $b): int {
+                // 0 (unbekannt) ans Ende statt an den Anfang sortieren.
+                if ($a->publishedAt === 0 && $b->publishedAt === 0) return 0;
+                if ($a->publishedAt === 0) return 1;
+                if ($b->publishedAt === 0) return -1;
+                return $a->publishedAt <=> $b->publishedAt;
+            });
+        } elseif ($sort === self::SORT_TYPE_ASC) {
+            usort($allHits, static function ($a, $b): int {
+                $cmp = strcmp($a->contentType, $b->contentType);
+                if ($cmp !== 0) return $cmp;
+                return $b->score <=> $a->score;
+            });
+        } else {
+            usort($allHits, static fn ($a, $b): int => $b->score <=> $a->score);
+        }
         $paged = \array_slice($allHits, $offset, $limit);
 
         return new SearchResult(
@@ -243,6 +308,25 @@ final class SearchService
             facets: $facets,
             queryTimeMs: $queryTime,
         );
+    }
+
+    /**
+     * Sort-Klausel pro Mode. weight + indexed_at sind v2.1.0-Felder; bei alten
+     * Indexen fängt der search()-Try/Catch-Fallback das ab.
+     *
+     * @return list<string>
+     */
+    private function buildSortClause(string $sort): array
+    {
+        return match ($sort) {
+            self::SORT_DATE_DESC => ['published_at:desc'],
+            self::SORT_DATE_ASC => ['published_at:asc'],
+            // v2.2.0: page < pdf < docx < … (alphabetisch, content_type ist
+            // lexikographisch zwingend), Tie-Break über weight DESC damit
+            // geboostete Items innerhalb der Gruppe oben sind.
+            self::SORT_TYPE_ASC => ['content_type:asc', 'weight:desc'],
+            default => ['weight:desc', 'indexed_at:desc'],
+        };
     }
 
     /**
@@ -279,15 +363,28 @@ final class SearchService
      *   ['type' => ['page','file']] → 'type IN ["page", "file"]'
      *   ['type' => 'page', 'locale' => 'de'] → 'type = "page" AND locale = "de"'
      *
+     * Spezialfall v2.1.0:
+     *   ['file_ext' => ['pdf','xlsx']] → 'tags IN ["pdf", "xlsx"]'
+     *   Wird genauso AND-verknüpft wie alle anderen Filter — wenn beide
+     *   `tags`- und `file_ext`-Sets gesetzt sind, MUSS der Treffer in BEIDEN
+     *   Tag-Listen liegen (also: korrekt getaggter Inhalt + passender Dateityp).
+     *
      * @param array<string, mixed> $filters
      */
     private function buildFilterExpression(array $filters): string
     {
         $parts = [];
         foreach ($filters as $field => $value) {
-            $field = preg_replace('/[^a-z0-9_]/i', '', $field) ?? '';
+            $rawField = $field;
+            $field = preg_replace('/[^a-z0-9_]/i', '', (string) $field) ?? '';
             if ($field === '') {
                 continue;
+            }
+
+            // file_ext ist ein logischer Filter, der auf das gleiche
+            // tags-Filterable im Index abgebildet wird.
+            if ($rawField === 'file_ext') {
+                $field = 'tags';
             }
 
             if (\is_array($value)) {

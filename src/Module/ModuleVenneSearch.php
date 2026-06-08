@@ -59,6 +59,10 @@ class ModuleVenneSearch extends Module
         $this->Template->headline = $this->headline;
         $this->Template->cssID = $this->cssID;
         $this->Template->showFacets = (bool) $this->vsearch_show_facets;
+        // v2.1.0: zusätzliche UI-Optionen
+        $this->Template->showSort = (bool) $this->vsearch_show_sort;
+        $this->Template->showFiletypeFilter = (bool) $this->vsearch_show_filetype_filter;
+        $this->Template->openInNewTab = (bool) $this->vsearch_open_in_new_tab;
     }
 
     private function getLocale(): string

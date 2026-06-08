@@ -60,22 +60,28 @@ final class ReindexCatalog
         // Das respektiert die SEO-Konfiguration der Site-Betreiber.
         // noSearch existiert nur in Contao 4 — in 5.x weggefallen, daher
         // versuchen wir es per try/catch.
+        // v2.1.0: hide-Filter wenn Setting deaktiviert ist. Wir lesen das
+        // hide-Feld immer mit (Contao 4 + 5 haben es), filtern aber nur bei
+        // Bedarf — sonst bleibt das bisherige Verhalten erhalten.
+        $hideClause = $config->indexHiddenPages ? '' : " AND (hide IS NULL OR hide = '' OR hide = '0')";
         try {
             $pageRows = $this->db->fetchAllAssociative(
-                "SELECT id, alias, title FROM tl_page
+                "SELECT id, alias, title, hide FROM tl_page
                 WHERE type IN ('regular', 'forward', 'redirect')
                   AND published = '1'
                   AND (robots = '' OR robots IS NULL OR robots NOT LIKE '%noindex%')
-                  AND (noSearch IS NULL OR noSearch = '' OR noSearch = '0')
+                  AND (noSearch IS NULL OR noSearch = '' OR noSearch = '0')"
+                . $hideClause . "
                 ORDER BY id ASC"
             );
         } catch (\Throwable) {
             // Contao 5.x: noSearch-Spalte gibt's nicht mehr → ohne diesen Filter
             $pageRows = $this->db->fetchAllAssociative(
-                "SELECT id, alias, title FROM tl_page
+                "SELECT id, alias, title, hide FROM tl_page
                 WHERE type IN ('regular', 'forward', 'redirect')
                   AND published = '1'
-                  AND (robots = '' OR robots IS NULL OR robots NOT LIKE '%noindex%')
+                  AND (robots = '' OR robots IS NULL OR robots NOT LIKE '%noindex%')"
+                . $hideClause . "
                 ORDER BY id ASC"
             );
         }

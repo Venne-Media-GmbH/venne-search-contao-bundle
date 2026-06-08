@@ -18,6 +18,19 @@ final class SearchDocument implements \JsonSerializable
      * @param list<string> $tags
      * @param list<int>    $allowedGroups Bei isProtected=true: tl_member_group-IDs
      *                                    die Zugriff haben. Leer = öffentlich.
+     * @param string $altText             v2.1.0: Contao-Datei-Metadaten — wird
+     *                                    bei Files in den Hover-Tooltip gerendert
+     *                                    (statt nackter URL). Leerer String =
+     *                                    keine Meta vorhanden, Fallback greift.
+     * @param string $coverUrl            v2.2.0: URL eines Cover-/Thumbnail-Bildes
+     *                                    für Datei-Treffer (Bild selbst bei
+     *                                    Bilddateien, leer wenn nichts verfügbar).
+     *                                    Wird im Frontend als <img alt="…">
+     *                                    statt des generischen SVG-Icons gerendert.
+     * @param string $contentType         v2.2.0: normalisierter Dokument-Typ
+     *                                    für `type_asc`-Sort (z.B. `page`, `pdf`,
+     *                                    `docx`, `xlsx`). Pages nehmen `page`,
+     *                                    Files nehmen die Extension (lowercase).
      */
     public function __construct(
         public readonly string $id,
@@ -31,6 +44,9 @@ final class SearchDocument implements \JsonSerializable
         public readonly float $weight = 1.0,
         public readonly bool $isProtected = false,
         public readonly array $allowedGroups = [],
+        public readonly string $altText = '',
+        public readonly string $coverUrl = '',
+        public readonly string $contentType = '',
     ) {
     }
 
@@ -48,6 +64,9 @@ final class SearchDocument implements \JsonSerializable
             'weight' => $this->weight,
             'is_protected' => $this->isProtected,
             'allowed_groups' => $this->allowedGroups,
+            'alt_text' => $this->altText,
+            'cover_url' => $this->coverUrl,
+            'content_type' => $this->contentType !== '' ? $this->contentType : $this->type,
             'indexed_at' => time(),
         ];
     }

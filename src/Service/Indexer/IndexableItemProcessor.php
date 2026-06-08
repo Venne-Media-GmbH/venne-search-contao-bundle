@@ -96,6 +96,16 @@ final class IndexableItemProcessor
                 'durationMs' => (int) ((microtime(true) - $start) * 1000),
             ];
         }
+        // v2.1.0: Setting "Versteckte Seiten indexieren" — wenn deaktiviert,
+        // werden Seiten mit gesetztem `tl_page.hide`-Flag aus der Suche raus.
+        if (!$config->indexHiddenPages && (string) ($pageRow['hide'] ?? '') === '1') {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'page_hidden_excluded',
+                'durationMs' => (int) ((microtime(true) - $start) * 1000),
+            ];
+        }
 
         // Defensive Permission-Check: auch wenn der Plan-Call das Item
         // freigegeben hat, prüfen wir hier nochmal — Plan kann veraltet sein,
@@ -149,10 +159,18 @@ final class IndexableItemProcessor
         //     und (b) das Label searchable ist (User tippt "neues" → Match).
         $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
         $tags = [];
+        // v2.1.0: Boost = max(boost) aller zugewiesenen Tags. Fließt in
+        // SearchDocument.weight, das im Index per `weight DESC` sortiert
+        // wird → geboostete Treffer landen oben.
+        $weight = 1.0;
         foreach ($tagObjects as $t) {
             $tags[] = $t['slug'];
             if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
                 $tags[] = $t['label'];
+            }
+            $tagBoost = (float) ($t['boost'] ?? 1.0);
+            if ($tagBoost > $weight) {
+                $weight = $tagBoost;
             }
         }
         // Fallback: Legacy-Keywords-CSV wenn keine Tag-Zuweisungen.
@@ -173,9 +191,10 @@ final class IndexableItemProcessor
             content: $normalizedContent,
             tags: $tags,
             publishedAt: !empty($pageRow['start']) ? (int) $pageRow['start'] : (int) ($pageRow['tstamp'] ?? 0),
-            weight: 1.0,
+            weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
+            contentType: 'page',
         );
         $this->indexer->upsert($doc);
 
@@ -227,25 +246,56 @@ final class IndexableItemProcessor
         // Tags aus dem Tag-System (Slug + Label, beides searchable) + Extension.
         $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
         $fileTags = [];
+        // v2.1.0: Boost = max(boost) aller zugewiesenen Tags (siehe processPage).
+        $weight = 1.0;
         foreach ($tagObjects as $t) {
             $fileTags[] = $t['slug'];
             if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
                 $fileTags[] = $t['label'];
             }
+            $tagBoost = (float) ($t['boost'] ?? 1.0);
+            if ($tagBoost > $weight) {
+                $weight = $tagBoost;
+            }
         }
         $fileTags[] = $ext;
         $fileTags = array_values(array_unique(array_filter($fileTags)));
+
+        // v2.1.0: Datei-Titel und ALT-Text aus tl_files.meta lesen
+        // (Contao-Datei-Metadaten, im Backend gepflegt). Fallback auf
+        // humanisierten Dateinamen, wenn keine Meta-Daten hinterlegt sind.
+        $meta = $this->extractFileMeta($relativePath, $locale, $config->enabledLocales);
+        $fallbackTitle = $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME));
+        $title = $meta['title'] !== '' ? $meta['title'] : $fallbackTitle;
+
+        // v2.2.0: Cover-URL ermitteln. Bilder = sich selbst; bei anderen
+        // Dateitypen schauen wir, ob im selben Verzeichnis ein gleichnamiges
+        // Bild liegt (z.B. `flyer.pdf` + `flyer.jpg` als Cover, Contao-Übliches
+        // Pattern). Nichts gefunden → leer, Frontend rendert das SVG-Icon.
+        $coverUrl = $this->resolveCoverUrl($relativePath, $absolute, $ext, $projectDir);
+
+        // v2.2.0: publishedAt aus tl_files.tstamp (Upload/Änderungszeit) für
+        // stabile Date-Sortierung — vorher fehlend, fiel auf 0 zurück.
+        $fileTstamp = $this->fetchFileTstamp($relativePath);
+        if ($fileTstamp === 0) {
+            $fileTstamp = @filemtime($absolute) ?: 0;
+        }
 
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
             locale: $locale,
-            title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
+            title: $title,
             url: '/' . ltrim($relativePath, '/'),
             content: $this->normalizer->normalize($text),
             tags: $fileTags,
+            publishedAt: $fileTstamp,
+            weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
+            altText: $meta['alt'],
+            coverUrl: $coverUrl,
+            contentType: $ext !== '' ? $ext : 'file',
         );
         $this->indexer->upsert($doc);
 
@@ -518,10 +568,148 @@ final class IndexableItemProcessor
         return '.html';
     }
 
+    /**
+     * v2.2.0: Cover-URL für einen Datei-Treffer ermitteln.
+     *
+     * Strategie (erste die liefert gewinnt):
+     *   1) Datei ist selbst ein Bild → direkt ihre URL als Cover
+     *   2) Im gleichen Verzeichnis liegt ein gleichnamiges Bild
+     *      (`flyer.pdf` → `flyer.jpg`, `.png`, `.webp`) → das nehmen
+     *   3) Nichts gefunden → leerer String, Frontend rendert Icon
+     */
+    private function resolveCoverUrl(string $relativePath, string $absolutePath, string $ext, string $projectDir): string
+    {
+        $imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
+
+        if (\in_array($ext, $imageExts, true)) {
+            return '/' . ltrim($relativePath, '/');
+        }
+
+        $base = pathinfo($relativePath, PATHINFO_FILENAME);
+        $dir = pathinfo($relativePath, PATHINFO_DIRNAME);
+        if ($base === '' || $dir === '' || $dir === '.') {
+            return '';
+        }
+        $absDir = rtrim($projectDir, '/') . '/' . ltrim($dir, '/');
+        foreach ($imageExts as $candExt) {
+            $candAbs = $absDir . '/' . $base . '.' . $candExt;
+            if (is_file($candAbs)) {
+                return '/' . ltrim($dir, '/') . '/' . $base . '.' . $candExt;
+            }
+        }
+        // Auch Großschreibung der Extension probieren (häufig bei Uploads).
+        foreach ($imageExts as $candExt) {
+            $candAbs = $absDir . '/' . $base . '.' . strtoupper($candExt);
+            if (is_file($candAbs)) {
+                return '/' . ltrim($dir, '/') . '/' . $base . '.' . strtoupper($candExt);
+            }
+        }
+        unset($absolutePath);
+        return '';
+    }
+
+    /**
+     * v2.2.0: tstamp einer Datei aus tl_files holen — Contao trackt Uploads
+     * und nachträgliche Replace-Vorgänge dort, das ist deutlich näher am
+     * „publiziert"-Konzept als filemtime() auf dem inode.
+     */
+    private function fetchFileTstamp(string $relativePath): int
+    {
+        try {
+            $row = $this->db->fetchAssociative(
+                'SELECT tstamp FROM tl_files WHERE path = ?',
+                [ltrim($relativePath, '/')],
+            );
+        } catch (\Throwable) {
+            return 0;
+        }
+        if (!\is_array($row)) {
+            return 0;
+        }
+        return (int) ($row['tstamp'] ?? 0);
+    }
+
     private function humanizeFilename(string $filename): string
     {
         $cleaned = preg_replace('/[-_]+/', ' ', $filename) ?? $filename;
         return ucwords(mb_strtolower(trim($cleaned)));
+    }
+
+    /**
+     * Liest Title + ALT-Text aus tl_files.meta für eine Datei. Contao speichert
+     * Meta als serialisiertes Array pro Locale: ['de' => ['title'=>..,'alt'=>..], ...].
+     * Locale-Auswahl: zuerst die erkannte File-Locale, dann erste enabled_locale,
+     * dann irgendein verfügbarer Locale-Eintrag.
+     *
+     * Beide Felder werden gestrippt + gekürzt — landen sonst 1:1 in der UI
+     * und im Index.
+     *
+     * @param list<string> $enabledLocales
+     * @return array{title:string, alt:string}
+     */
+    private function extractFileMeta(string $relativePath, string $locale, array $enabledLocales): array
+    {
+        $empty = ['title' => '', 'alt' => ''];
+
+        try {
+            $row = $this->db->fetchAssociative(
+                'SELECT meta FROM tl_files WHERE path = ?',
+                [ltrim($relativePath, '/')],
+            );
+        } catch (\Throwable) {
+            return $empty;
+        }
+        if (!\is_array($row) || empty($row['meta'])) {
+            return $empty;
+        }
+
+        $raw = (string) $row['meta'];
+        // Contao 4.x: serialisiertes PHP-Array. Contao 5.x kann auch JSON sein,
+        // wenn das Backend per Doctrine-Migration die Spalte umgewandelt hat.
+        // Wir versuchen beides — was zuerst klappt.
+        $decoded = null;
+        if ($raw !== '' && ($raw[0] === 'a' || $raw[0] === 's' || $raw[0] === 'b')) {
+            $decoded = @unserialize($raw, ['allowed_classes' => false]);
+        }
+        if (!\is_array($decoded)) {
+            $jsonDecoded = json_decode($raw, true);
+            if (\is_array($jsonDecoded)) {
+                $decoded = $jsonDecoded;
+            }
+        }
+        if (!\is_array($decoded)) {
+            return $empty;
+        }
+
+        // Locale-Auswahl: erst exakter Match, dann enabledLocales-Reihenfolge,
+        // dann beliebiger erster Eintrag.
+        $candidates = array_unique(array_filter(array_merge([$locale], $enabledLocales)));
+        $entry = null;
+        foreach ($candidates as $loc) {
+            if (isset($decoded[$loc]) && \is_array($decoded[$loc])) {
+                $entry = $decoded[$loc];
+                break;
+            }
+        }
+        if ($entry === null) {
+            foreach ($decoded as $value) {
+                if (\is_array($value)) {
+                    $entry = $value;
+                    break;
+                }
+            }
+        }
+        if (!\is_array($entry)) {
+            return $empty;
+        }
+
+        $title = trim(strip_tags((string) ($entry['title'] ?? '')));
+        $alt = trim(strip_tags((string) ($entry['alt'] ?? '')));
+
+        return [
+            'title' => mb_substr($title, 0, 255),
+            'alt' => mb_substr($alt, 0, 500),
+        ];
     }
 
     private function extractHeadlineText(string $raw): string

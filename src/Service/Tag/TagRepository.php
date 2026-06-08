@@ -23,16 +23,17 @@ final class TagRepository
     }
 
     /**
-     * @return list<array{id:int, slug:string, label:string, color:string, description:?string, count:int}>
+     * @return list<array{id:int, slug:string, label:string, color:string, boost:float, description:?string, count:int}>
      */
     public function findAllWithCounts(): array
     {
         if (!$this->tablesExist()) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT t.id, t.slug, t.label, t.color, t.description,
+                'SELECT t.id, t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.description,
                         (SELECT COUNT(*) FROM ' . self::ASSIGN_TABLE . ' a WHERE a.tag_id = t.id) AS cnt
                  FROM ' . self::TAG_TABLE . ' t
                  ORDER BY t.label ASC',
@@ -47,6 +48,7 @@ final class TagRepository
                 'slug' => (string) $r['slug'],
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
+                'boost' => (float) ($r['boost'] ?? 1.0),
                 'description' => $r['description'] !== null ? (string) $r['description'] : null,
                 'count' => (int) $r['cnt'],
             ];
@@ -55,16 +57,17 @@ final class TagRepository
     }
 
     /**
-     * @return list<array{id:int, slug:string, label:string, color:string}>
+     * @return list<array{id:int, slug:string, label:string, color:string, boost:float}>
      */
     public function findAll(): array
     {
         if (!$this->tablesExist()) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 'boost' : "'1.00'";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT id, slug, label, color FROM ' . self::TAG_TABLE . ' ORDER BY label ASC',
+                'SELECT id, slug, label, color, ' . $boostExpr . ' AS boost FROM ' . self::TAG_TABLE . ' ORDER BY label ASC',
             );
         } catch (\Throwable) {
             return [];
@@ -76,6 +79,7 @@ final class TagRepository
                 'slug' => (string) $r['slug'],
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
+                'boost' => (float) ($r['boost'] ?? 1.0),
             ];
         }
         return $out;
@@ -108,16 +112,17 @@ final class TagRepository
     /**
      * Volle Tag-Daten für eine Target. Kommt im Frontend an die Search-Hits ran.
      *
-     * @return list<array{slug:string, label:string, color:string}>
+     * @return list<array{slug:string, label:string, color:string, boost:float}>
      */
     public function tagsForTarget(string $targetType, string $targetId): array
     {
         if (!$this->tablesExist()) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT t.slug, t.label, t.color FROM ' . self::TAG_TABLE . ' t
+                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost FROM ' . self::TAG_TABLE . ' t
                  INNER JOIN ' . self::ASSIGN_TABLE . ' a ON a.tag_id = t.id
                  WHERE a.target_type = ? AND a.target_id = ?
                  ORDER BY t.label ASC',
@@ -132,22 +137,51 @@ final class TagRepository
                 'slug' => (string) $r['slug'],
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
+                'boost' => (float) ($r['boost'] ?? 1.0),
             ];
         }
         return $out;
     }
 
     /**
+     * Höchster Boost-Wert aller einem Target zugewiesenen Tags. Wird beim
+     * Indexieren ins SearchDocument.weight gesetzt — Sort weight DESC sorgt
+     * dafür, dass geboostete Treffer in der Ergebnisliste oben stehen.
+     */
+    public function maxBoostForTarget(string $targetType, string $targetId): float
+    {
+        if (!$this->tablesExist() || !$this->boostColumnAvailable()) {
+            return 1.0;
+        }
+        try {
+            $value = $this->db->fetchOne(
+                'SELECT MAX(t.boost) FROM ' . self::TAG_TABLE . ' t
+                 INNER JOIN ' . self::ASSIGN_TABLE . ' a ON a.tag_id = t.id
+                 WHERE a.target_type = ? AND a.target_id = ?',
+                [$targetType, $targetId],
+            );
+        } catch (\Throwable) {
+            return 1.0;
+        }
+        if ($value === false || $value === null) {
+            return 1.0;
+        }
+        $boost = (float) $value;
+        return $boost > 0.0 ? $boost : 1.0;
+    }
+
+    /**
      * Tagged-Count für eine ganze Liste targets in einem Query (für Backend-Tree).
      *
      * @param list<array{type:string, id:string}> $targets
-     * @return array<string, list<array{slug:string,label:string,color:string}>> Schlüssel: "type:id"
+     * @return array<string, list<array{slug:string,label:string,color:string,boost:float}>> Schlüssel: "type:id"
      */
     public function bulkTagsForTargets(array $targets): array
     {
         if (!$this->tablesExist() || $targets === []) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
 
         // Wir gruppieren pro target_type, damit der WHERE-Clause clean bleibt.
         $byType = [];
@@ -164,7 +198,7 @@ final class TagRepository
             $placeholders = implode(',', array_fill(0, \count($ids), '?'));
             try {
                 $rows = $this->db->fetchAllAssociative(
-                    'SELECT a.target_id, t.slug, t.label, t.color
+                    'SELECT a.target_id, t.slug, t.label, t.color, ' . $boostExpr . ' AS boost
                      FROM ' . self::ASSIGN_TABLE . ' a
                      INNER JOIN ' . self::TAG_TABLE . ' t ON t.id = a.tag_id
                      WHERE a.target_type = ? AND a.target_id IN (' . $placeholders . ')
@@ -183,6 +217,7 @@ final class TagRepository
                     'slug' => (string) $r['slug'],
                     'label' => (string) $r['label'],
                     'color' => (string) $r['color'],
+                    'boost' => (float) ($r['boost'] ?? 1.0),
                 ];
             }
         }
@@ -210,6 +245,7 @@ final class TagRepository
             'slug' => (string) $row['slug'],
             'label' => (string) $row['label'],
             'color' => (string) $row['color'],
+            'boost' => isset($row['boost']) ? (float) $row['boost'] : 1.0,
             'description' => $row['description'] !== null ? (string) $row['description'] : null,
         ];
     }
@@ -325,5 +361,28 @@ final class TagRepository
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Defensiv: Boost-Spalte existiert erst nach v2.1.0-Migration. Wenn die
+     * Migration noch nicht gelaufen ist (z.B. Bundle-Update ohne contao:migrate),
+     * fallen alle boost-bezogenen Queries auf neutralen Wert 1.0 zurück und
+     * niemand crasht.
+     */
+    private ?bool $boostAvailable = null;
+
+    private function boostColumnAvailable(): bool
+    {
+        if ($this->boostAvailable !== null) {
+            return $this->boostAvailable;
+        }
+        try {
+            $sm = $this->db->createSchemaManager();
+            $columns = $sm->listTableColumns(self::TAG_TABLE);
+            $this->boostAvailable = isset($columns['boost']);
+        } catch (\Throwable) {
+            $this->boostAvailable = false;
+        }
+        return $this->boostAvailable;
     }
 }

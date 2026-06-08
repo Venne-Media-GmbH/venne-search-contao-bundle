@@ -9,6 +9,10 @@ Die Plattform-Anbindung läuft über [venne-search.de](https://venne-search.de) 
 - **Live-Indexing**: Wenn du eine Seite speicherst oder eine Datei hochlädst, ist sie kurze Zeit später in der Suche
 - **Mehrsprachig**: Pro Locale ein Index, automatische Sprach-Erkennung für Dateien (Pfad → Embedding → Filename) mit Override-Möglichkeit
 - **Tag-System mit Tree-Picker**: Seitenbaum öffnen, per Klick oder Drag-&-Drop Tags zuweisen — Tags erscheinen klickbar als Filter in den Such-Treffern
+- **Tag-Boost (v2.1)**: Pro Tag ein Relevanz-Boost — geboostete Treffer landen oben, auch wenn der Suchbegriff nur über den Tag matcht. „Fristen"-Suche findet die Termin-Seite, auch wenn das Wort nur als Tag, nicht im Text steht.
+- **Datei-Metadaten in der Trefferliste (v2.1)**: Im Contao-Dateibaum gepflegte Titel und ALT-Texte erscheinen statt der humanisierten Dateinamen — pro Locale, mit Fallback.
+- **Sortieren & Filtern (v2.1)**: Endnutzer kann zwischen „Relevanz / Neueste / Älteste" wählen und nach Dateityp filtern (PDF / Excel / Word / Text / OpenDoc / RTF).
+- **Bookmark- & teilbare Suchanfragen (v2.1)**: Suche-State (Query, Filter, Sort) wandert in den URL-Hash. Browser-Back/Forward stellt die Suche wieder her — kein Datenverlust beim Klick auf ein Ergebnis.
 - **Anonymes Search-Analytics**: Erfasst auf der Plattform welche Begriffe gesucht werden (kein IP, kein User-Agent, keine User-ID) — nützlich um Content-Lücken zu finden
 - **PDF-Inhalte durchsuchen**: Texte aus PDFs werden extrahiert und indexiert
 - **Tippfehler-Toleranz**: `Krabbnburger` findet `Krabbenburger`
@@ -106,14 +110,32 @@ document.getElementById('search').addEventListener('input', async (e) => {
       "url": "/ueber-uns.html",
       "snippet": "…<mark>Team</mark>…",
       "tags": ["team"],
-      "score": 0.876
+      "tagsResolved": [{"slug": "team", "label": "Team", "color": "blue", "boost": 1.0}],
+      "score": 0.876,
+      "isProtected": false,
+      "altText": ""
     }
   ],
   "totalHits": 12,
   "facets": {"type": {"page": 8, "file": 4}},
+  "tagFacets": [{"slug": "team", "label": "Team", "color": "blue", "boost": 1.0, "count": 4}],
   "queryTimeMs": 7
 }
 ```
+
+### Query-Parameter (v2.1)
+
+| Parameter   | Typ            | Beschreibung |
+|-------------|----------------|--------------|
+| `q`         | string         | Suchbegriff |
+| `locale`    | string         | Sprache (z.B. `de`) |
+| `locales[]` | array          | Multi-Locale-Suche über mehrere Indexe |
+| `type`      | `page`/`file`  | Type-Filter |
+| `tags[]`    | array<string>  | Tag-Slugs (AND-Verknüpft) |
+| `ext[]`     | array<string>  | Datei-Extensions (z.B. `pdf`, `xlsx`) |
+| `sort`      | `relevance`/`date_desc`/`date_asc` | Sortier-Modus |
+| `limit`     | int            | Treffer-Anzahl (max 100) |
+| `offset`    | int            | Pagination |
 
 ### Fehler-Codes der API
 

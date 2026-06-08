@@ -17,7 +17,7 @@ declare(strict_types=1);
 \Contao\System::loadLanguageFile('tl_module');
 
 $GLOBALS['TL_DCA']['tl_module']['palettes']['venne_search'] = '{title_legend},name,headline,type'.
-    ';{config_legend},vsearch_display_mode,vsearch_locale,vsearch_trigger_label,vsearch_placeholder,vsearch_button_label,vsearch_min_chars,vsearch_limit,vsearch_show_facets'.
+    ';{config_legend},vsearch_display_mode,vsearch_locale,vsearch_trigger_label,vsearch_placeholder,vsearch_button_label,vsearch_min_chars,vsearch_limit,vsearch_show_facets,vsearch_show_sort,vsearch_show_filetype_filter,vsearch_open_in_new_tab'.
     ';{template_legend:hide},customTpl'.
     ';{protected_legend:hide},protected'.
     ';{expert_legend:hide},guests,cssID';
@@ -65,6 +65,33 @@ $GLOBALS['TL_DCA']['tl_module']['fields']['vsearch_show_facets'] = [
     'inputType' => 'checkbox',
     'eval' => ['tl_class' => 'w50 m12'],
     'sql' => "char(1) NOT NULL default '1'",
+];
+
+// v2.1.0: Sortier-Dropdown (Relevanz / Datum) im Frontend zeigen.
+$GLOBALS['TL_DCA']['tl_module']['fields']['vsearch_show_sort'] = [
+    'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_show_sort'],
+    'inputType' => 'checkbox',
+    'eval' => ['tl_class' => 'w50 m12'],
+    'sql' => "char(1) NOT NULL default '1'",
+];
+
+// v2.1.0: Dateityp-Filter-Pills (PDF/Excel/Word/...) zeigen — nur sichtbar
+// wenn der Type-Filter aktuell auf "file" steht.
+$GLOBALS['TL_DCA']['tl_module']['fields']['vsearch_show_filetype_filter'] = [
+    'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_show_filetype_filter'],
+    'inputType' => 'checkbox',
+    'eval' => ['tl_class' => 'w50 m12'],
+    'sql' => "char(1) NOT NULL default '1'",
+];
+
+// v2.1.0: optional alle Suchergebnis-Links in neuem Tab öffnen.
+// Per Default aus — der bessere UX-Pfad ist der URL-State (siehe v2.1.0
+// History-API), Browser-Back stellt die Suche dort wieder her.
+$GLOBALS['TL_DCA']['tl_module']['fields']['vsearch_open_in_new_tab'] = [
+    'label' => &$GLOBALS['TL_LANG']['tl_module']['vsearch_open_in_new_tab'],
+    'inputType' => 'checkbox',
+    'eval' => ['tl_class' => 'w50 m12'],
+    'sql' => "char(1) NOT NULL default ''",
 ];
 
 // v2.0.0: pro Modul konfigurierbares Such-Locale. Optionen werden zur Laufzeit

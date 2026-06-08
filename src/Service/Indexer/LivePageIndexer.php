@@ -82,6 +82,12 @@ final class LivePageIndexer
             $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
             return;
         }
+        // v2.1.0: hide-Flag respektieren wenn das Setting deaktiviert ist —
+        // versteckte Seiten werden auch beim Live-Index-Trigger entfernt.
+        if (!$config->indexHiddenPages && (string) ($pageRow['hide'] ?? '') === '1') {
+            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            return;
+        }
 
         // Permission-Check + Mode-Filter — wenn die Page laut Modus
         // nicht indexiert werden darf, löschen wir sie auch direkt aus
@@ -128,12 +134,18 @@ final class LivePageIndexer
         $url = $this->resolvePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
         // v2.0.0: Tag-System bevorzugt (Slug+Label = searchable); Fallback Legacy.
+        // v2.1.0: Boost = max(boost) aller zugewiesenen Tags → SearchDocument.weight.
         $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
         $tags = [];
+        $weight = 1.0;
         foreach ($tagObjects as $t) {
             $tags[] = $t['slug'];
             if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
                 $tags[] = $t['label'];
+            }
+            $tagBoost = (float) ($t['boost'] ?? 1.0);
+            if ($tagBoost > $weight) {
+                $weight = $tagBoost;
             }
         }
         if ($tags === []) {
@@ -150,7 +162,7 @@ final class LivePageIndexer
             content: $normalizedContent,
             tags: $tags,
             publishedAt: !empty($pageRow['start']) ? (int) $pageRow['start'] : (int) ($pageRow['tstamp'] ?? 0),
-            weight: 1.0,
+            weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
         );
@@ -243,25 +255,39 @@ final class LivePageIndexer
 
         $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
         $fileTags = [];
+        // v2.1.0: Boost = max(boost) aller zugewiesenen Tags.
+        $weight = 1.0;
         foreach ($tagObjects as $t) {
             $fileTags[] = $t['slug'];
             if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
                 $fileTags[] = $t['label'];
             }
+            $tagBoost = (float) ($t['boost'] ?? 1.0);
+            if ($tagBoost > $weight) {
+                $weight = $tagBoost;
+            }
         }
         $fileTags[] = $extension;
         $fileTags = array_values(array_unique(array_filter($fileTags)));
+
+        // v2.1.0: Datei-Titel und ALT-Text aus tl_files.meta.
+        $meta = $this->extractFileMeta($relativePath, $locale, $config->enabledLocales);
+        $title = $meta['title'] !== ''
+            ? $meta['title']
+            : $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME));
 
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
             locale: $locale,
-            title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
+            title: $title,
             url: '/'.$relativePath,
             content: $this->normalizer->normalize($text),
             tags: $fileTags,
+            weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
+            altText: $meta['alt'],
         );
 
         try {
@@ -333,6 +359,71 @@ final class LivePageIndexer
     {
         $cleaned = preg_replace('/[-_]+/', ' ', $filename) ?? $filename;
         return ucwords(mb_strtolower(trim($cleaned)));
+    }
+
+    /**
+     * Liest Title + ALT-Text aus tl_files.meta. Locale-Auswahl: erst exakter
+     * Locale-Match, dann enabledLocales-Reihenfolge, dann erster verfügbarer.
+     * Format ist serialisiertes PHP-Array (Contao 4.x) oder JSON (Contao 5.x).
+     *
+     * @param list<string> $enabledLocales
+     * @return array{title:string, alt:string}
+     */
+    private function extractFileMeta(string $relativePath, string $locale, array $enabledLocales): array
+    {
+        $empty = ['title' => '', 'alt' => ''];
+
+        try {
+            $row = $this->db->fetchAssociative(
+                'SELECT meta FROM tl_files WHERE path = ?',
+                [ltrim($relativePath, '/')],
+            );
+        } catch (\Throwable) {
+            return $empty;
+        }
+        if (!\is_array($row) || empty($row['meta'])) {
+            return $empty;
+        }
+
+        $raw = (string) $row['meta'];
+        $decoded = null;
+        if ($raw !== '' && ($raw[0] === 'a' || $raw[0] === 's' || $raw[0] === 'b')) {
+            $decoded = @unserialize($raw, ['allowed_classes' => false]);
+        }
+        if (!\is_array($decoded)) {
+            $jsonDecoded = json_decode($raw, true);
+            if (\is_array($jsonDecoded)) {
+                $decoded = $jsonDecoded;
+            }
+        }
+        if (!\is_array($decoded)) {
+            return $empty;
+        }
+
+        $candidates = array_unique(array_filter(array_merge([$locale], $enabledLocales)));
+        $entry = null;
+        foreach ($candidates as $loc) {
+            if (isset($decoded[$loc]) && \is_array($decoded[$loc])) {
+                $entry = $decoded[$loc];
+                break;
+            }
+        }
+        if ($entry === null) {
+            foreach ($decoded as $value) {
+                if (\is_array($value)) {
+                    $entry = $value;
+                    break;
+                }
+            }
+        }
+        if (!\is_array($entry)) {
+            return $empty;
+        }
+
+        return [
+            'title' => mb_substr(trim(strip_tags((string) ($entry['title'] ?? ''))), 0, 255),
+            'alt' => mb_substr(trim(strip_tags((string) ($entry['alt'] ?? ''))), 0, 500),
+        ];
     }
 
     /**

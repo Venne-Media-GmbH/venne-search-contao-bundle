@@ -38,10 +38,16 @@ final class DocumentIndexer
         'exactness',     // Exakte Wortform vor Stamm
     ];
 
-    /** Welche Felder durchsuchbar sind (Reihenfolge = Gewichtung). */
+    /**
+     * Welche Felder durchsuchbar sind (Reihenfolge = Gewichtung).
+     * v2.1.0: alt_text steht zwischen tags und content — Datei-Metadaten
+     * (Titel, ALT) sind aussagekräftiger als der OCR/PDF-Volltext, sollten
+     * also stärker ins Ranking einfließen, aber nicht über echten Tags.
+     */
     private const SEARCHABLE_ATTRIBUTES = [
         'title',
         'tags',
+        'alt_text',
         'content',
     ];
 
@@ -51,6 +57,9 @@ final class DocumentIndexer
         'locale',
         'tags',
         'published_at',
+        // v2.2.0: für `type_asc`-Sort + zukünftige „nach Dateityp filtern"
+        // Queries auf einem dedizierten Feld (statt missbrauchtem tags-Array).
+        'content_type',
         // Permission-ACL (v0.4.0): Frontend-Suche filtert hart nach diesen,
         // damit ein nicht-eingeloggter Besucher keine geschützten Treffer
         // sieht, selbst wenn sie irgendwie im Index liegen.
@@ -63,6 +72,10 @@ final class DocumentIndexer
         'published_at',
         'indexed_at',
         'weight',
+        // v2.2.0: Sortierung nach Dokumentenart (Pages → Files alphabetisch
+        // nach Extension). Lexikographische Sortierung über content_type
+        // bringt page < pdf < ... automatisch in eine sinnvolle Reihenfolge.
+        'content_type',
     ];
 
     /**

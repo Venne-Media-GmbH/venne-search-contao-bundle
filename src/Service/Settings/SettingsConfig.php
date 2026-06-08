@@ -67,6 +67,13 @@ final class SettingsConfig
         public readonly array $fileLocaleOverrides = [],
         /** Master-Toggle für Search-Analytics (Buffer + Flush). */
         public readonly bool $analyticsEnabled = true,
+        /**
+         * v2.1.0: Wenn false, werden Seiten mit gesetztem tl_page.hide
+         * („Im Menü nicht anzeigen") aus der Suche ausgeschlossen.
+         * Default true = bisheriges Verhalten der Bundle-Versionen vor 2.1.
+         * Re-Index erforderlich nach Änderung.
+         */
+        public readonly bool $indexHiddenPages = true,
     ) {
     }
 }

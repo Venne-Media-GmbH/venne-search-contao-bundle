@@ -91,6 +91,30 @@ final class FrontendSearchController extends AbstractController
             }
         }
 
+        // v2.1.0: ?ext[]=pdf&ext[]=xlsx — Datei-Extension-Filter. Im Index
+        // werden Extensions als Tag mitgeschrieben (siehe IndexableItemProcessor),
+        // also lassen sich beide Filter über die `tags`-Filterable kombinieren:
+        // tags IN ["a"] AND tags IN ["pdf","xlsx"]. Meilisearch kann das, wir
+        // schreiben es deshalb als zweites Filter-Set ('tags_ext').
+        $extParam = $request->query->all('ext');
+        if (\is_array($extParam)) {
+            $cleanExts = [];
+            foreach ($extParam as $e) {
+                $clean = preg_replace('/[^a-z0-9]/', '', strtolower((string) $e)) ?? '';
+                if ($clean !== '' && \strlen($clean) <= 8) {
+                    $cleanExts[] = $clean;
+                }
+            }
+            if ($cleanExts !== []) {
+                // Wir nutzen einen logischen Filter-Schlüssel; das Mapping auf
+                // den echten Filterable-Namen passiert im SearchService.
+                $filters['file_ext'] = $cleanExts;
+            }
+        }
+
+        // v2.1.0: Sort-Mode (relevance / date_desc / date_asc)
+        $sort = (string) $request->query->get('sort', SearchService::SORT_RELEVANCE);
+
         $userGroups = $this->resolveCurrentUserGroups();
 
         try {
@@ -102,6 +126,7 @@ final class FrontendSearchController extends AbstractController
                 offset: $offset,
                 userGroups: $userGroups,
                 locales: $locales,
+                sort: $sort,
             );
         } catch (ResolveAuthException) {
             return $this->errorResponse(401, 'unauthorized', 'Suche aktuell nicht verfügbar — der Site-Betreiber muss den Plattform-Schlüssel prüfen.');
@@ -157,6 +182,7 @@ final class FrontendSearchController extends AbstractController
                         'slug' => (string) $token,
                         'label' => (string) $token,
                         'color' => 'gray',
+                        'boost' => 1.0,
                         'count' => $count,
                     ];
                 }
@@ -168,6 +194,7 @@ final class FrontendSearchController extends AbstractController
                     'slug' => $tag['slug'],
                     'label' => $tag['label'],
                     'color' => $tag['color'],
+                    'boost' => (float) ($tag['boost'] ?? 1.0),
                     'count' => $count,
                 ];
             }
@@ -200,7 +227,7 @@ final class FrontendSearchController extends AbstractController
                         // grauer Chip, Slug ist die normalisierte Form.
                         $rawSlug = preg_replace('/[^a-z0-9]+/', '-', $low) ?? $low;
                         $rawSlug = trim((string) $rawSlug, '-');
-                        $resolvedById['raw:' . $low] = ['slug' => $rawSlug !== '' ? $rawSlug : $raw, 'label' => $raw, 'color' => 'gray'];
+                        $resolvedById['raw:' . $low] = ['slug' => $rawSlug !== '' ? $rawSlug : $raw, 'label' => $raw, 'color' => 'gray', 'boost' => 1.0];
                     }
                     return [
                         'id' => $h->id,
@@ -212,6 +239,15 @@ final class FrontendSearchController extends AbstractController
                         'tagsResolved' => array_values($resolvedById),
                         'score' => $h->score,
                         'isProtected' => $h->isProtected,
+                        'altText' => $h->altText,
+                        // v2.2.0: Cover-Bild-URL (leer = kein Cover, Frontend
+                        // rendert das generische Icon).
+                        'coverUrl' => $h->coverUrl,
+                        // v2.2.0: Sort-Key für „Nach Dokumentenart".
+                        'contentType' => $h->contentType,
+                        // v2.2.0: Unix-Timestamp, hilft Frontend bei Anzeige
+                        // einer Datumsspalte falls sortiert nach Datum.
+                        'publishedAt' => $h->publishedAt,
                     ];
                 },
                 $result->hits,

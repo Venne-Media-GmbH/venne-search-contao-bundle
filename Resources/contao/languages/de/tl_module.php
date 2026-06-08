@@ -12,3 +12,6 @@ $GLOBALS['TL_LANG']['tl_module']['vsearch_min_chars'] = ['Mindest-Zeichen', 'Ab 
 $GLOBALS['TL_LANG']['tl_module']['vsearch_limit'] = ['Treffer pro Seite', 'Maximale Anzahl angezeigter Treffer (Standard: 10).'];
 $GLOBALS['TL_LANG']['tl_module']['vsearch_show_facets'] = ['Facetten anzeigen', 'Filter-Buttons (Seiten/Artikel/Dateien) über der Trefferliste anzeigen.'];
 $GLOBALS['TL_LANG']['tl_module']['vsearch_locale'] = ['Such-Sprache', 'In welcher Sprache dieses Modul sucht. Leer = Sprache der aktuellen Seite. Endnutzer wechseln die Sprache nicht selbst.'];
+$GLOBALS['TL_LANG']['tl_module']['vsearch_show_sort'] = ['Sortierung anzeigen', 'Dropdown „Relevanz / Neueste zuerst / Älteste zuerst" über der Trefferliste anzeigen.'];
+$GLOBALS['TL_LANG']['tl_module']['vsearch_show_filetype_filter'] = ['Dateityp-Filter anzeigen', 'Pills für PDF / Excel / Word / Text einblenden — nur aktiv, wenn auf „Dateien" gefiltert wird.'];
+$GLOBALS['TL_LANG']['tl_module']['vsearch_open_in_new_tab'] = ['Treffer in neuem Tab öffnen', 'Optional: jeder Klick auf ein Suchergebnis öffnet einen neuen Browser-Tab. Standard ist deaktiviert — der URL-Status der Suche bleibt sonst nach Browser-Zurück erhalten.'];

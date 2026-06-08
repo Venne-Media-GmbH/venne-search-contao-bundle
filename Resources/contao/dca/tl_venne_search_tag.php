@@ -52,7 +52,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
         ],
     ],
     'palettes' => [
-        'default' => '{title_legend},label,color;{description_legend:hide},description;{assignments_legend},assignments_panel',
+        'default' => '{title_legend},label,color,boost;{description_legend:hide},description;{assignments_legend},assignments_panel',
     ],
     'fields' => [
         'id' => [
@@ -155,6 +155,87 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
             'reference' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['color_options'],
             'eval' => ['tl_class' => 'w50', 'mandatory' => true],
             'sql' => "varchar(16) NOT NULL default 'blue'",
+        ],
+        'boost' => [
+            // Tag-Boost: skaliert die Such-Relevanz aller diesem Tag
+            // zugeordneten Pages/Files. weight=max(boost) der Tags eines
+            // Documents fließt in die Sortier-Reihenfolge des Indexes
+            // (weight DESC vor indexed_at DESC). Bei Boost-Änderung werden
+            // alle zugewiesenen Targets im save_callback reindexiert.
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['boost'],
+            'inputType' => 'select',
+            'options' => ['1.00', '1.50', '2.00', '3.00', '5.00', '10.00'],
+            'reference' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['boost_options'],
+            'eval' => ['tl_class' => 'w50', 'mandatory' => true, 'helpwizard' => true],
+            'explanation' => 'venneSearchTagBoost',
+            'sql' => "decimal(4,2) NOT NULL default '1.00'",
+            'save_callback' => [
+                static function ($value, $dc) {
+                    // Boost-Wert sanitizen + Re-Index aller Targets, damit
+                    // die neue Gewichtung im Such-Index landet.
+                    $allowed = ['1.00', '1.50', '2.00', '3.00', '5.00', '10.00'];
+                    $normalized = number_format((float) $value, 2, '.', '');
+                    if (!\in_array($normalized, $allowed, true)) {
+                        $normalized = '1.00';
+                    }
+                    if (!\is_object($dc) || (int) $dc->id <= 0) {
+                        return $normalized;
+                    }
+                    $container = \Contao\System::getContainer();
+                    $db = $container?->get('database_connection');
+                    if ($db === null) {
+                        return $normalized;
+                    }
+                    $tagId = (int) $dc->id;
+                    $oldBoost = (string) ($db->fetchOne(
+                        'SELECT boost FROM tl_venne_search_tag WHERE id = ?',
+                        [$tagId],
+                    ) ?: '1.00');
+                    if ($oldBoost === $normalized) {
+                        return $normalized;
+                    }
+                    try {
+                        $assignments = $db->fetchAllAssociative(
+                            'SELECT target_type, target_id FROM tl_venne_search_tag_assignment WHERE tag_id = ?',
+                            [$tagId],
+                        );
+                        $settings = $container->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Settings\\SettingsRepository');
+                        if ($settings && $settings->isConfigured()) {
+                            $config = $settings->load();
+                            $processor = $container->get('VenneMedia\\VenneSearchContaoBundle\\Service\\Indexer\\IndexableItemProcessor');
+                            $projectDir = (string) $container->getParameter('kernel.project_dir');
+                            // Boost in DB zuerst persistieren, damit der
+                            // anschließende Reindex die neue Gewichtung sieht.
+                            $db->executeStatement(
+                                'UPDATE tl_venne_search_tag SET boost = ? WHERE id = ?',
+                                [$normalized, $tagId],
+                            );
+                            foreach ($assignments as $a) {
+                                $type = (string) $a['target_type'];
+                                $tid = (string) $a['target_id'];
+                                if ($type === 'page') {
+                                    $pageId = (int) $tid;
+                                    if ($pageId > 0) {
+                                        @$processor->processItem(
+                                            ['type' => 'page', 'ref' => $pageId, 'docId' => 'page-' . $pageId],
+                                            $config,
+                                            $projectDir,
+                                        );
+                                    }
+                                } elseif ($type === 'file') {
+                                    @$processor->processItem(
+                                        ['type' => 'file', 'ref' => $tid, 'docId' => 'file-path-' . md5($tid)],
+                                        $config,
+                                        $projectDir,
+                                    );
+                                }
+                            }
+                        }
+                    } catch (\Throwable) {
+                    }
+                    return $normalized;
+                },
+            ],
         ],
         'description' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['description'],

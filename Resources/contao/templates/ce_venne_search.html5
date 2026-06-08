@@ -7,15 +7,19 @@
  */
 $isModal = ($this->displayMode ?? 'inline') === 'modal';
 ?>
-<!-- venne-search-bundle template v0.17 — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^0.17 -->
+<!-- venne-search-bundle template v0.23 — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^2.2 -->
 <div class="vsearch mod_venne_search vsearch--<?= $isModal ? 'modal' : 'inline' ?><?= $this->cssID && $this->cssID[1] ? ' '.$this->cssID[1] : '' ?>"<?= $this->cssID && $this->cssID[0] ? ' id="'.$this->cssID[0].'"' : '' ?>
      data-vsearch
-     data-vsearch-version="0.17"
+     data-vsearch-version="0.23"
      data-mode="<?= $isModal ? 'modal' : 'inline' ?>"
      data-api-url="<?= $this->apiUrl ?>"
      data-locale="<?= $this->locale ?>"
      data-min-chars="<?= $this->minChars ?>"
-     data-limit="<?= $this->limit ?>">
+     data-limit="<?= $this->limit ?>"
+     data-module-id="<?= $this->moduleId ?>"
+     data-show-sort="<?= $this->showSort ? '1' : '0' ?>"
+     data-show-filetype-filter="<?= $this->showFiletypeFilter ? '1' : '0' ?>"
+     data-open-new-tab="<?= $this->openInNewTab ? '1' : '0' ?>">
 
     <?php if ($isModal): ?>
         <button type="button" class="vsearch__trigger" data-vsearch-trigger>
@@ -59,13 +63,34 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                         spellcheck="false"
                         data-vsearch-input
                     >
+                    <button type="button" class="vsearch__clear" data-vsearch-clear hidden aria-label="Eingabe l&ouml;schen">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+                            <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
+                        </svg>
+                    </button>
                 </div>
             </form>
 
             <div class="vsearch__toolbar" data-vsearch-toolbar hidden>
-                <p class="vsearch__meta" data-vsearch-meta></p>
+                <div class="vsearch__toolbar-row">
+                    <p class="vsearch__meta" data-vsearch-meta></p>
+                    <?php if ($this->showSort): ?>
+                        <label class="vsearch__sort">
+                            <span class="vsearch__sort-label">Sortierung</span>
+                            <select class="vsearch__sort-select" data-vsearch-sort>
+                                <option value="relevance">Relevanz</option>
+                                <option value="date_desc">Neueste zuerst</option>
+                                <option value="date_asc">&Auml;lteste zuerst</option>
+                                <option value="type_asc">Nach Dokumentenart</option>
+                            </select>
+                        </label>
+                    <?php endif; ?>
+                </div>
                 <?php if ($this->showFacets): ?>
                     <div class="vsearch__facets" data-vsearch-facets></div>
+                <?php endif; ?>
+                <?php if ($this->showFiletypeFilter): ?>
+                    <div class="vsearch__ext-filters" data-vsearch-ext-filters hidden></div>
                 <?php endif; ?>
             </div>
 
@@ -77,7 +102,18 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
 </div>
 
 <style>
-    .vsearch { max-width: 880px; --vs-accent: #4a8087; --vs-accent-soft: rgba(74,128,135,.08); --vs-text: #1f2937; --vs-text-muted: #6b7280; --vs-border: rgba(0,0,0,.1); --vs-border-strong: rgba(0,0,0,.16); --vs-pdf: #c4341e; --vs-pdf-soft: rgba(196,52,30,.1); --vs-bg: #ffffff; --vs-mark: #ffe27a; }
+    .vsearch {
+        max-width: 880px;
+        --vs-accent: #4a8087; --vs-accent-soft: rgba(74,128,135,.08); --vs-accent-strong: #2f6068;
+        --vs-text: #1f2937; --vs-text-muted: #6b7280; --vs-text-soft: #9ca3af;
+        --vs-border: rgba(0,0,0,.08); --vs-border-strong: rgba(0,0,0,.16);
+        --vs-bg: #ffffff; --vs-bg-soft: #f9fafb;
+        --vs-mark: #ffe27a;
+        --vs-shadow-card: 0 1px 2px rgba(0,0,0,.04);
+        --vs-shadow-card-hover: 0 8px 24px -10px rgba(74,128,135,.35), 0 2px 6px rgba(0,0,0,.06);
+        --vs-radius: 12px;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
     .vsearch *, .vsearch *::before, .vsearch *::after { box-sizing: border-box; }
     .vsearch--modal { max-width: none; display: inline-block; }
     .vsearch__sr { position: absolute; left: -9999px; }
@@ -94,7 +130,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vsearch__trigger:hover { border-color: var(--vs-accent); background: var(--vs-accent-soft); color: var(--vs-accent); }
     .vsearch__trigger-icon { color: var(--vs-accent); flex-shrink: 0; }
 
-    /* Modal-Shell — Overlay */
+    /* Modal-Shell */
     .vsearch__shell--modal {
         position: fixed; inset: 0; z-index: 9999;
         background: rgba(15, 23, 42, .55);
@@ -110,15 +146,10 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         box-shadow: 0 24px 64px -12px rgba(0,0,0,.4);
         position: relative; padding: 1.25rem 1.25rem 1rem;
     }
-
-    /* Inline-Shell */
     .vsearch--inline .vsearch__panel { background: transparent; }
-
     @keyframes vsearch-fade-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 
-    /* Close — !important auf alle Geometrie-Werte, sonst quetscht das Theme
-       (z.B. FFA mit globalem button{border-radius:9999px;background:#f15a24})
-       den Button zu einem orangen Oval. */
+    /* Close-Button — !important wegen FFA/Theme-Konflikten */
     .vsearch__close {
         position: absolute !important; top: .9rem !important; right: .9rem !important; z-index: 10;
         width: 36px !important; height: 36px !important; min-width: 36px !important; max-width: 36px !important;
@@ -132,15 +163,8 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vsearch__close:hover { background: rgba(0,0,0,.12) !important; color: rgba(0,0,0,.85) !important; }
     .vsearch__close svg { display: none !important; }
-    .vsearch__close::before {
-        content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px;
-        background: currentColor; transform: translate(-50%, -50%) rotate(45deg);
-    }
-    .vsearch__close::after {
-        content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px;
-        background: currentColor; transform: translate(-50%, -50%) rotate(-45deg);
-    }
-    /* Suchfeld neben dem Close-Button etwas Platz lassen */
+    .vsearch__close::before { content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px; background: currentColor; transform: translate(-50%, -50%) rotate(45deg); }
+    .vsearch__close::after { content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px; background: currentColor; transform: translate(-50%, -50%) rotate(-45deg); }
     .vsearch__shell--modal .vsearch__form { padding-right: 2.8rem; }
 
     /* Suchfeld */
@@ -151,19 +175,31 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         color: var(--vs-text-muted); pointer-events: none;
     }
     .vsearch__input {
-        width: 100%; padding: .85rem 1rem .85rem 2.8rem; font-size: 1.05rem;
-        border: 1px solid var(--vs-border); border-radius: 10px;
+        width: 100%; padding: .85rem 2.6rem .85rem 2.8rem; font-size: 1.05rem;
+        border: 1px solid var(--vs-border-strong); border-radius: 10px;
         background: var(--vs-bg); color: var(--vs-text);
         transition: border-color .15s, box-shadow .15s;
     }
     .vsearch__input:focus { outline: 0; border-color: var(--vs-accent); box-shadow: 0 0 0 3px var(--vs-accent-soft); }
+    /* v2.2.0: Clear-Button im Input — sichtbar sobald Inhalt drin ist. */
+    .vsearch__clear {
+        position: absolute !important; right: .65rem; top: 50%; transform: translateY(-50%);
+        width: 26px !important; height: 26px !important;
+        padding: 0 !important; margin: 0 !important; border: 0 !important;
+        border-radius: 50%; background: rgba(0,0,0,.06) !important; color: rgba(0,0,0,.55) !important;
+        cursor: pointer; display: inline-flex !important; align-items: center; justify-content: center;
+        box-shadow: none !important;
+    }
+    .vsearch__clear:hover { background: rgba(0,0,0,.12) !important; color: var(--vs-text) !important; }
+    .vsearch__clear[hidden] { display: none !important; }
 
-    /* Toolbar — Meta + Facets */
-    .vsearch__toolbar { display: flex; gap: 1rem; align-items: center; justify-content: space-between; flex-wrap: wrap; padding: .25rem 0 .8rem; border-bottom: 1px solid var(--vs-border); margin-bottom: .8rem; }
+    /* Toolbar */
+    .vsearch__toolbar { padding: .25rem 0 .8rem; border-bottom: 1px solid var(--vs-border); margin-bottom: .9rem; }
+    .vsearch__toolbar-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: .6rem; }
     .vsearch__meta { color: var(--vs-text-muted); font-size: .85rem; margin: 0; }
     .vsearch__facets { display: flex; gap: .35rem; flex-wrap: wrap; }
-    /* Facet-Pills — !important, sonst kapert das Theme (orange Buttons im FFA)
-       die Hintergrundfarbe und der "Alle"-Pill ist immer aktiv-orange. */
+
+    /* Facet-Pills — !important wegen FFA-Theme */
     .vsearch__facet {
         padding: .3rem .8rem !important; font-size: .82rem !important;
         border: 1px solid var(--vs-border) !important;
@@ -195,44 +231,109 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vsearch__facet--tag-active[data-color="gray"]   { background: #374151 !important; color: #fff !important; }
     .vsearch__facet--tag-active[data-color="teal"]   { background: #115e59 !important; color: #fff !important; }
 
-    /* Liste */
-    .vsearch__results { margin: 0; max-height: 60vh; overflow-y: auto; padding-right: .25rem; }
-    .vsearch__list { list-style: none !important; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .5rem; }
+    /* === Trefferliste === */
+    .vsearch__results { margin: 0; max-height: 70vh; overflow-y: auto; padding-right: .25rem; }
+    .vsearch__list { list-style: none !important; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .6rem; }
     .vsearch__list li {
-        list-style: none !important;
-        padding: 0; border: 1px solid var(--vs-border);
-        border-radius: 10px; background: var(--vs-bg);
-        transition: border-color .15s, box-shadow .15s, transform .1s;
+        list-style: none !important; padding: 0;
+        border: 1px solid var(--vs-border); border-radius: var(--vs-radius);
+        background: var(--vs-bg); box-shadow: var(--vs-shadow-card);
+        transition: border-color .15s, box-shadow .2s, transform .15s;
     }
     .vsearch__list li::before, .vsearch__list li::marker { content: none !important; display: none !important; }
-    .vsearch__list li:hover { border-color: var(--vs-accent); box-shadow: 0 4px 16px -8px rgba(74,128,135,.35); }
+    .vsearch__list li:hover {
+        border-color: var(--vs-accent);
+        box-shadow: var(--vs-shadow-card-hover);
+        transform: translateY(-1px);
+    }
     .vsearch__list a {
         color: inherit; text-decoration: none;
-        display: flex; gap: .9rem; padding: .85rem 1rem;
+        display: flex; gap: 1rem; padding: .95rem 1.1rem;
+        align-items: flex-start;
     }
 
+    /* Visual (Cover oder Icon) */
     .vs-icon {
-        flex-shrink: 0; width: 42px; height: 42px;
+        flex-shrink: 0; width: 56px; height: 56px;
         display: inline-flex; align-items: center; justify-content: center;
         border-radius: 10px; background: var(--vs-accent-soft); color: var(--vs-accent);
     }
-    .vs-icon--file { background: var(--vs-pdf-soft); color: var(--vs-pdf); }
+    .vs-icon--file { background: #f3f4f6; color: #4b5563; }
+    .vs-icon--pdf { background: #fee2e2; color: #b91c1c; }
+    .vs-icon--docx, .vs-icon--doc { background: #dbeafe; color: #1d4ed8; }
+    .vs-icon--xlsx, .vs-icon--xls { background: #d1fae5; color: #047857; }
+    .vs-icon--pptx, .vs-icon--ppt { background: #fed7aa; color: #c2410c; }
+    .vs-icon--odt { background: #e0e7ff; color: #4338ca; }
+    .vs-icon--rtf { background: #f3e8ff; color: #7e22ce; }
+    .vs-icon--txt, .vs-icon--md { background: #f3f4f6; color: #374151; }
+    .vs-icon--cover { background: #f3f4f6; padding: 0; overflow: hidden; }
+    .vs-cover-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
 
-    .vs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
-    .vs-title { font-weight: 600; font-size: 1rem; color: var(--vs-text); margin: 0; line-height: 1.35; }
-    .vs-url {
-        font-size: .78rem; color: var(--vs-accent);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-        line-height: 1.3; margin: 0;
+    /* Body */
+    .vs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .25rem; }
+
+    /* Titel-Zeile: Titel + ggf. Tags + Schloss in einer Reihe */
+    .vs-title-row {
+        display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+        min-width: 0;
     }
-    .vs-snippet { font-size: .88rem; color: var(--vs-text-muted); line-height: 1.5; margin: .2rem 0 0; }
+    .vs-title {
+        font-weight: 600; font-size: 1rem; color: var(--vs-text);
+        margin: 0; line-height: 1.35;
+        flex: 1 1 auto; min-width: 0;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .vs-lock {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 18px; height: 18px;
+        color: #a16207; background: rgba(202, 138, 4, 0.12); border-radius: 4px;
+        flex-shrink: 0;
+    }
+
+    /* Meta-Zeile: Typ-Badge + Datum + Größe + URL */
+    .vs-meta {
+        display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+        font-size: .78rem; color: var(--vs-text-muted); line-height: 1.4;
+    }
+    .vs-badge {
+        display: inline-flex; align-items: center;
+        padding: .1rem .45rem;
+        font-size: .68rem; font-weight: 700; letter-spacing: .02em;
+        text-transform: uppercase;
+        border-radius: 4px;
+        background: var(--vs-bg-soft); color: var(--vs-text-muted);
+        border: 1px solid var(--vs-border);
+    }
+    .vs-badge--page { background: var(--vs-accent-soft); color: var(--vs-accent-strong); border-color: transparent; }
+    .vs-badge--pdf { background: #fee2e2; color: #b91c1c; border-color: transparent; }
+    .vs-badge--docx, .vs-badge--doc { background: #dbeafe; color: #1d4ed8; border-color: transparent; }
+    .vs-badge--xlsx, .vs-badge--xls { background: #d1fae5; color: #047857; border-color: transparent; }
+    .vs-badge--pptx, .vs-badge--ppt { background: #fed7aa; color: #c2410c; border-color: transparent; }
+    .vs-badge--odt { background: #e0e7ff; color: #4338ca; border-color: transparent; }
+    .vs-meta-dot { color: var(--vs-text-soft); font-weight: 700; line-height: 1; }
+    .vs-url {
+        color: var(--vs-text-soft);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        min-width: 0; flex: 1 1 200px;
+    }
+
+    /* Snippet */
+    .vs-snippet {
+        font-size: .9rem; color: var(--vs-text); line-height: 1.55;
+        margin: .25rem 0 0;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
     .vsearch__list mark { background: var(--vs-mark); color: var(--vs-text); padding: 0 2px; border-radius: 2px; font-weight: 600; }
 
-    /* Tag-Chips am Treffer */
-    .vs-tags { display: flex; flex-wrap: wrap; gap: .25rem; margin: .35rem 0 0; }
+    /* Tag-Chips: rechts neben Titel (kompakt) */
+    .vs-tags {
+        display: inline-flex; flex-wrap: wrap; gap: .3rem;
+        flex-shrink: 0;
+    }
     .vs-tag {
         display: inline-flex; align-items: center;
-        padding: .12rem .55rem; font-size: .72rem; font-weight: 500;
+        padding: .1rem .5rem; font-size: .7rem; font-weight: 500;
         border-radius: 999px; background: #dbeafe; color: #1e40af;
         line-height: 1.4; white-space: nowrap;
     }
@@ -243,15 +344,85 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vs-tag[data-color="pink"]   { background: #fce7f3; color: #9d174d; }
     .vs-tag[data-color="gray"]   { background: #e5e7eb; color: #374151; }
     .vs-tag[data-color="teal"]   { background: #ccfbf1; color: #115e59; }
+    .vs-tag[data-boost="1"] { box-shadow: inset 0 0 0 1px currentColor; padding-left: .3rem; }
+    .vs-tag[data-boost="1"] .vs-tag-pin { display: inline-block; width: 9px; height: 9px; margin-right: .2rem; opacity: .9; }
 
     /* Empty-State */
     .vsearch__empty { padding: 2.5rem 1rem; text-align: center; color: var(--vs-text-muted); }
     .vsearch__empty-icon { color: rgba(0,0,0,.18); margin-bottom: .8rem; }
     .vsearch__empty-title { font-size: 1.05rem; font-weight: 600; color: var(--vs-text); margin: 0 0 .35rem; }
-    .vsearch__empty-hint { font-size: .9rem; margin: 0; }
+    .vsearch__empty-hint { font-size: .9rem; margin: 0 0 .8rem; }
+    .vsearch__empty-tips { display: flex; flex-wrap: wrap; gap: .4rem; justify-content: center; margin-top: .8rem; }
+    .vsearch__empty-tip {
+        padding: .3rem .7rem; font-size: .78rem; font-weight: 500;
+        border: 1px solid var(--vs-border); border-radius: 999px;
+        background: var(--vs-bg); color: var(--vs-text);
+        cursor: pointer; transition: all .12s;
+    }
+    .vsearch__empty-tip:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
 
-    /* Loading */
-    .vsearch__loading { padding: 2rem; text-align: center; color: var(--vs-text-muted); font-size: .9rem; }
+    /* Skeleton-Loading */
+    .vsearch__skeleton { list-style: none !important; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .6rem; }
+    .vsearch__skel-card {
+        list-style: none !important;
+        display: flex; gap: 1rem; padding: .95rem 1.1rem;
+        border: 1px solid var(--vs-border); border-radius: var(--vs-radius); background: var(--vs-bg);
+    }
+    .vsearch__skel-icon { width: 56px; height: 56px; border-radius: 10px; flex-shrink: 0; }
+    .vsearch__skel-body { flex: 1; display: flex; flex-direction: column; gap: .4rem; }
+    .vsearch__skel-line { height: .7rem; border-radius: 3px; }
+    .vsearch__skel-line--title { width: 70%; height: .9rem; }
+    .vsearch__skel-line--meta { width: 50%; }
+    .vsearch__skel-line--snippet { width: 95%; }
+    .vsearch__skel-line--snippet2 { width: 80%; }
+    .vsearch__skel-icon, .vsearch__skel-line {
+        background: linear-gradient(90deg, #eef0f3 0%, #f7f8fa 50%, #eef0f3 100%);
+        background-size: 200% 100%;
+        animation: vsearch-shimmer 1.4s ease-in-out infinite;
+    }
+    @keyframes vsearch-shimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+    }
+
+    /* v2.1.0: Sort + Ext-Filter */
+    .vsearch__sort { display: inline-flex; align-items: center; gap: .4rem; font-size: .82rem; color: var(--vs-text-muted); }
+    .vsearch__sort-label { font-weight: 500; }
+    .vsearch__sort-select {
+        padding: .25rem .5rem;
+        border: 1px solid var(--vs-border); border-radius: 6px; background: var(--vs-bg);
+        font: inherit; font-size: .82rem; color: var(--vs-text); cursor: pointer;
+    }
+    .vsearch__sort-select:focus { outline: 2px solid var(--vs-accent); outline-offset: 1px; }
+
+    .vsearch__ext-filters {
+        display: flex; flex-wrap: wrap; gap: .35rem;
+        margin-top: .4rem; padding-top: .4rem;
+        border-top: 1px dashed var(--vs-border); align-items: center;
+    }
+    .vsearch__ext-filter {
+        padding: .2rem .65rem; font-size: .78rem; font-weight: 500;
+        border: 1px solid var(--vs-border); border-radius: 999px;
+        background: var(--vs-bg); color: var(--vs-text);
+        cursor: pointer; transition: all .12s;
+    }
+    .vsearch__ext-filter:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
+    .vsearch__ext-filter--active { background: var(--vs-accent); color: #fff; border-color: var(--vs-accent); }
+
+    /* === Mobile-Breakpoints === */
+    @media (max-width: 600px) {
+        .vsearch__input { font-size: 1rem; padding: .75rem 2.4rem .75rem 2.6rem; }
+        .vsearch__shell--modal { padding: 4vh .5rem 1rem; }
+        .vsearch__shell--modal .vsearch__panel { padding: 1rem .9rem .8rem; border-radius: 10px; }
+        .vsearch__list a { padding: .8rem .85rem; gap: .75rem; }
+        .vs-icon { width: 44px; height: 44px; }
+        .vs-title { font-size: .95rem; white-space: normal; }
+        .vs-snippet { font-size: .85rem; -webkit-line-clamp: 3; }
+        .vs-meta { font-size: .72rem; }
+        .vs-url { display: none; }
+        .vsearch__toolbar-row { gap: .5rem; }
+        .vsearch__sort-label { display: none; }
+    }
 </style>
 
 <script>
@@ -265,27 +436,143 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
 
         var mode = box.dataset.mode;
         var input = box.querySelector('[data-vsearch-input]');
+        var clearBtn = box.querySelector('[data-vsearch-clear]');
         var resultsBox = box.querySelector('[data-vsearch-results]');
         var resultsList = box.querySelector('[data-vsearch-list]');
         var toolbar = box.querySelector('[data-vsearch-toolbar]');
         var meta = box.querySelector('[data-vsearch-meta]');
         var facetsBox = box.querySelector('[data-vsearch-facets]');
+        var sortSelect = box.querySelector('[data-vsearch-sort]');
+        var extFiltersBox = box.querySelector('[data-vsearch-ext-filters]');
         var apiUrl = box.dataset.apiUrl;
         var locale = box.dataset.locale;
         var minChars = parseInt(box.dataset.minChars, 10) || 3;
         var limit = parseInt(box.dataset.limit, 10) || 10;
+        var openInNewTab = box.dataset.openNewTab === '1';
+        var showFiletypeFilter = box.dataset.showFiletypeFilter === '1';
+
+        var FILETYPE_GROUPS = [
+            { key: 'pdf',   label: 'PDF',     exts: ['pdf'] },
+            { key: 'excel', label: 'Excel',   exts: ['xlsx', 'xls'] },
+            { key: 'word',  label: 'Word',    exts: ['docx', 'doc'] },
+            { key: 'text',  label: 'Text',    exts: ['txt', 'md'] },
+            { key: 'odt',   label: 'OpenDoc', exts: ['odt'] },
+            { key: 'rtf',   label: 'RTF',     exts: ['rtf'] }
+        ];
+
+        var TYPE_LABELS = {
+            page: 'Seite', file: 'Datei', article: 'Artikel',
+            pdf: 'PDF', docx: 'DOCX', doc: 'DOC',
+            xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT',
+            odt: 'ODT', rtf: 'RTF', txt: 'TXT', md: 'MD'
+        };
 
         var debounceTimer = null;
         var lastQuery = '';
         var ctrl = null;
         var currentTypeFilter = '';
         var currentTagFilters = [];
+        var currentSort = 'relevance';
+        var currentExtGroups = [];
+        var lastTagFacets = [];
+
+        // URL-State (siehe v2.1.0)
+        var hashPrefix = 'vs' + (box.dataset.moduleId || '0');
+        var suppressHashUpdate = false;
+
+        function serializeState() {
+            var parts = [];
+            var q = input.value.trim();
+            if (q) parts.push('q=' + encodeURIComponent(q));
+            if (currentTypeFilter) parts.push('type=' + encodeURIComponent(currentTypeFilter));
+            if (currentTagFilters.length) parts.push('tags=' + encodeURIComponent(currentTagFilters.join(',')));
+            if (currentSort && currentSort !== 'relevance') parts.push('sort=' + encodeURIComponent(currentSort));
+            if (currentExtGroups.length) parts.push('ext=' + encodeURIComponent(currentExtGroups.join(',')));
+            if (!parts.length) return '';
+            return hashPrefix + ':' + parts.join('&');
+        }
+
+        function parseState(rawHash) {
+            if (!rawHash) return null;
+            var blocks = rawHash.replace(/^#/, '').split('|');
+            for (var i = 0; i < blocks.length; i++) {
+                var block = blocks[i];
+                if (block.indexOf(hashPrefix + ':') !== 0) continue;
+                var payload = block.substring(hashPrefix.length + 1);
+                var state = { q: '', type: '', tags: [], sort: 'relevance', ext: [] };
+                payload.split('&').forEach(function (kv) {
+                    var idx = kv.indexOf('=');
+                    if (idx < 0) return;
+                    var k = kv.substring(0, idx);
+                    var v = decodeURIComponent(kv.substring(idx + 1));
+                    if (k === 'q') state.q = v;
+                    else if (k === 'type') state.type = v;
+                    else if (k === 'tags') state.tags = v ? v.split(',').filter(Boolean) : [];
+                    else if (k === 'sort') state.sort = v;
+                    else if (k === 'ext') state.ext = v ? v.split(',').filter(Boolean) : [];
+                });
+                return state;
+            }
+            return null;
+        }
+
+        function updateHash() {
+            if (suppressHashUpdate) return;
+            var ours = serializeState();
+            var rawHash = window.location.hash.replace(/^#/, '');
+            var keptBlocks = rawHash.split('|').filter(function (b) {
+                return b !== '' && b.indexOf(hashPrefix + ':') !== 0;
+            });
+            if (ours) keptBlocks.push(ours);
+            var newHash = keptBlocks.length ? '#' + keptBlocks.join('|') : '';
+            try {
+                if (window.location.hash !== newHash) {
+                    window.history.replaceState(null, '', window.location.pathname + window.location.search + newHash);
+                }
+            } catch (e) {}
+        }
+
+        function pushHashBeforeNavigate() {
+            var ours = serializeState();
+            var rawHash = window.location.hash.replace(/^#/, '');
+            var keptBlocks = rawHash.split('|').filter(function (b) {
+                return b !== '' && b.indexOf(hashPrefix + ':') !== 0;
+            });
+            if (ours) keptBlocks.push(ours);
+            var newHash = keptBlocks.length ? '#' + keptBlocks.join('|') : '';
+            try {
+                window.history.pushState(null, '', window.location.pathname + window.location.search + newHash);
+            } catch (e) {}
+        }
+
+        function restoreFromHash() {
+            var state = parseState(window.location.hash);
+            if (!state || !state.q) return false;
+            suppressHashUpdate = true;
+            try {
+                input.value = state.q;
+                lastQuery = state.q;
+                currentTypeFilter = state.type || '';
+                currentTagFilters = Array.isArray(state.tags) ? state.tags : [];
+                currentSort = state.sort || 'relevance';
+                currentExtGroups = Array.isArray(state.ext) ? state.ext : [];
+                if (sortSelect) sortSelect.value = currentSort;
+                toggleClearBtn();
+                runSearch(state.q);
+            } finally {
+                setTimeout(function () { suppressHashUpdate = false; }, 0);
+            }
+            return true;
+        }
 
         // Modal
         if (mode === 'modal') {
             var trigger = box.querySelector('[data-vsearch-trigger]');
             var shell = box.querySelector('[data-vsearch-shell]');
             var close = box.querySelector('[data-vsearch-close]');
+
+            window.__vsearchOpenModal = function () { openModal(); };
+            window.__vsearchCloseModal = function () { closeModal(); };
 
             function openModal() {
                 shell.hidden = false;
@@ -301,6 +588,11 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 lastQuery = '';
                 currentTypeFilter = '';
                 currentTagFilters = [];
+                currentSort = 'relevance';
+                currentExtGroups = [];
+                if (sortSelect) sortSelect.value = 'relevance';
+                toggleClearBtn();
+                updateHash();
             }
 
             trigger.addEventListener('click', openModal);
@@ -317,7 +609,24 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             });
         }
 
+        function toggleClearBtn() {
+            if (!clearBtn) return;
+            clearBtn.hidden = !input.value;
+        }
+        if (clearBtn) {
+            clearBtn.addEventListener('click', function () {
+                input.value = '';
+                lastQuery = '';
+                toggleClearBtn();
+                resultsBox.hidden = true;
+                if (toolbar) toolbar.hidden = true;
+                input.focus();
+                updateHash();
+            });
+        }
+
         input.addEventListener('input', function () {
+            toggleClearBtn();
             var q = input.value.trim();
             if (q.length < minChars) {
                 resultsBox.hidden = true;
@@ -335,12 +644,19 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             ctrl = new AbortController();
             var url = apiUrl + '?q=' + encodeURIComponent(q) + '&locale=' + encodeURIComponent(locale) + '&limit=' + limit;
             if (currentTypeFilter) url += '&type=' + encodeURIComponent(currentTypeFilter);
-            currentTagFilters.forEach(function (slug) {
-                url += '&tags[]=' + encodeURIComponent(slug);
-            });
+            currentTagFilters.forEach(function (slug) { url += '&tags[]=' + encodeURIComponent(slug); });
+            if (currentSort && currentSort !== 'relevance') url += '&sort=' + encodeURIComponent(currentSort);
+            if (currentExtGroups.length && (currentTypeFilter === '' || currentTypeFilter === 'file')) {
+                currentExtGroups.forEach(function (groupKey) {
+                    var grp = FILETYPE_GROUPS.filter(function (g) { return g.key === groupKey; })[0];
+                    if (!grp) return;
+                    grp.exts.forEach(function (ext) { url += '&ext[]=' + encodeURIComponent(ext); });
+                });
+            }
 
+            updateHash();
             resultsBox.hidden = false;
-            resultsList.innerHTML = '<li class="vsearch__loading">Suche läuft…</li>';
+            renderSkeleton();
 
             fetch(url, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } })
                 .then(function (r) { return r.json(); })
@@ -351,23 +667,66 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 });
         }
 
+        if (sortSelect) {
+            sortSelect.addEventListener('change', function () {
+                currentSort = sortSelect.value || 'relevance';
+                if (lastQuery) runSearch(lastQuery);
+            });
+        }
+
+        function renderSkeleton() {
+            // 3 Skeleton-Karten — gibt visuelles Feedback dass was passiert,
+            // ohne den vorherigen Trefferraum kollabieren zu lassen.
+            var html = '';
+            for (var i = 0; i < 3; i++) {
+                html += '<li class="vsearch__skel-card">' +
+                    '<div class="vsearch__skel-icon"></div>' +
+                    '<div class="vsearch__skel-body">' +
+                        '<div class="vsearch__skel-line vsearch__skel-line--title"></div>' +
+                        '<div class="vsearch__skel-line vsearch__skel-line--meta"></div>' +
+                        '<div class="vsearch__skel-line vsearch__skel-line--snippet"></div>' +
+                        '<div class="vsearch__skel-line vsearch__skel-line--snippet2"></div>' +
+                    '</div>' +
+                '</li>';
+            }
+            resultsList.innerHTML = html;
+        }
+
+        function renderExtFilters() {
+            if (!extFiltersBox || !showFiletypeFilter) return;
+            var visible = currentTypeFilter === '' || currentTypeFilter === 'file';
+            extFiltersBox.hidden = !visible;
+            if (!visible) { extFiltersBox.innerHTML = ''; return; }
+            var html = '<span class="vsearch__sort-label" style="margin-right:.4rem;">Dateityp</span>';
+            FILETYPE_GROUPS.forEach(function (grp) {
+                var active = currentExtGroups.indexOf(grp.key) !== -1 ? ' vsearch__ext-filter--active' : '';
+                html += '<button type="button" class="vsearch__ext-filter' + active + '" data-vsearch-ext-group="' + escapeHtml(grp.key) + '">' + escapeHtml(grp.label) + '</button>';
+            });
+            extFiltersBox.innerHTML = html;
+            Array.from(extFiltersBox.querySelectorAll('[data-vsearch-ext-group]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var key = btn.dataset.vsearchExtGroup;
+                    var idx = currentExtGroups.indexOf(key);
+                    if (idx === -1) currentExtGroups.push(key);
+                    else currentExtGroups.splice(idx, 1);
+                    if (lastQuery) runSearch(lastQuery);
+                });
+            });
+        }
+
         function render(data, q) {
             resultsList.innerHTML = '';
+            lastTagFacets = data.tagFacets || [];
 
             if (toolbar) toolbar.hidden = false;
             meta.textContent = (data.totalHits || 0) + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
 
-            if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, data.tagFacets || [], q);
+            if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, lastTagFacets, q);
+            renderExtFilters();
 
             if (!data.hits || data.hits.length === 0) {
-                resultsList.innerHTML =
-                    '<li class="vsearch__empty">' +
-                        '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
-                            '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
-                        '</svg>' +
-                        '<p class="vsearch__empty-title">Keine Treffer</p>' +
-                        '<p class="vsearch__empty-hint">Für „' + escapeHtml(q) + '" haben wir nichts gefunden. Versuch ein anderes Wort.</p>' +
-                    '</li>';
+                resultsList.innerHTML = renderEmptyState(q, lastTagFacets);
+                attachEmptyTipHandlers();
                 return;
             }
 
@@ -375,27 +734,128 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 var li = document.createElement('li');
                 var a = document.createElement('a');
                 a.href = hit.url || '#';
-                a.title = hit.url || '';
-                var iconHtml = hit.type === 'file' ? iconFile() : iconPage();
-                var iconClass = hit.type === 'file' ? 'vs-icon vs-icon--file' : 'vs-icon';
-                var snippet = hit.snippet ? sanitizeWithMark(hit.snippet) : '';
+                if (hit.type === 'file' && hit.altText) a.title = hit.altText;
+                else a.title = hit.url || '';
+                if (openInNewTab) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+                a.addEventListener('click', function (e) {
+                    if (openInNewTab) return;
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.button === 1) return;
+                    pushHashBeforeNavigate();
+                });
+
+                var ext = '';
+                if (hit.type === 'file') {
+                    var m = String(hit.url || '').match(/\.([a-z0-9]+)(?:[?#]|$)/i);
+                    ext = m ? m[1].toLowerCase() : '';
+                }
+                var iconHtml = hit.type === 'file' ? iconFile(ext) : iconPage();
+                var iconClass = 'vs-icon';
+                if (hit.type === 'file') iconClass += ' vs-icon--file vs-icon--' + (ext || 'generic');
+
+                // Cover ODER Icon
+                var visualHtml;
+                if (hit.coverUrl) {
+                    var coverAlt = hit.altText || hit.title || 'Vorschaubild';
+                    visualHtml = '<span class="vs-icon vs-icon--cover">' +
+                        '<img class="vs-cover-img" src="' + escapeHtml(hit.coverUrl) + '" alt="' + escapeHtml(coverAlt) + '" loading="lazy" ' +
+                        'onerror="var p=this.parentNode;p.parentNode.removeChild(p);">' +
+                    '</span>';
+                } else {
+                    visualHtml = '<span class="' + iconClass + '">' + iconHtml + '</span>';
+                }
+
+                // Tags (kompakt, neben Titel)
                 var tagsHtml = '';
                 if (Array.isArray(hit.tagsResolved) && hit.tagsResolved.length) {
-                    var chips = hit.tagsResolved.map(function (t) {
-                        return '<span class="vs-tag" data-color="' + escapeHtml(t.color || 'gray') + '">' + escapeHtml(t.label || t.slug || '') + '</span>';
+                    var chips = hit.tagsResolved.slice(0, 3).map(function (t) {
+                        var boost = parseFloat(t.boost || 1.0);
+                        var isBoosted = boost > 1.0 ? '1' : '0';
+                        var pin = isBoosted === '1' ? '<svg class="vs-tag-pin" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M14 2l-1 1 2 2-5 5H4l5 5-5 5h6l5-5 2 2 1-1V2h-4z"/></svg>' : '';
+                        var title = isBoosted === '1' ? ' title="Empfohlen — Tag mit erhöhter Relevanz (Boost ' + boost.toFixed(1) + ')"' : '';
+                        return '<span class="vs-tag" data-color="' + escapeHtml(t.color || 'gray') + '" data-boost="' + isBoosted + '"' + title + '>' + pin + escapeHtml(t.label || t.slug || '') + '</span>';
                     });
                     tagsHtml = '<span class="vs-tags">' + chips.join('') + '</span>';
                 }
+
+                var lockBadge = hit.isProtected
+                    ? '<span class="vs-lock" title="Nur für Mitglieder sichtbar" aria-label="Geschützter Inhalt">' + iconLock() + '</span>'
+                    : '';
+
+                // Meta-Zeile
+                var typeKey = hit.type === 'file' ? (ext || 'file') : 'page';
+                var typeLabel = TYPE_LABELS[typeKey] || typeKey.toUpperCase();
+                var metaParts = ['<span class="vs-badge vs-badge--' + escapeHtml(typeKey) + '">' + escapeHtml(typeLabel) + '</span>'];
+                if (hit.publishedAt && hit.publishedAt > 0) {
+                    metaParts.push('<span class="vs-meta-dot">·</span><span class="vs-date">' + escapeHtml(formatDate(hit.publishedAt)) + '</span>');
+                }
+                if (hit.fileSize && hit.fileSize > 0) {
+                    metaParts.push('<span class="vs-meta-dot">·</span><span class="vs-size">' + escapeHtml(formatBytes(hit.fileSize)) + '</span>');
+                }
+                metaParts.push('<span class="vs-meta-dot">·</span><span class="vs-url">' + escapeHtml(prettifyUrl(hit.url, hit.type)) + '</span>');
+                var metaHtml = '<span class="vs-meta">' + metaParts.join('') + '</span>';
+
+                var snippet = hit.snippet ? sanitizeWithMark(hit.snippet) : '';
+
                 a.innerHTML =
-                    '<span class="' + iconClass + '">' + iconHtml + '</span>' +
+                    visualHtml +
                     '<span class="vs-body">' +
-                        '<span class="vs-title">' + sanitizeWithMark(hit.title || '(ohne Titel)') + '</span>' +
+                        '<span class="vs-title-row">' +
+                            '<span class="vs-title">' + sanitizeWithMark(hit.title || '(ohne Titel)') + '</span>' +
+                            lockBadge +
+                            tagsHtml +
+                        '</span>' +
+                        metaHtml +
                         (snippet ? '<span class="vs-snippet">' + snippet + '</span>' : '') +
-                        tagsHtml +
                     '</span>';
                 li.appendChild(a);
                 resultsList.appendChild(li);
             });
+        }
+
+        function renderEmptyState(q, tagFacets) {
+            // Empty-State mit Tipps:
+            //   - bei wenig Treffern Tag-Vorschläge anbieten (klickbar als Filter)
+            //   - immer einen Hinweis auf Tippfehler/andere Schreibweise
+            var html =
+                '<li class="vsearch__empty">' +
+                    '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+                        '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
+                    '</svg>' +
+                    '<p class="vsearch__empty-title">Keine Treffer für „' + escapeHtml(q) + '"</p>' +
+                    '<p class="vsearch__empty-hint">Versuche ein anderes Wort, prüfe die Schreibweise oder kürze den Suchbegriff.</p>';
+            // Wenn Tags bekannt sind: top 6 anzeigen als „Vielleicht meinst du …"-Vorschläge
+            if (Array.isArray(tagFacets) && tagFacets.length > 0) {
+                var top = tagFacets.slice(0, 6);
+                html += '<div class="vsearch__empty-tips">';
+                top.forEach(function (t) {
+                    html += '<button type="button" class="vsearch__empty-tip" data-vsearch-empty-tag="' + escapeHtml(t.slug) + '">' +
+                        escapeHtml(t.label) + '</button>';
+                });
+                html += '</div>';
+            }
+            html += '</li>';
+            return html;
+        }
+
+        function attachEmptyTipHandlers() {
+            Array.from(resultsList.querySelectorAll('[data-vsearch-empty-tag]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var slug = btn.dataset.vsearchEmptyTag;
+                    if (currentTagFilters.indexOf(slug) === -1) currentTagFilters.push(slug);
+                    input.value = '';
+                    lastQuery = '';
+                    toggleClearBtn();
+                    // Tag-only-Browse — leere Query, Filter aktiv
+                    runSearch('');
+                });
+            });
+        }
+
+        function iconLock() {
+            return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>' +
+                '<path d="M7 11V7a5 5 0 0 1 10 0v4"/>' +
+            '</svg>';
         }
 
         function renderFacets(typeFacets, tagFacets, q) {
@@ -418,6 +878,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             Array.from(facetsBox.querySelectorAll('[data-vsearch-facet-type]')).forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     currentTypeFilter = btn.dataset.vsearchFacetType;
+                    if (currentTypeFilter !== '' && currentTypeFilter !== 'file') currentExtGroups = [];
                     runSearch(q);
                 });
             });
@@ -438,32 +899,38 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             });
         }
         function sanitizeWithMark(s) {
-            return escapeHtml(s)
-                .replace(/&lt;mark&gt;/g, '<mark>')
-                .replace(/&lt;\/mark&gt;/g, '</mark>');
+            return escapeHtml(s).replace(/&lt;mark&gt;/g, '<mark>').replace(/&lt;\/mark&gt;/g, '</mark>');
         }
-
-        // Macht einen URL-Pfad lesbar: Files -> nur Dateiname, Pages -> /alias
-        // ohne /files-Prefix oder URL-Encoding-Mist.
         function prettifyUrl(url, type) {
             if (!url) return '';
             try { url = decodeURI(url); } catch (e) {}
             if (type === 'file') {
-                // Letztes Pfad-Segment = Dateiname
                 var idx = url.lastIndexOf('/');
                 return idx >= 0 ? url.substring(idx + 1) : url;
             }
-            // Page: nur den letzten relevanten Teil zeigen, kein leeres /
             return url === '/' ? 'Startseite' : url;
         }
-
-        function iconFile() {
-            return '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        function formatBytes(bytes) {
+            if (!bytes || bytes < 1024) return (bytes || 0) + ' B';
+            var units = ['KB', 'MB', 'GB'];
+            var i = -1; var n = bytes;
+            do { n /= 1024; i++; } while (n >= 1024 && i < units.length - 1);
+            return n.toFixed(n < 10 ? 1 : 0) + ' ' + units[i];
+        }
+        function formatDate(ts) {
+            var d = new Date(ts * 1000);
+            if (isNaN(d.getTime())) return '';
+            var dd = String(d.getDate()).padStart(2, '0');
+            var mm = String(d.getMonth() + 1).padStart(2, '0');
+            return dd + '.' + mm + '.' + d.getFullYear();
+        }
+        function iconFile(ext) {
+            var label = (ext || 'FILE').toUpperCase().substring(0, 4);
+            var fontSize = label.length > 3 ? 4.6 : 5.5;
+            return '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
                 '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
                 '<polyline points="14 2 14 8 20 8"/>' +
-                '<line x1="8" y1="13" x2="16" y2="13"/>' +
-                '<line x1="8" y1="17" x2="16" y2="17"/>' +
-                '<line x1="8" y1="9" x2="10" y2="9"/>' +
+                '<text x="12" y="17" text-anchor="middle" stroke="none" fill="currentColor" font-size="' + fontSize + '" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" letter-spacing="0.3">' + label + '</text>' +
             '</svg>';
         }
         function iconPage() {
@@ -473,6 +940,42 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 '<path d="M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z"/>' +
             '</svg>';
         }
+
+        // popstate
+        window.addEventListener('popstate', function () {
+            var state = parseState(window.location.hash);
+            var modalShell = (mode === 'modal') ? box.querySelector('[data-vsearch-shell]') : null;
+            if (state && state.q) {
+                if (modalShell && modalShell.hidden) {
+                    modalShell.hidden = false;
+                    document.body.style.overflow = 'hidden';
+                }
+                restoreFromHash();
+            } else if (modalShell && !modalShell.hidden && typeof closeModal === 'function') {
+                closeModal();
+            } else if (mode !== 'modal') {
+                input.value = ''; lastQuery = '';
+                resultsBox.hidden = true;
+                if (toolbar) toolbar.hidden = true;
+                currentTypeFilter = ''; currentTagFilters = [];
+                currentSort = 'relevance'; currentExtGroups = [];
+                if (sortSelect) sortSelect.value = 'relevance';
+                toggleClearBtn();
+            }
+        });
+
+        // Initial-Restore
+        (function initFromHash() {
+            var initialState = parseState(window.location.hash);
+            if (!initialState || !initialState.q) return;
+            if (mode === 'modal') {
+                var modalShell = box.querySelector('[data-vsearch-shell]');
+                if (modalShell) { modalShell.hidden = false; document.body.style.overflow = 'hidden'; }
+            }
+            restoreFromHash();
+        })();
+
+        toggleClearBtn();
     });
 })();
 </script>

@@ -15,6 +15,8 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['security_legend'] = 'Sicherheit
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['status_legend'] = 'Status';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['documents_legend'] = 'Indexierte Daten';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_legend'] = 'Suchanfragen-Analytics';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['crawler_legend'] = 'Externer Crawler';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['crawler_panel'] = ['Externer Crawler', 'Crawlt dynamische Detail-Seiten (z.B. ?meldung=…) die nicht im Contao-Seitenbaum stehen.'];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['tags_legend'] = 'Tags & Schlagwörter';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'] = ['Index aktualisieren', 'Erst Vorschau (was ist neu vs. schon im Index?), dann live indexieren.'];
 

@@ -48,6 +48,21 @@ services:
         arguments:
             $logger: '@?logger'
 
+    # v2.2.0: PageTagFieldListener wird per static::render() aus dem DCA
+    # aufgerufen — der Container muss den Service auflösbar halten (public),
+    # sonst inlined Symfony ihn weg und ::render() crasht beim Lookup.
+    VenneMedia\VenneSearchContaoBundle\EventListener\PageTagFieldListener:
+        public: true
+
+    # v2.2.0: Crawler-Panel im DCA, gleiches Pattern wie Tag-Feld (public).
+    VenneMedia\VenneSearchContaoBundle\EventListener\CrawlerPanelListener:
+        public: true
+
+    # v2.2.0: HTTP-Client für die Crawler-API auf venne-search.de.
+    VenneMedia\VenneSearchContaoBundle\Service\Platform\CrawlerConfigClient:
+        arguments:
+            $logger: '@?logger'
+
     # Meilisearch-Client als Singleton — gebaut von der Factory, die das
     # Endpoint+Key aus den DCA-Settings (tl_venne_search_settings) holt.
     Meilisearch\Client:

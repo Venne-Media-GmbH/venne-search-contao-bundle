@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing,index_hidden_pages,generate_pdf_thumbnails;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
+        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing,index_hidden_pages,generate_pdf_thumbnails;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{crawler_legend},crawler_panel;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -270,6 +270,13 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         'reindex_button' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'],
             'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderReindexPanel'],
+            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
+        ],
+        // v2.2.0: Externer Crawler — Konfig läuft über venne-search.de-API,
+        // hier nur Backend-UI zum Setzen der Optionen + Status-Anzeige.
+        'crawler_panel' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['crawler_panel'],
+            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\CrawlerPanelListener::class, 'render'],
             'eval' => ['doNotShow' => true, 'doNotCopy' => true],
         ],
         // Pseudo-Felder ohne SQL — rendern via input_field_callback Custom-HTML.

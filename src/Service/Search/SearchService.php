@@ -107,6 +107,9 @@ final class SearchService
             //   date_asc:  published_at ASC  — Älteste oben
             'sort' => $this->buildSortClause($sort),
         ];
+        if ($params['sort'] === []) {
+            unset($params['sort']);
+        }
 
         // Strenge Such-Strategie: bei "strict" zwingen wir Meilisearch dazu,
         // ALLE Query-Tokens zu finden (kein partielles Match). Das verhindert
@@ -327,7 +330,11 @@ final class SearchService
             // lexikographisch zwingend), Tie-Break über weight DESC damit
             // geboostete Items innerhalb der Gruppe oben sind.
             self::SORT_TYPE_ASC => ['content_type:asc', 'weight:desc'],
-            default => ['weight:desc', 'indexed_at:desc'],
+            // Relevance: KEIN expliziter Sort — Meilisearch's BM25-Ranking
+            // entscheidet. weight/indexed_at als Sort würde Relevanz overriden
+            // und crawled-Docs (weight=1.0) gegenüber geboosteten Pages benachteiligen,
+            // selbst wenn der Content viel besser matched.
+            default => [],
         };
     }
 

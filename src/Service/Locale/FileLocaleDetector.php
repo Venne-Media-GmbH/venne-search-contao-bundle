@@ -90,9 +90,9 @@ final class FileLocaleDetector
             return;
         }
 
-        if ($pathToUuid === []) {
-            return;
-        }
+        // Hinweis: Wir prüfen NICHT mehr early-return bei leerem $pathToUuid —
+        // selbst ohne UUIDs sollen wir den memo-Cache mit Fallback-Locales
+        // füllen, damit der spätere detect()-Loop NICHT mehr in die DB greift.
 
         // 2. singleSRC: pro Chunk ein WHERE IN, Locale-Counts pro UUID sammeln.
         $uuids = array_values($pathToUuid);
@@ -150,15 +150,39 @@ final class FileLocaleDetector
         } catch (\Throwable) {
         }
 
-        // 4. Memo füllen: pro Pfad das dominante Locale (höchster Count) ermitteln.
-        foreach ($pathToUuid as $path => $u) {
-            $counts = $countsByUuid[$u] ?? [];
-            if ($counts === []) {
+        // 4. Memo füllen: für ALLE Eingabe-Pfade (auch ohne UUID/Embedding)
+        // einen Locale-Eintrag setzen. Damit läuft die teure detectInternal-
+        // Logik (mit 2 zusätzlichen tl_content-Queries pro Datei) bei
+        // großen Sites NIE aus dem warmup-Pool raus.
+        $fallback = $this->fallbackLocale($config);
+        foreach ($relativePaths as $path) {
+            if (isset($this->memo[$path])) {
                 continue;
             }
-            ksort($counts);
-            arsort($counts);
-            $this->memo[$path] = (string) array_key_first($counts);
+            // Override-Check vorzeitig anwenden, ansonsten Fallback.
+            if (isset($config->fileLocaleOverrides[$path])) {
+                $override = strtolower((string) $config->fileLocaleOverrides[$path]);
+                if ($override !== '' && \in_array($override, $config->enabledLocales, true)) {
+                    $this->memo[$path] = $override;
+                    continue;
+                }
+            }
+            $u = $pathToUuid[$path] ?? null;
+            $counts = $u !== null ? ($countsByUuid[$u] ?? []) : [];
+            if ($counts !== []) {
+                ksort($counts);
+                arsort($counts);
+                $this->memo[$path] = (string) array_key_first($counts);
+                continue;
+            }
+            // Kein Embedding gefunden — versuche Pfad-/Filename-Hint, sonst Fallback.
+            $pathHint = $this->detectFromPath($path, $config->enabledLocales);
+            if ($pathHint !== null) {
+                $this->memo[$path] = $pathHint;
+                continue;
+            }
+            $nameHint = $this->detectFromFilename($path, $config->enabledLocales);
+            $this->memo[$path] = $nameHint ?? $fallback;
         }
     }
 

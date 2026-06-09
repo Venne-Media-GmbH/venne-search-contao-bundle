@@ -858,16 +858,26 @@ final class BackendActionListener
             '});'.
             'btn.dataset.originalHtml=btn.innerHTML;'.
             // === START: Plan abrufen, Vorschau zeigen ===
+            // Defensive Frontend-Logik: wenn der Server kein JSON liefert
+            // (z.B. Symfony-Container-Crash → HTML-500-Seite), zeigen wir
+            // eine klare Fehlermeldung statt eine kryptische JSON-Parse-Exception.
             'btn.addEventListener("click",function(){'.
             ' btn.disabled=true;btn.textContent="Lade Vorschau…";'.
             ' planWrap.style.display="none";wrap.style.display="none";'.
             ' fetch(planUrl,{method:"POST",headers:{"Content-Type":"application/json","X-Requested-With":"XMLHttpRequest"},credentials:"same-origin",body:"{}"})'.
-            '  .then(function(r){return r.json();})'.
+            '  .then(function(r){return r.text().then(function(t){'.
+            '   var d;try{d=JSON.parse(t);}catch(e){'.
+            '    var hint=r.status>=500?"Der Server liefert kein JSON (HTTP "+r.status+"). Vermutlich ein Symfony-Container- oder PHP-Fehler. Prüfe var/logs/prod-YYYY-MM-DD.log und führe einen sauberen Cache-Rebuild aus: rm -rf var/cache/* && php vendor/bin/contao-console cache:warmup --env=prod":"HTTP "+r.status+" — Antwort war kein JSON";'.
+            '    throw new Error(hint);'.
+            '   }return d;'.
+            '  });})'.
             '  .then(function(d){'.
             '   if(!d||!d.ok){throw new Error(d&&d.error||"Plan-Call fehlgeschlagen");}'.
             '   showPlan(d);'.
             '  }).catch(function(e){'.
-            '   alert("Fehler beim Lesen der Plan-Vorschau: "+(e&&e.message||"unbekannt"));'.
+            '   var msg=e&&e.message||"unbekannt";'.
+            '   planWrap.innerHTML=\'<div style="padding:1rem 1.2rem;border:1px solid #fca5a5;background:#fef2f2;color:#991b1b;border-radius:8px;"><strong>Fehler beim Lesen der Plan-Vorschau:</strong><br><span style="display:block;margin-top:.4rem;font-family:monospace;font-size:.85rem;white-space:pre-wrap;">\'+msg.replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c];})+\'</span></div>\';'.
+            '   planWrap.style.display="block";'.
             '   btn.disabled=false;btn.innerHTML=btn.dataset.originalHtml;'.
             '  });'.
             '});'.

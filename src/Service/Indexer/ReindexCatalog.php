@@ -222,25 +222,27 @@ final class ReindexCatalog
                 : 'file-path-' . md5($relativePath);
             $siteItemIds[$docId] = true;
 
-            // filesize() macht einen stat()-Syscall pro File. Bei großen Sites
-            // mit Network-Storage (Plesk-Vhost, NFS) ist das pro Datei 10-30ms.
-            // Bei >2000 Files überspringen wir filesize — Größe ist nur für die
-            // UI-Anzeige, der Indexer holt sie sich beim eigentlichen Indexieren
-            // selbst noch mal.
-            if (\count($fileRows) > 2000) {
+            // PLAN-FAST-PATH: bei public_only komplett alle teuren Lookups
+            // überspringen. Die Plan-Vorschau zeigt eh nur "public" an, und
+            // der echte Indexer macht Permission-Resolve sowieso pro File
+            // noch mal selbst. Bei großen Sites (>2000 Files) ist das der
+            // einzige Weg, dass die Vorschau in <30s antwortet.
+            $isPublicOnlyMode = $config->indexMode === SettingsConfig::MODE_PUBLIC_ONLY;
+            if ($isPublicOnlyMode) {
                 $sizeKb = 0;
+                $perm = ['isProtected' => false, 'allowedGroups' => []];
+                $decision = ['decision' => 'allow', 'reason' => null];
             } else {
-                $absolute = $projectDir . '/' . ltrim($relativePath, '/');
-                $bytes = @filesize($absolute);
-                $sizeKb = $bytes === false ? 0 : (int) round($bytes / 1024);
+                if (\count($fileRows) > 2000) {
+                    $sizeKb = 0;
+                } else {
+                    $absolute = $projectDir . '/' . ltrim($relativePath, '/');
+                    $bytes = @filesize($absolute);
+                    $sizeKb = $bytes === false ? 0 : (int) round($bytes / 1024);
+                }
+                $perm = $this->permissions->resolveFilePermissions($relativePath, false);
+                $decision = $this->decidePermission('file', $relativePath, $perm['isProtected'], $config);
             }
-
-            // public_only-Modus: ACL-Lookup skippen (spart pro File einen
-            // LIKE-Scan auf tl_content). Im with_protected-Modus brauchen
-            // wir die Member-Groups für die Such-Filterung.
-            $skipAcl = $config->indexMode === SettingsConfig::MODE_PUBLIC_ONLY;
-            $perm = $this->permissions->resolveFilePermissions($relativePath, $skipAcl);
-            $decision = $this->decidePermission('file', $relativePath, $perm['isProtected'], $config);
 
             $detectedLocale = $this->localeDetector->detect($relativePath, $config);
 

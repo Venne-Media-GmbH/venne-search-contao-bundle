@@ -79,6 +79,14 @@ final class PdfThumbnailGenerator
             $this->logger->warning('venne_search.thumbnail.mkdir_failed', ['dir' => $absCacheDir]);
             return null;
         }
+        // Contao 4.12+ symlinkt nur Folder mit `.public`-Marker in den
+        // public-Webroot — ohne diesen wären unsere generierten Cover-Bilder
+        // im Frontend per HTTP NICHT erreichbar (404). Marker idempotent
+        // anlegen sobald das Cache-Verzeichnis existiert.
+        $publicMarker = $absCacheDir . '/.public';
+        if (!is_file($publicMarker)) {
+            @touch($publicMarker);
+        }
 
         // 1) Ghostscript-Versuch
         if ($this->tryGhostscript($absolutePdfPath, $absCachePath)) {

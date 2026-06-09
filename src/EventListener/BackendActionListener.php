@@ -1446,13 +1446,38 @@ final class BackendActionListener
                 $packages = $json['packages'] ?? $json ?? [];
                 foreach ($packages as $pkg) {
                     if (($pkg['name'] ?? '') === 'venne-media/venne-search-contao-bundle') {
-                        $v = (string) ($pkg['version'] ?? '');
-                        return ltrim($v, 'v') ?: 'unknown';
+                        return self::cleanVersion(
+                            (string) ($pkg['version'] ?? ''),
+                            (string) ($pkg['version_normalized'] ?? ''),
+                            (string) ($pkg['source']['reference'] ?? '')
+                        );
                     }
                 }
             }
         } catch (\Throwable) {
         }
         return 'unknown';
+    }
+
+    /**
+     * Wandelt Composer-Versions-Strings in eine lesbare Form um:
+     *   "v2.2.0"            → "2.2.0"
+     *   "dev-dev-v2.2.0"    → "2.2.0-dev"  (Branch dev-v2.2.0 als Dev-Build)
+     *   "dev-main"          → "main-dev"
+     *   "2.2.x-dev"         → "2.2.x-dev"  (unverändert)
+     */
+    public static function cleanVersion(string $version, string $normalized = '', string $reference = ''): string
+    {
+        $v = $version;
+        if (str_starts_with($v, 'dev-')) {
+            $branch = substr($v, 4);
+            // Branchen wie "dev-v2.2.0" → "2.2.0-dev"
+            if (str_starts_with($branch, 'v')) {
+                return substr($branch, 1) . '-dev';
+            }
+            // Sonst: "main-dev", "feature/foo-dev"
+            return $branch . '-dev';
+        }
+        return ltrim($v, 'v') ?: 'unknown';
     }
 }

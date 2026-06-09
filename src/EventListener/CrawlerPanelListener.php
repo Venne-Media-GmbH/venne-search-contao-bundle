@@ -71,7 +71,7 @@ final class CrawlerPanelListener
         $statusHtml = $this->renderStatusBox($lastRunAt, $nextRunAt, $stats);
 
         return <<<HTML
-<div class="widget clr" style="padding:1rem 1.2rem;">
+<div class="widget clr" style="padding:1rem 1.2rem;box-sizing:border-box;max-width:100%;overflow:hidden;">
     <h3 style="margin:0 0 .6rem 0;font-size:1rem;font-weight:600;">Externer Crawler</h3>
     <p class="tl_help" style="margin-top:0;margin-bottom:1rem;font-size:.85rem;line-height:1.5;color:#6b7280;white-space:normal;">
         Indexiert dynamische Detail-Seiten die nicht im Contao-Seitenbaum stehen (z.B. Custom-Catalog-URLs).
@@ -105,7 +105,7 @@ HTML;
         $errors = \is_array($stats) ? (int) ($stats['errors'] ?? 0) : 0;
 
         return <<<HTML
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:.7rem;margin-bottom:1.2rem;max-width:100%;box-sizing:border-box;">
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem;margin-bottom:1.2rem;max-width:100%;width:100%;box-sizing:border-box;">
     <div style="padding:.7rem .9rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;min-width:0;">
         <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Letzter Lauf</div>
         <div style="font-size:1rem;font-weight:600;color:#1f2937;margin-top:.15rem;">{$lastFmt}</div>

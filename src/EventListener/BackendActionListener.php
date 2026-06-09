@@ -660,7 +660,7 @@ final class BackendActionListener
             '<div style="padding-right:1rem;">'.
             '<h3 style="margin:0 0 4px;color:#1f2937;font-size:1rem;font-weight:600;line-height:1.3;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">'.
                 '<span>Komplett-Indexierung deiner Site</span>'.
-                '<span style="font-size:.7rem;font-weight:500;padding:2px 8px;border-radius:999px;background:rgba(74,128,135,0.1);color:#3a7178;letter-spacing:.02em;">v'.htmlspecialchars($bundleVersion).'</span>'.
+                '<span style="font-size:.7rem;font-weight:500;padding:2px 8px;border-radius:999px;background:rgba(74,128,135,0.1);color:#3a7178;letter-spacing:.02em;">v'.htmlspecialchars(ltrim($bundleVersion, 'v')).'</span>'.
             '</h3>'.
             '<p style="margin:0;color:#4b5563;font-size:.9rem;line-height:1.5;padding-right:.4rem;">Crawlt <strong style="color:#1f2937;">alle aktiven Seiten</strong>, Artikel und Dateien aus dem Datei-Bereich (%s). Erst Vorschau, dann live pro Datei — du siehst <strong>vorab</strong>, was indexiert wird.</p>'.
             '</div>'.
@@ -1446,11 +1446,7 @@ final class BackendActionListener
                 $packages = $json['packages'] ?? $json ?? [];
                 foreach ($packages as $pkg) {
                     if (($pkg['name'] ?? '') === 'venne-media/venne-search-contao-bundle') {
-                        return self::cleanVersion(
-                            (string) ($pkg['version'] ?? ''),
-                            (string) ($pkg['version_normalized'] ?? ''),
-                            (string) ($pkg['source']['reference'] ?? '')
-                        );
+                        return self::cleanVersion((string) ($pkg['version'] ?? ''));
                     }
                 }
             }
@@ -1466,7 +1462,7 @@ final class BackendActionListener
      *   "dev-main"          → "main-dev"
      *   "2.2.x-dev"         → "2.2.x-dev"  (unverändert)
      */
-    public static function cleanVersion(string $version, string $normalized = '', string $reference = ''): string
+    public static function cleanVersion(string $version): string
     {
         $v = $version;
         if (str_starts_with($v, 'dev-')) {

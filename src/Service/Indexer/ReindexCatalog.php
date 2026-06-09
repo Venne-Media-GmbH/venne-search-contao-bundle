@@ -183,11 +183,31 @@ final class ReindexCatalog
         }
 
         $log('pages_loop_done', ['count' => $pageIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
-        $log('files_loop_start', []);
+
+        // BULK-WARMUP: Page-Embedding-Locales für ALLE Files in einem Rutsch
+        // berechnen. Spart bei großen Sites tausende Einzel-Queries (pro File
+        // lief vorher 1 tl_files-Lookup + 1 singleSRC-Query + 1 multiSRC-LIKE).
+        $allPaths = [];
+        foreach ($fileRows as $row) {
+            $ext = strtolower((string) ($row['extension'] ?? ''));
+            if (\in_array($ext, self::INDEXABLE_FILE_EXTENSIONS, true)) {
+                $allPaths[] = (string) $row['path'];
+            }
+        }
+        $this->localeDetector->warmupEmbeddingLocales($allPaths, $config);
+        $log('files_warmup_done', ['files' => \count($allPaths), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
+        $log('files_loop_start', ['total' => \count($fileRows)]);
         $fileIdx = 0;
+        $filesLoopStart = microtime(true);
         foreach ($fileRows as $row) {
             if (++$fileIdx % 500 === 0) {
-                $log('files_loop_progress', ['done' => $fileIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+                $log('files_loop_progress', [
+                    'done' => $fileIdx,
+                    'total' => \count($fileRows),
+                    'elapsedMs' => (int) ((microtime(true) - $filesLoopStart) * 1000),
+                    'memMb' => (int) (memory_get_usage(true) / 1024 / 1024),
+                ]);
             }
             $ext = strtolower((string) ($row['extension'] ?? ''));
             if (!\in_array($ext, self::INDEXABLE_FILE_EXTENSIONS, true)) {

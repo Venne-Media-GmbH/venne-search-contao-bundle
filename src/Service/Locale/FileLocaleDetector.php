@@ -54,6 +54,114 @@ final class FileLocaleDetector
         return $locale;
     }
 
+    /**
+     * Warm-Up für Massenanwendung (Reindex-Plan): füllt den memo-Cache mit
+     * den Embedding-Locales für ALLE übergebenen Pfade in EINEM DB-Roundtrip
+     * pro Quell-Tabelle, statt 3 Queries pro Datei.
+     *
+     * Performance-Effekt: bei 3000 Files reduziert sich der DB-Aufwand von
+     * ~9000 Queries (mit teurem LIKE-Scan pro File) auf 4 Queries gesamt.
+     *
+     * @param list<string> $relativePaths
+     */
+    public function warmupEmbeddingLocales(array $relativePaths, SettingsConfig $config): void
+    {
+        if ($relativePaths === []) {
+            return;
+        }
+        // 1. tl_files: alle UUIDs auf einen Schlag holen.
+        $pathToUuid = [];
+        try {
+            // chunked WHERE IN damit max-allowed-packet bei vielen Files nicht reißt
+            foreach (array_chunk(array_values(array_unique($relativePaths)), 500) as $chunk) {
+                $placeholders = implode(',', array_fill(0, \count($chunk), '?'));
+                $rows = $this->db->fetchAllAssociative(
+                    'SELECT path, uuid FROM tl_files WHERE path IN (' . $placeholders . ')',
+                    $chunk,
+                );
+                foreach ($rows as $r) {
+                    $u = (string) ($r['uuid'] ?? '');
+                    if ($u !== '') {
+                        $pathToUuid[(string) $r['path']] = $u;
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            return;
+        }
+
+        if ($pathToUuid === []) {
+            return;
+        }
+
+        // 2. singleSRC: pro Chunk ein WHERE IN, Locale-Counts pro UUID sammeln.
+        $uuids = array_values($pathToUuid);
+        $countsByUuid = [];
+        try {
+            foreach (array_chunk($uuids, 500) as $chunk) {
+                $placeholders = implode(',', array_fill(0, \count($chunk), '?'));
+                $rows = $this->db->fetchAllAssociative(
+                    'SELECT c.singleSRC AS u, p.language AS locale
+                     FROM tl_content c
+                     INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = \'tl_article\'
+                     INNER JOIN tl_page p ON p.id = a.pid
+                     WHERE c.singleSRC IN (' . $placeholders . ')',
+                    $chunk,
+                );
+                foreach ($rows as $r) {
+                    $u = (string) ($r['u'] ?? '');
+                    $loc = $this->normalizeLocale((string) ($r['locale'] ?? ''), $config->enabledLocales);
+                    if ($u !== '' && $loc !== null) {
+                        $countsByUuid[$u][$loc] = ($countsByUuid[$u][$loc] ?? 0) + 1;
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        // 3. multiSRC: serialisiertes Array — kann nicht via IN abgefragt werden.
+        // Wir holen ALLE relevanten tl_content-Rows einmal und matchen client-side
+        // per Hex-Suche. Bei 3000 Files lohnt sich ein Full-Scan EINMAL deutlich
+        // mehr als 3000 Einzel-LIKEs.
+        $uuidHexSet = [];
+        foreach ($uuids as $u) {
+            $uuidHexSet[bin2hex($u)] = $u;
+        }
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                'SELECT p.language AS locale, c.multiSRC
+                 FROM tl_content c
+                 INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = \'tl_article\'
+                 INNER JOIN tl_page p ON p.id = a.pid
+                 WHERE c.multiSRC IS NOT NULL AND c.multiSRC <> \'\''
+            );
+            foreach ($rows as $r) {
+                $multi = (string) ($r['multiSRC'] ?? '');
+                $loc = $this->normalizeLocale((string) ($r['locale'] ?? ''), $config->enabledLocales);
+                if ($multi === '' || $loc === null) {
+                    continue;
+                }
+                foreach ($uuidHexSet as $hex => $bin) {
+                    if (str_contains($multi, $hex)) {
+                        $countsByUuid[$bin][$loc] = ($countsByUuid[$bin][$loc] ?? 0) + 1;
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        // 4. Memo füllen: pro Pfad das dominante Locale (höchster Count) ermitteln.
+        foreach ($pathToUuid as $path => $u) {
+            $counts = $countsByUuid[$u] ?? [];
+            if ($counts === []) {
+                continue;
+            }
+            ksort($counts);
+            arsort($counts);
+            $this->memo[$path] = (string) array_key_first($counts);
+        }
+    }
+
     public function clearMemo(): void
     {
         $this->memo = [];

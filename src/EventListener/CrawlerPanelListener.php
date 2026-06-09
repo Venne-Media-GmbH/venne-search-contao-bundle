@@ -105,20 +105,20 @@ HTML;
         $errors = \is_array($stats) ? (int) ($stats['errors'] ?? 0) : 0;
 
         return <<<HTML
-<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.6rem;margin-bottom:1.2rem;max-width:100%;width:100%;box-sizing:border-box;">
-    <div style="padding:.7rem .9rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;min-width:0;">
+<div style="display:flex;flex-wrap:wrap;gap:.6rem;margin-bottom:1.2rem;max-width:100%;width:100%;box-sizing:border-box;">
+    <div style="flex:1 1 140px;min-width:0;padding:.7rem .9rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;box-sizing:border-box;">
         <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Letzter Lauf</div>
         <div style="font-size:1rem;font-weight:600;color:#1f2937;margin-top:.15rem;">{$lastFmt}</div>
     </div>
-    <div style="padding:.7rem .9rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;min-width:0;">
+    <div style="flex:1 1 140px;min-width:0;padding:.7rem .9rem;border:1px solid #d1d5db;border-radius:6px;background:#f9fafb;box-sizing:border-box;">
         <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Nächster Lauf</div>
         <div style="font-size:1rem;font-weight:600;color:#1f2937;margin-top:.15rem;">{$nextFmt}</div>
     </div>
-    <div style="padding:.7rem .9rem;border:1px solid #86efac;border-radius:6px;background:#f0fdf4;min-width:0;">
+    <div style="flex:1 1 140px;min-width:0;padding:.7rem .9rem;border:1px solid #86efac;border-radius:6px;background:#f0fdf4;box-sizing:border-box;">
         <div style="font-size:.7rem;color:#15803d;text-transform:uppercase;letter-spacing:.04em;">Indexiert</div>
         <div style="font-size:1rem;font-weight:600;color:#15803d;margin-top:.15rem;">{$indexed} <span style="font-weight:400;color:#6b7280;font-size:.85rem;">/ {$seen}</span></div>
     </div>
-    <div style="padding:.7rem .9rem;border:1px solid {$this->errorBorderColor($errors)};border-radius:6px;background:{$this->errorBg($errors)};min-width:0;">
+    <div style="flex:1 1 140px;min-width:0;padding:.7rem .9rem;border:1px solid {$this->errorBorderColor($errors)};border-radius:6px;background:{$this->errorBg($errors)};box-sizing:border-box;">
         <div style="font-size:.7rem;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Fehler</div>
         <div style="font-size:1rem;font-weight:600;color:#1f2937;margin-top:.15rem;">{$errors}</div>
     </div>

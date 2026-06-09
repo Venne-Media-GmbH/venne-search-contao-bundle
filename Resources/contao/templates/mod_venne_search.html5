@@ -74,16 +74,21 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             <div class="vsearch__toolbar" data-vsearch-toolbar hidden>
                 <div class="vsearch__toolbar-row">
                     <p class="vsearch__meta" data-vsearch-meta></p>
+                    <?php if ($this->showFacets): ?>
+                        <button type="button" class="vsearch__filter-toggle" data-vsearch-filter-toggle aria-label="Filter">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/>
+                            </svg>
+                            Filter
+                        </button>
+                    <?php endif; ?>
                     <?php if ($this->showSort): ?>
-                        <label class="vsearch__sort">
-                            <span class="vsearch__sort-label">Sortierung</span>
-                            <select class="vsearch__sort-select" data-vsearch-sort>
-                                <option value="relevance">Relevanz</option>
-                                <option value="date_desc">Neueste zuerst</option>
-                                <option value="date_asc">&Auml;lteste zuerst</option>
-                                <option value="type_asc">Nach Dokumentenart</option>
-                            </select>
-                        </label>
+                        <div class="vsearch__sort-pills" role="tablist" aria-label="Sortierung" data-vsearch-sort-pills>
+                            <button type="button" class="vsearch__sort-pill vsearch__sort-pill--active" data-sort="relevance" aria-pressed="true">Relevanz</button>
+                            <button type="button" class="vsearch__sort-pill" data-sort="date_desc" aria-pressed="false">Neueste</button>
+                            <button type="button" class="vsearch__sort-pill" data-sort="date_asc" aria-pressed="false">Älteste</button>
+                            <button type="button" class="vsearch__sort-pill" data-sort="type_asc" aria-pressed="false">Art</button>
+                        </div>
                     <?php endif; ?>
                 </div>
             </div>
@@ -223,6 +228,9 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vsearch__body[hidden] { display: none; }
     .vsearch--inline .vsearch__body,
     .vsearch__shell:not(.vsearch__shell--modal) .vsearch__body { grid-template-columns: 1fr; }
+    /* Initial-State: kein Filter → Sidebar verstecken, Treffer-Bereich volle Breite */
+    .vsearch__body.vs-no-sidebar { grid-template-columns: 1fr; }
+    .vsearch__body.vs-no-sidebar .vsearch__sidebar { display: none; }
 
     /* Sidebar */
     .vsearch__sidebar {
@@ -273,18 +281,58 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     /* Main-Spalte */
     .vsearch__main { min-width: 0; }
 
-    /* Responsive: bei <820px Sidebar-Kollaps */
+    /* Filter-Toggle-Button (nur auf Mobile sichtbar) */
+    .vsearch__filter-toggle {
+        display: none; align-items: center; gap: .4rem;
+        padding: .5rem .85rem !important; border: 1px solid var(--vs-border-strong) !important;
+        background: var(--vs-bg) !important; color: var(--vs-text) !important;
+        border-radius: 999px !important; font-size: .85rem !important; font-weight: 500 !important;
+        cursor: pointer;
+    }
+    .vsearch__filter-toggle:hover { background: var(--vs-bg-soft) !important; }
+    .vsearch__filter-toggle .vsearch__filter-toggle-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 18px; height: 18px; padding: 0 5px;
+        background: var(--vs-accent); color: #fff;
+        border-radius: 999px; font-size: .7rem; font-weight: 700;
+    }
+
+    /* Drawer-Close-Button + Backdrop default aus (nur Mobile-Drawer braucht sie) */
+    .vsearch__sidebar-close { display: none !important; }
+    .vsearch__drawer-backdrop { display: none; }
+
+    /* Responsive: bei <820px Sidebar als Drawer */
     @media (max-width: 820px) {
         .vsearch__body { grid-template-columns: 1fr; }
-        .vsearch__sidebar { border-right: 0; border-bottom: 1px solid var(--vs-border); padding: 0 0 1rem; max-height: none; position: static; }
-        .vsearch__sidebar-section { margin-bottom: .8rem; }
-        .vsearch__sidebar .vsearch__facets,
-        .vsearch__sidebar .vsearch__ext-filters,
-        .vsearch__sidebar .vsearch__tag-cloud {
-            flex-direction: row; flex-wrap: wrap;
+        .vsearch__filter-toggle { display: inline-flex; }
+        .vsearch__sidebar {
+            position: fixed; top: 0; left: 0; bottom: 0; width: 84%; max-width: 320px;
+            background: var(--vs-bg); z-index: 10000;
+            padding: 4rem 1.25rem 1.5rem; border-right: 1px solid var(--vs-border);
+            box-shadow: 4px 0 24px rgba(0,0,0,.15);
+            transform: translateX(-100%); transition: transform .25s ease-out;
+            max-height: 100vh; overflow-y: auto;
         }
-        .vsearch__sidebar .vsearch__facet,
-        .vsearch__sidebar .vsearch__ext-filter { width: auto; }
+        .vsearch__sidebar.vs-drawer-open { transform: translateX(0); }
+        .vsearch__sidebar::before {
+            content: "Filter"; display: block;
+            position: absolute; top: 1rem; left: 1.25rem;
+            font-size: 1.05rem; font-weight: 700; color: var(--vs-text);
+        }
+        .vsearch__sidebar-close {
+            position: absolute !important; top: .9rem !important; right: .9rem !important;
+            width: 32px !important; height: 32px !important;
+            border: 0 !important; border-radius: 50% !important;
+            background: rgba(0,0,0,.06) !important; color: var(--vs-text) !important;
+            cursor: pointer; display: flex !important; align-items: center; justify-content: center;
+            font-size: 1.2rem; line-height: 1;
+        }
+        .vsearch__drawer-backdrop {
+            display: block;
+            position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 9999;
+            opacity: 0; pointer-events: none; transition: opacity .2s;
+        }
+        .vsearch__drawer-backdrop.vs-drawer-open { opacity: 1; pointer-events: auto; }
     }
     .vsearch__meta { color: var(--vs-text-muted); font-size: .85rem; margin: 0; }
     .vsearch__facets { display: flex; gap: .35rem; flex-wrap: wrap; }
@@ -331,6 +379,21 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         border-color: var(--vs-accent) !important;
         box-shadow: 0 0 0 2px var(--vs-accent-soft), var(--vs-shadow-card-hover) !important;
     }
+    .vsearch__list.vs-is-loading { opacity: .55; pointer-events: none; transition: opacity .15s ease-out; }
+
+    /* Mehr-laden-Button */
+    .vsearch__loadmore {
+        display: block; margin: 1rem auto 0;
+        padding: .65rem 1.5rem !important; border: 1px solid var(--vs-border-strong) !important;
+        background: var(--vs-bg) !important; color: var(--vs-text) !important;
+        border-radius: 999px !important; font-size: .9rem !important; font-weight: 500 !important;
+        cursor: pointer; transition: background .15s, border-color .15s, color .15s;
+        box-shadow: var(--vs-shadow-card) !important;
+    }
+    .vsearch__loadmore:hover:not(:disabled) {
+        background: var(--vs-accent) !important; border-color: var(--vs-accent) !important; color: #fff !important;
+    }
+    .vsearch__loadmore:disabled { opacity: .6; cursor: wait; }
     .vsearch__list li {
         list-style: none !important; padding: 0;
         border: 1px solid var(--vs-border); border-radius: var(--vs-radius);
@@ -572,6 +635,25 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vsearch__sort-select:focus { outline: 2px solid var(--vs-accent); outline-offset: 1px; }
 
+    /* Sort-Pills (Tabs-Optik) */
+    .vsearch__sort-pills {
+        display: inline-flex; gap: .25rem; align-items: center;
+        padding: .25rem; background: var(--vs-bg-soft);
+        border: 1px solid var(--vs-border); border-radius: 999px;
+    }
+    .vsearch__sort-pill {
+        padding: .35rem .85rem !important; border: 0 !important;
+        background: transparent !important; color: var(--vs-text-muted) !important;
+        border-radius: 999px !important; font-size: .82rem !important; font-weight: 500 !important;
+        cursor: pointer; transition: background .15s, color .15s;
+        box-shadow: none !important; line-height: 1.2 !important;
+    }
+    .vsearch__sort-pill:hover { background: rgba(0,0,0,.04) !important; color: var(--vs-text) !important; }
+    .vsearch__sort-pill--active {
+        background: var(--vs-bg) !important; color: var(--vs-accent-strong) !important;
+        box-shadow: 0 1px 2px rgba(0,0,0,.06) !important; font-weight: 600 !important;
+    }
+
     .vsearch__ext-filters {
         display: flex; flex-wrap: wrap; gap: .35rem;
         margin-top: .4rem; padding-top: .4rem;
@@ -651,6 +733,8 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         var debounceTimer = null;
         var lastQuery = '';
         var ctrl = null;
+        var currentOffset = 0;
+        var lastTotalHits = 0;
         var currentTypeFilter = '';
         var currentTagFilters = [];
         var currentSort = 'relevance';
@@ -738,6 +822,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 currentSort = state.sort || 'relevance';
                 currentExtGroups = Array.isArray(state.ext) ? state.ext : [];
                 if (sortSelect) sortSelect.value = currentSort;
+                syncSortPills(currentSort);
                 toggleClearBtn();
                 runSearch(state.q);
             } finally {
@@ -759,6 +844,8 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 shell.hidden = false;
                 document.body.style.overflow = 'hidden';
                 setTimeout(function () { input.focus(); }, 60);
+                // Initial-State: zeige Recent Searches sofort, OHNE auf Tippen zu warten
+                if (!input.value) showInitialState();
             }
             function closeModal() {
                 shell.hidden = true;
@@ -773,6 +860,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 currentSort = 'relevance';
                 currentExtGroups = [];
                 if (sortSelect) sortSelect.value = 'relevance';
+                syncSortPills('relevance');
                 toggleClearBtn();
                 updateHash();
             }
@@ -823,10 +911,13 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             debounceTimer = setTimeout(function () { runSearch(q); }, 220);
         });
 
-        function runSearch(q) {
+        function runSearch(q, opts) {
+            opts = opts || {};
+            var append = opts.append === true;
+            if (!append) currentOffset = 0;
             if (ctrl) ctrl.abort();
             ctrl = new AbortController();
-            var url = apiUrl + '?q=' + encodeURIComponent(q) + '&locale=' + encodeURIComponent(locale) + '&limit=' + limit;
+            var url = apiUrl + '?q=' + encodeURIComponent(q) + '&locale=' + encodeURIComponent(locale) + '&limit=' + limit + '&offset=' + currentOffset;
             if (currentTypeFilter) url += '&type=' + encodeURIComponent(currentTypeFilter);
             currentTagFilters.forEach(function (slug) { url += '&tags[]=' + encodeURIComponent(slug); });
             if (currentSort && currentSort !== 'relevance') url += '&sort=' + encodeURIComponent(currentSort);
@@ -840,13 +931,24 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
 
             updateHash();
             resultsBox.hidden = false;
-            renderSkeleton();
+            if (bodyBox) bodyBox.hidden = false;
+            // Bei erstem Suchlauf: Skeleton. Bei Folge-Suchen: bestehende
+            // Treffer nur dimmen — verhindert Flackern, vermittelt Stabilität.
+            if (!append && (resultsList.children.length === 0 || resultsList.querySelector('.vsearch__empty, .vsearch__skel-card, .vsearch__empty-initial'))) {
+                renderSkeleton();
+            } else if (!append) {
+                resultsList.classList.add('vs-is-loading');
+            }
 
             fetch(url, { signal: ctrl.signal, headers: { 'Accept': 'application/json' } })
                 .then(function (r) { return r.json(); })
-                .then(function (data) { render(data, q); })
+                .then(function (data) {
+                    resultsList.classList.remove('vs-is-loading');
+                    render(data, q, append);
+                })
                 .catch(function (err) {
                     if (err.name === 'AbortError') return;
+                    resultsList.classList.remove('vs-is-loading');
                     resultsList.innerHTML = '<li class="vsearch__empty"><p class="vsearch__empty-title">Fehler bei der Suche</p><p class="vsearch__empty-hint">Bitte versuche es erneut.</p></li>';
                 });
         }
@@ -855,6 +957,40 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             sortSelect.addEventListener('change', function () {
                 currentSort = sortSelect.value || 'relevance';
                 if (lastQuery) runSearch(lastQuery);
+            });
+        }
+        // Mobile-Filter-Drawer
+        var filterToggle = box.querySelector('[data-vsearch-filter-toggle]');
+        var sidebar = box.querySelector('[data-vsearch-sidebar]');
+        var drawerBackdrop = null;
+        if (filterToggle && sidebar) {
+            drawerBackdrop = document.createElement('div');
+            drawerBackdrop.className = 'vsearch__drawer-backdrop';
+            sidebar.parentNode.insertBefore(drawerBackdrop, sidebar);
+            var closeBtn = document.createElement('button');
+            closeBtn.type = 'button';
+            closeBtn.className = 'vsearch__sidebar-close';
+            closeBtn.setAttribute('aria-label', 'Filter schließen');
+            closeBtn.innerHTML = '×';
+            sidebar.appendChild(closeBtn);
+            function openDrawer() { sidebar.classList.add('vs-drawer-open'); drawerBackdrop.classList.add('vs-drawer-open'); }
+            function closeDrawer() { sidebar.classList.remove('vs-drawer-open'); drawerBackdrop.classList.remove('vs-drawer-open'); }
+            filterToggle.addEventListener('click', openDrawer);
+            closeBtn.addEventListener('click', closeDrawer);
+            drawerBackdrop.addEventListener('click', closeDrawer);
+        }
+        var sortPillsBox = box.querySelector('[data-vsearch-sort-pills]');
+        if (sortPillsBox) {
+            Array.from(sortPillsBox.querySelectorAll('[data-sort]')).forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var s = btn.dataset.sort;
+                    currentSort = s || 'relevance';
+                    sortPillsBox.querySelectorAll('[data-sort]').forEach(function (b) {
+                        b.classList.toggle('vsearch__sort-pill--active', b === btn);
+                        b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+                    });
+                    if (lastQuery || currentTagFilters.length || currentTypeFilter || currentExtGroups.length) runSearch(lastQuery);
+                });
             });
         }
 
@@ -909,24 +1045,30 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             });
         }
 
-        function render(data, q) {
-            resultsList.innerHTML = '';
+        function render(data, q, append) {
+            if (!append) resultsList.innerHTML = '';
+            // Vorhandene „Mehr laden"-Buttons entfernen, neuer wird ggf. unten gesetzt
+            var oldLoadMore = resultsList.parentNode.querySelector('.vsearch__loadmore');
+            if (oldLoadMore) oldLoadMore.parentNode.removeChild(oldLoadMore);
+
             lastTagFacets = data.tagFacets || [];
+            lastTotalHits = data.totalHits || 0;
 
             if (toolbar) toolbar.hidden = false;
-            if (bodyBox) bodyBox.hidden = false;
-            meta.textContent = (data.totalHits || 0) + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
+            if (bodyBox) { bodyBox.hidden = false; bodyBox.classList.remove('vs-no-sidebar'); }
+            meta.textContent = lastTotalHits + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
             // Recent: erfolgreiche Query speichern (für Empty-State im Modal)
-            if (q && (data.totalHits || 0) > 0) pushRecent(q);
+            if (!append && q && lastTotalHits > 0) pushRecent(q);
 
             if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, lastTagFacets, q);
             renderExtFilters((data.facets && data.facets.content_type) || {});
 
-            if (!data.hits || data.hits.length === 0) {
+            if (!append && (!data.hits || data.hits.length === 0)) {
                 resultsList.innerHTML = renderEmptyState(q, lastTagFacets);
                 attachEmptyTipHandlers();
                 return;
             }
+            if (append && (!data.hits || data.hits.length === 0)) return;
 
             data.hits.forEach(function (hit) {
                 var li = document.createElement('li');
@@ -1018,6 +1160,21 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 li.appendChild(a);
                 resultsList.appendChild(li);
             });
+
+            // Offset hochzählen + Mehr-laden-Button wenn noch was übrig ist
+            currentOffset += data.hits.length;
+            if (currentOffset < lastTotalHits) {
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'vsearch__loadmore';
+                btn.textContent = 'Mehr laden (' + (lastTotalHits - currentOffset) + ' weitere)';
+                btn.addEventListener('click', function () {
+                    btn.disabled = true;
+                    btn.textContent = 'Lädt …';
+                    runSearch(q, {append: true});
+                });
+                resultsList.parentNode.appendChild(btn);
+            }
         }
 
         function renderEmptyState(q, tagFacets) {
@@ -1054,6 +1211,42 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             }
             html += '</li>';
             return html;
+        }
+
+        function showInitialState() {
+            // Vor erster Query: zeige Welcome-Panel mit Recent Searches + Hinweis.
+            var recents = readRecent();
+            var html = '<li class="vsearch__empty vsearch__empty-initial">' +
+                '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
+                    '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
+                '</svg>' +
+                '<p class="vsearch__empty-title">Was suchst du?</p>' +
+                '<p class="vsearch__empty-hint">Tippe ein Suchwort ein — Treffer erscheinen sofort.</p>';
+            if (recents.length > 0) {
+                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">Zuletzt gesucht</div><div class="vsearch__empty-tips">';
+                recents.forEach(function (r) {
+                    html += '<button type="button" class="vsearch__empty-tip" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>';
+                });
+                html += '</div></div>';
+            }
+            html += '</li>';
+            resultsList.innerHTML = html;
+            attachEmptyTipHandlers();
+            resultsBox.hidden = false;
+            if (bodyBox) {
+                bodyBox.hidden = false;
+                bodyBox.classList.add('vs-no-sidebar');
+            }
+            if (toolbar) toolbar.hidden = true;
+        }
+
+        function syncSortPills(sort) {
+            if (!sortPillsBox) return;
+            sortPillsBox.querySelectorAll('[data-sort]').forEach(function (b) {
+                var active = b.dataset.sort === sort;
+                b.classList.toggle('vsearch__sort-pill--active', active);
+                b.setAttribute('aria-pressed', active ? 'true' : 'false');
+            });
         }
 
         function attachEmptyTipHandlers() {
@@ -1094,14 +1287,6 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 var label = labels[type] || type;
                 html += '<button type="button" class="vsearch__facet' + active + '" data-vsearch-facet-type="' + escapeHtml(type) + '">' + escapeHtml(label) + ' (' + typeFacets[type] + ')</button>';
             });
-            if (Array.isArray(tagFacets) && tagFacets.length) {
-                html += '<span class="vsearch__facet-sep" aria-hidden="true"></span>';
-                tagFacets.forEach(function (t) {
-                    var active = currentTagFilters.indexOf(t.slug) !== -1 ? ' vsearch__facet--tag-active' : '';
-                    html += '<button type="button" class="vsearch__facet vsearch__facet--tag' + active + '" data-color="' + escapeHtml(t.color || 'gray') + '" data-vsearch-facet-tag="' + escapeHtml(t.slug) + '">'
-                         + escapeHtml(t.label) + ' (' + t.count + ')</button>';
-                });
-            }
             facetsBox.innerHTML = html;
             Array.from(facetsBox.querySelectorAll('[data-vsearch-facet-type]')).forEach(function (btn) {
                 btn.addEventListener('click', function () {
@@ -1110,15 +1295,34 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     runSearch(q);
                 });
             });
-            Array.from(facetsBox.querySelectorAll('[data-vsearch-facet-tag]')).forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var slug = btn.dataset.vsearchFacetTag;
-                    var idx = currentTagFilters.indexOf(slug);
-                    if (idx === -1) currentTagFilters.push(slug);
-                    else currentTagFilters.splice(idx, 1);
-                    runSearch(q);
-                });
-            });
+
+            // Tags eigenständig in Sidebar-Bereich rendern (wenn vorhanden).
+            var tagCloud = box.querySelector('[data-vsearch-tag-cloud]');
+            var tagSection = box.querySelector('[data-vsearch-sidebar-tags]');
+            if (tagCloud && tagSection) {
+                if (Array.isArray(tagFacets) && tagFacets.length) {
+                    var tagHtml = '';
+                    tagFacets.forEach(function (t) {
+                        var active = currentTagFilters.indexOf(t.slug) !== -1 ? ' vsearch__facet--tag-active' : '';
+                        tagHtml += '<button type="button" class="vsearch__facet vsearch__facet--tag' + active + '" data-color="' + escapeHtml(t.color || 'gray') + '" data-vsearch-facet-tag="' + escapeHtml(t.slug) + '">'
+                             + escapeHtml(t.label) + ' (' + t.count + ')</button>';
+                    });
+                    tagCloud.innerHTML = tagHtml;
+                    tagSection.hidden = false;
+                    Array.from(tagCloud.querySelectorAll('[data-vsearch-facet-tag]')).forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            var slug = btn.dataset.vsearchFacetTag;
+                            var idx = currentTagFilters.indexOf(slug);
+                            if (idx === -1) currentTagFilters.push(slug);
+                            else currentTagFilters.splice(idx, 1);
+                            runSearch(q);
+                        });
+                    });
+                } else {
+                    tagCloud.innerHTML = '';
+                    tagSection.hidden = true;
+                }
+            }
         }
 
         function escapeHtml(s) {
@@ -1196,6 +1400,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 currentTypeFilter = ''; currentTagFilters = [];
                 currentSort = 'relevance'; currentExtGroups = [];
                 if (sortSelect) sortSelect.value = 'relevance';
+                syncSortPills('relevance');
                 toggleClearBtn();
             }
         });

@@ -231,7 +231,10 @@ final class ReindexCatalog
             if ($isPublicOnlyMode) {
                 $sizeKb = 0;
                 $perm = ['isProtected' => false, 'allowedGroups' => []];
-                $decision = ['decision' => 'allow', 'reason' => null];
+                // WICHTIG: Key heißt 'include' (Bool), NICHT 'decision' —
+                // buildItemEntry() prüft genau das. Falscher Key = 2234 Files
+                // landen fälschlich in der "excluded"-Spalte.
+                $decision = ['include' => true, 'reason' => null];
             } else {
                 if (\count($fileRows) > 2000) {
                     $sizeKb = 0;

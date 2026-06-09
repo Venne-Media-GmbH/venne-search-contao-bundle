@@ -190,6 +190,13 @@ final class IndexableItemProcessor
         }
         $tags = array_values(array_unique($tags));
 
+        // v2.2.0: Cover-Bild für die Page erkennen — sucht das erste Bild
+        // (singleSRC) in den tl_content-Elementen der Page. Findet typische
+        // Hero-Bilder, Article-Featured-Images, eingebettete Bilder etc.
+        // Pages ohne Bild bleiben mit leerem coverUrl → Frontend zeigt das
+        // Page-Type-Icon.
+        $pageCoverUrl = $this->resolvePageCoverUrl($pageId);
+
         $doc = new SearchDocument(
             id: $docId,
             type: 'page',
@@ -202,6 +209,7 @@ final class IndexableItemProcessor
             weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
+            coverUrl: $pageCoverUrl,
             contentType: 'page',
         );
         $this->indexer->upsert($doc);
@@ -612,6 +620,71 @@ final class IndexableItemProcessor
      *      (`flyer.pdf` → `flyer.jpg`, `.png`, `.webp`) → das nehmen
      *   3) Nichts gefunden → leerer String, Frontend rendert Icon
      */
+    /**
+     * Sucht ein Cover-Bild für eine Page: erstes Bild aus den tl_content-
+     * Elementen der Page-Artikel (singleSRC = UUID, dann tl_files Lookup).
+     *
+     * Wir nehmen das ERSTE Bild (per ORDER BY sorting) — das ist typisch
+     * das Hero-/Featured-Image am Page-Anfang.
+     *
+     * Performance: 2 Queries pro Page. Bei 300 Pages = 600 Queries,
+     * gut zu vertreten.
+     */
+    private function resolvePageCoverUrl(int $pageId): string
+    {
+        try {
+            // Erstes Bild-Content-Element der Page (über alle Articles).
+            // Type 'image' ist das klassische Image-CE; 'text' kann auch ein
+            // eingebettetes singleSRC haben (über addImage=true).
+            $row = $this->db->fetchAssociative(
+                "SELECT c.singleSRC
+                 FROM tl_content c
+                 INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
+                 WHERE a.pid = ?
+                   AND c.invisible = ''
+                   AND c.type IN ('image', 'text', 'headline', 'gallery', 'hyperlink')
+                   AND c.singleSRC IS NOT NULL
+                   AND c.singleSRC <> ''
+                 ORDER BY a.sorting ASC, c.sorting ASC
+                 LIMIT 1",
+                [$pageId],
+            );
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if (!\is_array($row) || !isset($row['singleSRC'])) {
+            return '';
+        }
+
+        $uuidBin = (string) $row['singleSRC'];
+        if ($uuidBin === '' || \strlen($uuidBin) !== 16) {
+            return '';
+        }
+
+        // UUID → tl_files.path auflösen.
+        try {
+            $fileRow = $this->db->fetchAssociative(
+                'SELECT path, extension FROM tl_files WHERE uuid = ? LIMIT 1',
+                [$uuidBin],
+            );
+        } catch (\Throwable) {
+            return '';
+        }
+
+        if (!\is_array($fileRow)) {
+            return '';
+        }
+        $path = (string) ($fileRow['path'] ?? '');
+        $ext = strtolower((string) ($fileRow['extension'] ?? ''));
+        $imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
+        if ($path === '' || !\in_array($ext, $imageExts, true)) {
+            return '';
+        }
+
+        return '/' . ltrim($path, '/');
+    }
+
     private function resolveCoverUrl(string $relativePath, string $absolutePath, string $ext, string $projectDir): string
     {
         $imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];

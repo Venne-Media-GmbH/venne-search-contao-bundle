@@ -212,20 +212,21 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vsearch__input:focus { outline: 0; border-color: var(--vs-accent); box-shadow: 0 0 0 3px var(--vs-accent-soft); }
     /* v2.2.0: Clear-Button im Input — sichtbar sobald Inhalt drin ist. */
+    .vsearch__inputwrap { position: relative !important; }
     .vsearch__clear {
-        position: absolute !important; right: .65rem; top: 50%; transform: translateY(-50%);
-        width: 26px !important; height: 26px !important;
+        position: absolute !important;
+        right: .65rem !important; top: 50% !important; transform: translateY(-50%) !important;
+        width: 26px !important; height: 26px !important; min-width: 26px !important; max-width: 26px !important;
         padding: 0 !important; margin: 0 !important; border: 0 !important;
-        border-radius: 50%; background: rgba(0,0,0,.06) !important; color: rgba(0,0,0,.55) !important;
+        border-radius: 50% !important; background: rgba(0,0,0,.06) !important; color: rgba(0,0,0,.55) !important;
         cursor: pointer; display: inline-flex !important; align-items: center; justify-content: center;
-        box-shadow: none !important;
+        box-shadow: none !important; flex: none !important; float: none !important;
+        z-index: 2;
     }
     .vsearch__clear:hover { background: rgba(0,0,0,.12) !important; color: var(--vs-text) !important; }
     .vsearch__clear[hidden] { display: none !important; }
-    /* Im Modal: Input-Clear bleibt sichtbar, aber kompakter — damit beide
-       X (rund oben rechts = Modal-Close, klein im Input = Eingabe-Clear)
-       unterschiedliche Funktionen klar zeigen. */
-    .vsearch--modal .vsearch__inputwrap .vsearch__clear { right: .55rem; }
+    /* Im Modal: Input-Clear bleibt im Input — wir erzwingen die rechte Position. */
+    .vsearch--modal .vsearch__inputwrap .vsearch__clear { right: .65rem !important; }
 
     /* Toolbar */
     .vsearch__toolbar { padding: .5rem 0 1rem; border-bottom: 1px solid var(--vs-border); margin-bottom: 1.1rem; }

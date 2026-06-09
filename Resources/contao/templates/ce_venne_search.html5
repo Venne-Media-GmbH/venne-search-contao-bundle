@@ -7,10 +7,10 @@
  */
 $isModal = ($this->displayMode ?? 'inline') === 'modal';
 ?>
-<!-- venne-search-bundle template v0.23 — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^2.2 -->
+<!-- venne-search-bundle template v2.2.0-dev — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^2.2 -->
 <div class="vsearch mod_venne_search vsearch--<?= $isModal ? 'modal' : 'inline' ?><?= $this->cssID && $this->cssID[1] ? ' '.$this->cssID[1] : '' ?>"<?= $this->cssID && $this->cssID[0] ? ' id="'.$this->cssID[0].'"' : '' ?>
      data-vsearch
-     data-vsearch-version="0.23"
+     data-vsearch-version="2.2.0-dev"
      data-mode="<?= $isModal ? 'modal' : 'inline' ?>"
      data-api-url="<?= $this->apiUrl ?>"
      data-locale="<?= $this->locale ?>"
@@ -249,7 +249,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vsearch__list a {
         color: inherit; text-decoration: none;
         display: flex; gap: 1rem; padding: .95rem 1.1rem;
-        align-items: flex-start;
+        align-items: stretch;
     }
 
     /* Visual (Cover oder Icon) */
@@ -266,8 +266,57 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     .vs-icon--odt { background: #e0e7ff; color: #4338ca; }
     .vs-icon--rtf { background: #f3e8ff; color: #7e22ce; }
     .vs-icon--txt, .vs-icon--md { background: #f3f4f6; color: #374151; }
-    .vs-icon--cover { background: #f3f4f6; padding: 0; overflow: hidden; }
-    .vs-cover-img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: inherit; }
+    /* GROßES Placeholder-Icon im Cover-Format wenn kein cover_url vorhanden.
+       Sichtbarer "wir konnten kein Bild finden"-Ersatz statt 56px-Briefmarke. */
+    .vs-icon--big {
+        width: 120px !important;
+        height: auto !important;
+        min-height: 120px !important;
+        border-radius: 14px !important;
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        align-self: stretch !important;
+    }
+    .vs-icon--crawled.vs-icon--big {
+        background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
+        color: #5b21b6;
+    }
+    .vs-icon--page.vs-icon--big {
+        background: linear-gradient(135deg, var(--vs-accent-soft) 0%, rgba(74,128,135,.18) 100%);
+        color: var(--vs-accent-strong);
+    }
+    @media (max-width: 600px) {
+        .vs-icon--big { width: 90px !important; min-height: 90px !important; border-radius: 12px !important; }
+    }
+    /* Cover-Visual: GROSS, anschaulich, füllt die Karte vom oberen bis unteren
+       Rand. Fixe Breite, height auto + min-height sorgt für Stretch über die
+       komplette Treffer-Karte. !important wegen FFA/Contao-Theme-Overrides. */
+    .vs-icon--cover {
+        background: #f3f4f6 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        width: 120px !important;
+        height: auto !important;
+        min-height: 120px !important;
+        flex-shrink: 0 !important;
+        flex-grow: 0 !important;
+        border: 0 !important;
+        border-radius: 14px !important;
+        align-self: stretch !important;
+    }
+    .vs-cover-img {
+        width: 100% !important;
+        height: 100% !important;
+        min-height: 120px !important;
+        object-fit: cover !important;
+        object-position: center !important;
+        display: block !important;
+        border-radius: inherit !important;
+    }
+    @media (max-width: 600px) {
+        .vs-icon--cover { width: 90px !important; min-height: 90px !important; border-radius: 12px !important; }
+        .vs-cover-img { min-height: 90px !important; }
+    }
 
     /* Body */
     .vs-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .25rem; }
@@ -305,6 +354,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         border: 1px solid var(--vs-border);
     }
     .vs-badge--page { background: var(--vs-accent-soft); color: var(--vs-accent-strong); border-color: transparent; }
+    .vs-badge--crawled { background: #ede9fe; color: #5b21b6; border-color: transparent; }
     .vs-badge--pdf { background: #fee2e2; color: #b91c1c; border-color: transparent; }
     .vs-badge--docx, .vs-badge--doc { background: #dbeafe; color: #1d4ed8; border-color: transparent; }
     .vs-badge--xlsx, .vs-badge--xls { background: #d1fae5; color: #047857; border-color: transparent; }
@@ -461,7 +511,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         ];
 
         var TYPE_LABELS = {
-            page: 'Seite', file: 'Datei', article: 'Artikel',
+            page: 'Seite', file: 'Datei', article: 'Artikel', crawled: 'Webseite',
             pdf: 'PDF', docx: 'DOCX', doc: 'DOC',
             xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT',
             odt: 'ODT', rtf: 'RTF', txt: 'TXT', md: 'MD'
@@ -692,15 +742,26 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             resultsList.innerHTML = html;
         }
 
-        function renderExtFilters() {
+        function renderExtFilters(contentTypeFacets) {
             if (!extFiltersBox || !showFiletypeFilter) return;
             var visible = currentTypeFilter === '' || currentTypeFilter === 'file';
-            extFiltersBox.hidden = !visible;
-            if (!visible) { extFiltersBox.innerHTML = ''; return; }
+            // Counts pro Extension aus facets.content_type (Server liefert {pdf:3, docx:1, ...}).
+            var counts = contentTypeFacets || {};
+            // Nur Pills für Gruppen, deren Extensions mind. 1 Treffer haben.
+            // Aktive Filter bleiben sichtbar auch wenn Count 0, sonst kann der User sie nicht mehr ausschalten.
+            var available = FILETYPE_GROUPS.map(function (grp) {
+                var sum = 0;
+                grp.exts.forEach(function (e) { sum += (counts[e] || 0); });
+                return {grp: grp, count: sum, active: currentExtGroups.indexOf(grp.key) !== -1};
+            }).filter(function (x) { return x.count > 0 || x.active; });
+
+            extFiltersBox.hidden = !visible || available.length === 0;
+            if (extFiltersBox.hidden) { extFiltersBox.innerHTML = ''; return; }
             var html = '<span class="vsearch__sort-label" style="margin-right:.4rem;">Dateityp</span>';
-            FILETYPE_GROUPS.forEach(function (grp) {
-                var active = currentExtGroups.indexOf(grp.key) !== -1 ? ' vsearch__ext-filter--active' : '';
-                html += '<button type="button" class="vsearch__ext-filter' + active + '" data-vsearch-ext-group="' + escapeHtml(grp.key) + '">' + escapeHtml(grp.label) + '</button>';
+            available.forEach(function (x) {
+                var activeCls = x.active ? ' vsearch__ext-filter--active' : '';
+                var countSuffix = x.count > 0 ? ' (' + x.count + ')' : '';
+                html += '<button type="button" class="vsearch__ext-filter' + activeCls + '" data-vsearch-ext-group="' + escapeHtml(x.grp.key) + '">' + escapeHtml(x.grp.label) + countSuffix + '</button>';
             });
             extFiltersBox.innerHTML = html;
             Array.from(extFiltersBox.querySelectorAll('[data-vsearch-ext-group]')).forEach(function (btn) {
@@ -722,7 +783,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             meta.textContent = (data.totalHits || 0) + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
 
             if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, lastTagFacets, q);
-            renderExtFilters();
+            renderExtFilters((data.facets && data.facets.content_type) || {});
 
             if (!data.hits || data.hits.length === 0) {
                 resultsList.innerHTML = renderEmptyState(q, lastTagFacets);
@@ -748,21 +809,28 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     var m = String(hit.url || '').match(/\.([a-z0-9]+)(?:[?#]|$)/i);
                     ext = m ? m[1].toLowerCase() : '';
                 }
-                var iconHtml = hit.type === 'file' ? iconFile(ext) : iconPage();
-                var iconClass = 'vs-icon';
+                var iconHtml = hit.type === 'file' ? iconFile(ext) : (hit.type === 'crawled' ? iconCrawled() : iconPage());
+                var iconClass = 'vs-icon vs-icon--big';
                 if (hit.type === 'file') iconClass += ' vs-icon--file vs-icon--' + (ext || 'generic');
+                else if (hit.type === 'crawled') iconClass += ' vs-icon--crawled';
+                else iconClass += ' vs-icon--page';
 
-                // Cover ODER Icon
+                // Cover ODER großes Icon-Placeholder
                 var visualHtml;
                 if (hit.coverUrl) {
-                    var coverAlt = hit.altText || hit.title || 'Vorschaubild';
+                    var titleNoTags = (hit.title || '').replace(/<[^>]+>/g, '');
+                    var coverAlt = hit.altText || titleNoTags || 'Vorschaubild';
+                    // Bei Bildfehler: Cover-Container in Icon-Placeholder umwandeln statt entfernen
+                    var fallbackHtml = encodeURIComponent('<span class="' + iconClass + '" data-fallback="1">' + iconHtml + '</span>');
                     visualHtml = '<span class="vs-icon vs-icon--cover">' +
                         '<img class="vs-cover-img" src="' + escapeHtml(hit.coverUrl) + '" alt="' + escapeHtml(coverAlt) + '" loading="lazy" ' +
-                        'onerror="var p=this.parentNode;p.parentNode.removeChild(p);">' +
+                        'onerror="var p=this.parentNode;p.outerHTML=decodeURIComponent(\'' + fallbackHtml + '\');">' +
                     '</span>';
                 } else {
                     visualHtml = '<span class="' + iconClass + '">' + iconHtml + '</span>';
                 }
+                /* iconClass enthält jetzt immer vs-icon--big damit das Placeholder
+                   genauso groß wie ein Cover wirkt (120×120) — nie wieder Mini-Globus. */
 
                 // Tags (kompakt, neben Titel)
                 var tagsHtml = '';
@@ -782,7 +850,10 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     : '';
 
                 // Meta-Zeile
-                var typeKey = hit.type === 'file' ? (ext || 'file') : 'page';
+                var typeKey;
+                if (hit.type === 'file') typeKey = ext || 'file';
+                else if (hit.type === 'crawled') typeKey = 'crawled';
+                else typeKey = 'page';
                 var typeLabel = TYPE_LABELS[typeKey] || typeKey.toUpperCase();
                 var metaParts = ['<span class="vs-badge vs-badge--' + escapeHtml(typeKey) + '">' + escapeHtml(typeLabel) + '</span>'];
                 if (hit.publishedAt && hit.publishedAt > 0) {
@@ -859,7 +930,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         }
 
         function renderFacets(typeFacets, tagFacets, q) {
-            var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel' };
+            var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel', crawled: 'Websiteinhalte' };
             var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">Alle</button>';
             Object.keys(typeFacets).forEach(function (type) {
                 var active = currentTypeFilter === type ? ' vsearch__facet--active' : '';
@@ -931,6 +1002,13 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>' +
                 '<polyline points="14 2 14 8 20 8"/>' +
                 '<text x="12" y="17" text-anchor="middle" stroke="none" fill="currentColor" font-size="' + fontSize + '" font-weight="700" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif" letter-spacing="0.3">' + label + '</text>' +
+            '</svg>';
+        }
+        function iconCrawled() {
+            // Globus-Icon für externe Webseiten-Inhalte
+            return '<svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+                '<circle cx="12" cy="12" r="9"/>' +
+                '<path d="M3 12h18M12 3a14 14 0 0 1 4 9 14 14 0 0 1-4 9 14 14 0 0 1-4-9 14 14 0 0 1 4-9z"/>' +
             '</svg>';
         }
         function iconPage() {

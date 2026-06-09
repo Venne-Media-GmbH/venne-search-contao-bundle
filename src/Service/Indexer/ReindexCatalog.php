@@ -13,6 +13,12 @@ use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
 
 /**
+ * Callback-Typ: (string $stage, array $context) → void
+ * Damit kann der ReindexPlanController Progress-Updates in sein eigenes Log
+ * mitschneiden, ohne dass ReindexCatalog selbst Filesystem-IO macht.
+ */
+
+/**
  * Baut die komplette Reindex-Vorschau in einem einzigen Aufruf.
  *
  * Sammelt:
@@ -50,8 +56,15 @@ final class ReindexCatalog
      *   orphans: list<string>
      * }
      */
-    public function buildPlan(SettingsConfig $config): array
+    /**
+     * @param SettingsConfig $config
+     * @param callable|null  $progress Optional: (string $stage, array $ctx) => void
+     */
+    public function buildPlan(SettingsConfig $config, ?callable $progress = null): array
     {
+        $log = $progress ?? static function (): void {};
+        $log('plan_start', ['memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
         $locale = $config->enabledLocales[0] ?? 'de';
         $mode = $config->indexMode;
 
@@ -89,6 +102,8 @@ final class ReindexCatalog
         // pro Pfad enthalten. Wir nehmen pro Pfad die Row mit der niedrigsten
         // id — funktioniert auf allen MySQL/MariaDB-Versionen, ohne ANY_VALUE
         // (das gibt es erst in MySQL 5.7+ / MariaDB 10.5+).
+        $log('pages_loaded', ['count' => \count($pageRows), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
         $fileRows = $this->db->fetchAllAssociative(
             "SELECT f.id, f.uuid, f.path, f.extension
              FROM tl_files f
@@ -100,6 +115,7 @@ final class ReindexCatalog
              ) AS unique_files ON unique_files.min_id = f.id
              ORDER BY f.path ASC"
         );
+        $log('files_loaded', ['count' => \count($fileRows), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
 
         $projectDir = rtrim($this->kernel->getProjectDir(), '/');
 
@@ -113,13 +129,20 @@ final class ReindexCatalog
         $siteItemIds = [];
 
         $indexUid = $config->indexPrefix . '_' . $locale;
+        $log('indexed_ids_start', ['indexUid' => $indexUid]);
         $indexedIds = $this->loadIndexedIds($indexUid);
+        $log('indexed_ids_loaded', ['count' => \count($indexedIds), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
 
         // ===== PAGES =====
         // Page-Locale lookup: tl_page.language gilt nur auf Root-Pages, deshalb
         // wandern wir bei Bedarf nach oben zur Root und nehmen deren Sprache.
         $pageLocaleCache = [];
+        $log('pages_loop_start', []);
+        $pageIdx = 0;
         foreach ($pageRows as $row) {
+            if (++$pageIdx % 500 === 0) {
+                $log('pages_loop_progress', ['done' => $pageIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+            }
             $pageId = (int) $row['id'];
             $alias = (string) ($row['alias'] ?? '');
             $title = (string) ($row['title'] ?? '');
@@ -159,7 +182,13 @@ final class ReindexCatalog
             $fileRows = [];
         }
 
+        $log('pages_loop_done', ['count' => $pageIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+        $log('files_loop_start', []);
+        $fileIdx = 0;
         foreach ($fileRows as $row) {
+            if (++$fileIdx % 500 === 0) {
+                $log('files_loop_progress', ['done' => $fileIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+            }
             $ext = strtolower((string) ($row['extension'] ?? ''));
             if (!\in_array($ext, self::INDEXABLE_FILE_EXTENSIONS, true)) {
                 continue;
@@ -202,12 +231,20 @@ final class ReindexCatalog
             );
         }
 
+        $log('files_loop_done', ['count' => $fileIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
         $orphans = [];
         foreach ($indexedIds as $indexedId => $_) {
             if (!isset($siteItemIds[$indexedId])) {
                 $orphans[] = $indexedId;
             }
         }
+
+        $log('plan_done', [
+            'items' => \count($items), 'orphans' => \count($orphans),
+            'new' => $newCount, 'existing' => $existingCount, 'excluded' => $excludedCount,
+            'memMb' => (int) (memory_get_usage(true) / 1024 / 1024),
+        ]);
 
         return [
             'stats' => [

@@ -190,7 +190,13 @@ final class ReindexPlanController extends AbstractController
 
             $planStart = microtime(true);
             try {
-                $plan = $this->catalog->buildPlan($config);
+                // Progress-Callback: jede Stufe im buildPlan landet im
+                // bundle-eigenen Log mit reqId und Memory-Verbrauch — so
+                // siehst du SOFORT wo's klemmt wenn der Request hängt.
+                $self = $this;
+                $plan = $this->catalog->buildPlan($config, static function (string $stage, array $ctx) use ($self, $reqId): void {
+                    $self->diagLog('info', 'plan:' . $stage, array_merge(['reqId' => $reqId], $ctx));
+                });
                 $this->diagLog('info', 'plan_built', [
                     'reqId' => $reqId,
                     'durationMs' => (int) ((microtime(true) - $planStart) * 1000),

@@ -201,13 +201,15 @@ final class ReindexCatalog
         $fileIdx = 0;
         $filesLoopStart = microtime(true);
         foreach ($fileRows as $row) {
-            if (++$fileIdx % 500 === 0) {
+            if (++$fileIdx % 100 === 0) {
                 $log('files_loop_progress', [
                     'done' => $fileIdx,
                     'total' => \count($fileRows),
                     'elapsedMs' => (int) ((microtime(true) - $filesLoopStart) * 1000),
                     'memMb' => (int) (memory_get_usage(true) / 1024 / 1024),
                 ]);
+                // Time-Limit immer wieder verlängern damit FPM nicht killt
+                @set_time_limit(120);
             }
             $ext = strtolower((string) ($row['extension'] ?? ''));
             if (!\in_array($ext, self::INDEXABLE_FILE_EXTENSIONS, true)) {
@@ -220,9 +222,18 @@ final class ReindexCatalog
                 : 'file-path-' . md5($relativePath);
             $siteItemIds[$docId] = true;
 
-            $absolute = $projectDir . '/' . ltrim($relativePath, '/');
-            $bytes = @filesize($absolute);
-            $sizeKb = $bytes === false ? 0 : (int) round($bytes / 1024);
+            // filesize() macht einen stat()-Syscall pro File. Bei großen Sites
+            // mit Network-Storage (Plesk-Vhost, NFS) ist das pro Datei 10-30ms.
+            // Bei >2000 Files überspringen wir filesize — Größe ist nur für die
+            // UI-Anzeige, der Indexer holt sie sich beim eigentlichen Indexieren
+            // selbst noch mal.
+            if (\count($fileRows) > 2000) {
+                $sizeKb = 0;
+            } else {
+                $absolute = $projectDir . '/' . ltrim($relativePath, '/');
+                $bytes = @filesize($absolute);
+                $sizeKb = $bytes === false ? 0 : (int) round($bytes / 1024);
+            }
 
             // public_only-Modus: ACL-Lookup skippen (spart pro File einen
             // LIKE-Scan auf tl_content). Im with_protected-Modus brauchen

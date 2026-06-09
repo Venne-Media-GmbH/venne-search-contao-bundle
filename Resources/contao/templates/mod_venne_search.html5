@@ -211,11 +211,16 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         transition: border-color .15s, box-shadow .15s;
     }
     .vsearch__input:focus { outline: 0; border-color: var(--vs-accent); box-shadow: 0 0 0 3px var(--vs-accent-soft); }
-    /* v2.2.0: Clear-Button im Input — sichtbar sobald Inhalt drin ist. */
+    /* v2.2.0: Clear-Button im Input — sichtbar sobald Inhalt drin ist.
+       Selektor mit doppelter Klassen-Specificity, damit FFA-Theme nicht
+       in den absolute-Layout rein-grätscht (button[type=reset] oder
+       .vsearch button waren Auslöser für "X fliegt außerhalb"). */
     .vsearch__inputwrap { position: relative !important; }
-    .vsearch__clear {
+    .vsearch .vsearch__inputwrap .vsearch__clear {
         position: absolute !important;
-        right: .65rem !important; top: 50% !important; transform: translateY(-50%) !important;
+        right: .7rem !important; left: auto !important;
+        top: 50% !important; bottom: auto !important;
+        transform: translateY(-50%) !important;
         width: 26px !important; height: 26px !important; min-width: 26px !important; max-width: 26px !important;
         padding: 0 !important; margin: 0 !important; border: 0 !important;
         border-radius: 50% !important; background: rgba(0,0,0,.06) !important; color: rgba(0,0,0,.55) !important;
@@ -223,10 +228,8 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         box-shadow: none !important; flex: none !important; float: none !important;
         z-index: 2;
     }
-    .vsearch__clear:hover { background: rgba(0,0,0,.12) !important; color: var(--vs-text) !important; }
-    .vsearch__clear[hidden] { display: none !important; }
-    /* Im Modal: Input-Clear bleibt im Input — wir erzwingen die rechte Position. */
-    .vsearch--modal .vsearch__inputwrap .vsearch__clear { right: .65rem !important; }
+    .vsearch .vsearch__inputwrap .vsearch__clear:hover { background: rgba(0,0,0,.12) !important; color: var(--vs-text) !important; }
+    .vsearch .vsearch__inputwrap .vsearch__clear[hidden] { display: none !important; }
 
     /* Toolbar */
     .vsearch__toolbar { padding: .5rem 0 1rem; border-bottom: 1px solid var(--vs-border); margin-bottom: 1.1rem; }

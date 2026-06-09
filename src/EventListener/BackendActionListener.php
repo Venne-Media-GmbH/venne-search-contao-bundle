@@ -1465,15 +1465,19 @@ final class BackendActionListener
     public static function cleanVersion(string $version): string
     {
         $v = $version;
-        if (str_starts_with($v, 'dev-')) {
-            $branch = substr($v, 4);
-            // Branchen wie "dev-v2.2.0" → "2.2.0-dev"
-            if (str_starts_with($branch, 'v')) {
-                return substr($branch, 1) . '-dev';
-            }
-            // Sonst: "main-dev", "feature/foo-dev"
-            return $branch . '-dev';
+        // Composer kann mehrfach "dev-" prefixen ("dev-dev-v2.2.0" für Branch dev-v2.2.0).
+        // Wir ziehen alle führenden "dev-" weg, dann ein optionales "v".
+        while (str_starts_with($v, 'dev-')) {
+            $v = substr($v, 4);
         }
-        return ltrim($v, 'v') ?: 'unknown';
+        $v = ltrim($v, 'v');
+        if ($v === '') {
+            return 'unknown';
+        }
+        // Wenn ursprünglich dev-Branch (jetzt ohne führende dev-/v-Prefixe), Suffix anhängen
+        if (str_starts_with($version, 'dev-')) {
+            return $v . '-dev';
+        }
+        return $v;
     }
 }

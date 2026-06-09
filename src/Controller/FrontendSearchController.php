@@ -314,7 +314,6 @@ final class FrontendSearchController extends AbstractController
         $response->setPrivate();
         $response->setMaxAge(30);
         $response->setVary(['Cookie'], false);
-
         return $response;
     }
 

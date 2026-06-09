@@ -7,7 +7,7 @@
  */
 $isModal = ($this->displayMode ?? 'inline') === 'modal';
 ?>
-<!-- venne-search-bundle template v0.23 — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^2.2 -->
+<!-- venne-search-bundle template v2.2.0-dev — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^2.2 -->
 <div class="vsearch mod_venne_search vsearch--<?= $isModal ? 'modal' : 'inline' ?><?= $this->cssID && $this->cssID[1] ? ' '.$this->cssID[1] : '' ?>"<?= $this->cssID && $this->cssID[0] ? ' id="'.$this->cssID[0].'"' : '' ?>
      data-vsearch
      data-vsearch-version="0.23"

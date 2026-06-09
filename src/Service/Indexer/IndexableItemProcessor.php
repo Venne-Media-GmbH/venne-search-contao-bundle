@@ -621,48 +621,87 @@ final class IndexableItemProcessor
      *   3) Nichts gefunden → leerer String, Frontend rendert Icon
      */
     /**
-     * Sucht ein Cover-Bild für eine Page: erstes Bild aus den tl_content-
-     * Elementen der Page-Artikel (singleSRC = UUID, dann tl_files Lookup).
+     * Sucht ein Cover-Bild für eine Page:
+     *   1. Erstes Standard-tl_content.singleSRC (image, text, gallery, …)
+     *   2. Erste UUID in rsce_data (RockSolid Custom Elements, JSON-Feld)
+     *   3. Erste UUID in irgendeinem CE der Page als binary singleSRC
      *
-     * Wir nehmen das ERSTE Bild (per ORDER BY sorting) — das ist typisch
-     * das Hero-/Featured-Image am Page-Anfang.
-     *
-     * Performance: 2 Queries pro Page. Bei 300 Pages = 600 Queries,
-     * gut zu vertreten.
+     * Wir nehmen das ERSTE Bild (per ORDER BY a.sorting + c.sorting),
+     * das ist typisch das Hero-/Featured-Image am Page-Anfang.
      */
     private function resolvePageCoverUrl(int $pageId): string
     {
+        // 1. Standard-Pfad: tl_content mit singleSRC (binary 16-byte UUID).
         try {
-            // Erstes Bild-Content-Element der Page (über alle Articles).
-            // Type 'image' ist das klassische Image-CE; 'text' kann auch ein
-            // eingebettetes singleSRC haben (über addImage=true).
             $row = $this->db->fetchAssociative(
                 "SELECT c.singleSRC
                  FROM tl_content c
                  INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
                  WHERE a.pid = ?
                    AND c.invisible = ''
-                   AND c.type IN ('image', 'text', 'headline', 'gallery', 'hyperlink')
+                   AND c.type IN ('image', 'text', 'headline', 'gallery', 'hyperlink', 'accordionSingle')
                    AND c.singleSRC IS NOT NULL
                    AND c.singleSRC <> ''
                  ORDER BY a.sorting ASC, c.sorting ASC
                  LIMIT 1",
                 [$pageId],
             );
+            if (\is_array($row) && isset($row['singleSRC'])) {
+                $url = $this->lookupFileByUuidBin((string) $row['singleSRC']);
+                if ($url !== '') {
+                    return $url;
+                }
+            }
         } catch (\Throwable) {
-            return '';
         }
 
-        if (!\is_array($row) || !isset($row['singleSRC'])) {
-            return '';
+        // 2. RSCE-Pfad: rsce_data ist JSON. Bilder sind als UUID-Hyphen-Strings
+        // (z.B. "de167b52-574c-11e3-aeda-f5cf2c70ab0a") in beliebig benannten
+        // Feldern. Wir scannen alle rsce_data-Einträge der Page und nehmen
+        // die ERSTE UUID die zu einem existierenden Bild gehört.
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                "SELECT c.rsce_data
+                 FROM tl_content c
+                 INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
+                 WHERE a.pid = ?
+                   AND c.invisible = ''
+                   AND c.rsce_data IS NOT NULL
+                   AND c.rsce_data <> ''
+                 ORDER BY a.sorting ASC, c.sorting ASC",
+                [$pageId],
+            );
+            foreach ($rows as $r) {
+                $raw = (string) ($r['rsce_data'] ?? '');
+                if ($raw === '' || !preg_match_all('/\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i', $raw, $matches)) {
+                    continue;
+                }
+                foreach ($matches[1] as $uuidHex) {
+                    // Hex (mit Bindestrichen) zu binary konvertieren
+                    $uuidBin = @hex2bin(str_replace('-', '', $uuidHex));
+                    if ($uuidBin === false || \strlen($uuidBin) !== 16) {
+                        continue;
+                    }
+                    $url = $this->lookupFileByUuidBin($uuidBin);
+                    if ($url !== '') {
+                        return $url;
+                    }
+                }
+            }
+        } catch (\Throwable) {
         }
 
-        $uuidBin = (string) $row['singleSRC'];
-        if ($uuidBin === '' || \strlen($uuidBin) !== 16) {
+        return '';
+    }
+
+    /**
+     * Auflösung: 16-byte-UUID → /path/to/file (nur Bilder).
+     */
+    private function lookupFileByUuidBin(string $uuidBin): string
+    {
+        if (\strlen($uuidBin) !== 16) {
             return '';
         }
-
-        // UUID → tl_files.path auflösen.
         try {
             $fileRow = $this->db->fetchAssociative(
                 'SELECT path, extension FROM tl_files WHERE uuid = ? LIMIT 1',
@@ -671,7 +710,6 @@ final class IndexableItemProcessor
         } catch (\Throwable) {
             return '';
         }
-
         if (!\is_array($fileRow)) {
             return '';
         }
@@ -681,7 +719,6 @@ final class IndexableItemProcessor
         if ($path === '' || !\in_array($ext, $imageExts, true)) {
             return '';
         }
-
         return '/' . ltrim($path, '/');
     }
 

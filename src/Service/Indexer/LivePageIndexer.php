@@ -529,9 +529,8 @@ final class LivePageIndexer
     }
 
     /**
-     * Erstes Image-Content-Element der Page als Cover-Bild.
      * Identisch zu IndexableItemProcessor::resolvePageCoverUrl — siehe dort
-     * für die Begründung der Query-Strategie.
+     * für die Begründung. Unterstützt Standard-singleSRC UND RSCE-JSON-UUIDs.
      */
     private function resolvePageCoverUrl(int $pageId): string
     {
@@ -542,23 +541,49 @@ final class LivePageIndexer
                  INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
                  WHERE a.pid = ?
                    AND c.invisible = ''
-                   AND c.type IN ('image', 'text', 'headline', 'gallery', 'hyperlink')
+                   AND c.type IN ('image', 'text', 'headline', 'gallery', 'hyperlink', 'accordionSingle')
                    AND c.singleSRC IS NOT NULL
                    AND c.singleSRC <> ''
                  ORDER BY a.sorting ASC, c.sorting ASC
                  LIMIT 1",
                 [$pageId],
             );
+            if (\is_array($row) && isset($row['singleSRC'])) {
+                $url = $this->lookupFileByUuidBin((string) $row['singleSRC']);
+                if ($url !== '') return $url;
+            }
         } catch (\Throwable) {
-            return '';
         }
-        if (!\is_array($row) || !isset($row['singleSRC'])) {
-            return '';
+        // RSCE: UUID-Strings in JSON-Feld rsce_data.
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                "SELECT c.rsce_data
+                 FROM tl_content c
+                 INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
+                 WHERE a.pid = ? AND c.invisible = '' AND c.rsce_data IS NOT NULL AND c.rsce_data <> ''
+                 ORDER BY a.sorting ASC, c.sorting ASC",
+                [$pageId],
+            );
+            foreach ($rows as $r) {
+                $raw = (string) ($r['rsce_data'] ?? '');
+                if ($raw === '' || !preg_match_all('/\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i', $raw, $matches)) {
+                    continue;
+                }
+                foreach ($matches[1] as $uuidHex) {
+                    $uuidBin = @hex2bin(str_replace('-', '', $uuidHex));
+                    if ($uuidBin === false || \strlen($uuidBin) !== 16) continue;
+                    $url = $this->lookupFileByUuidBin($uuidBin);
+                    if ($url !== '') return $url;
+                }
+            }
+        } catch (\Throwable) {
         }
-        $uuidBin = (string) $row['singleSRC'];
-        if ($uuidBin === '' || \strlen($uuidBin) !== 16) {
-            return '';
-        }
+        return '';
+    }
+
+    private function lookupFileByUuidBin(string $uuidBin): string
+    {
+        if (\strlen($uuidBin) !== 16) return '';
         try {
             $fileRow = $this->db->fetchAssociative(
                 'SELECT path, extension FROM tl_files WHERE uuid = ? LIMIT 1',
@@ -567,15 +592,11 @@ final class LivePageIndexer
         } catch (\Throwable) {
             return '';
         }
-        if (!\is_array($fileRow)) {
-            return '';
-        }
+        if (!\is_array($fileRow)) return '';
         $path = (string) ($fileRow['path'] ?? '');
         $ext = strtolower((string) ($fileRow['extension'] ?? ''));
         $imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
-        if ($path === '' || !\in_array($ext, $imageExts, true)) {
-            return '';
-        }
+        if ($path === '' || !\in_array($ext, $imageExts, true)) return '';
         return '/' . ltrim($path, '/');
     }
 }

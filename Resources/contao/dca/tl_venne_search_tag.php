@@ -52,7 +52,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
         ],
     ],
     'palettes' => [
-        'default' => '{title_legend},label,color,boost;{description_legend:hide},description;{assignments_legend},assignments_panel',
+        'default' => '{title_legend},label,color,boost;{auto_match_legend},auto_match_pattern;{description_legend:hide},description;{assignments_legend},assignments_panel',
     ],
     'fields' => [
         'id' => [
@@ -236,6 +236,16 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
                     return $normalized;
                 },
             ],
+        ],
+        'auto_match_pattern' => [
+            // Glob-Patterns (eines pro Zeile) — jede URL eines Treffers, die
+            // matched, bekommt diesen Tag automatisch in der Such-Antwort.
+            // Funktioniert für Contao-Pages, Files und externe gecrawlte URLs.
+            // Beispiel: *pressemitteilungen-detailseite* → Tag "Pressemitteilung"
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_pattern'],
+            'inputType' => 'textarea',
+            'eval' => ['tl_class' => 'clr long', 'rows' => 4, 'decodeEntities' => true],
+            'sql' => 'text NULL',
         ],
         'description' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['description'],

@@ -23,6 +23,64 @@ final class TagRepository
     }
 
     /**
+     * Tags die ein auto_match_pattern haben — werden im SearchService gegen
+     * jede Treffer-URL gematcht und automatisch zugewiesen. Spart Backfill
+     * und funktioniert für gecrawlte externe URLs genauso wie für interne.
+     *
+     * @return list<array{slug:string, label:string, color:string, boost:float, patterns:list<string>}>
+     */
+    public function findAutoMatchTags(): array
+    {
+        if (!$this->tablesExist()) {
+            return [];
+        }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.auto_match_pattern
+                 FROM ' . self::TAG_TABLE . ' t
+                 WHERE t.auto_match_pattern IS NOT NULL AND t.auto_match_pattern <> \'\'',
+            );
+        } catch (\Throwable) {
+            // Spalte existiert noch nicht (Migration noch nicht gelaufen) — kein Auto-Match.
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $raw = (string) ($r['auto_match_pattern'] ?? '');
+            $patterns = [];
+            foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $line) {
+                $line = trim((string) $line);
+                if ($line !== '') {
+                    $patterns[] = $line;
+                }
+            }
+            if ($patterns === []) {
+                continue;
+            }
+            $out[] = [
+                'slug' => (string) $r['slug'],
+                'label' => (string) $r['label'],
+                'color' => (string) $r['color'],
+                'boost' => (float) $r['boost'],
+                'patterns' => $patterns,
+            ];
+        }
+
+        return $out;
+    }
+
+    private function autoMatchColumnAvailable(): bool
+    {
+        try {
+            $cols = $this->db->createSchemaManager()->listTableColumns(self::TAG_TABLE);
+            return isset($cols['auto_match_pattern']);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
      * @return list<array{id:int, slug:string, label:string, color:string, boost:float, description:?string, count:int}>
      */
     public function findAllWithCounts(): array

@@ -199,13 +199,45 @@ final class FrontendSearchController extends AbstractController
                 ];
             }
         }
+        // Auto-Match-Tags: pro Tag URL-Glob-Patterns. Jeder Hit der
+        // matcht, kriegt den Tag dazu — ohne Indexer-Eingriff.
+        $autoMatchTags = $tags->findAutoMatchTags();
+        // Counts für Auto-Tags zur Facet-Liste hinzufügen (nur wenn min. 1 Hit matcht).
+        $autoMatchHitCounts = [];
+        foreach ($result->hits as $h) {
+            foreach ($autoMatchTags as $am) {
+                foreach ($am['patterns'] as $pattern) {
+                    if (self::globMatch($pattern, (string) $h->url)) {
+                        $autoMatchHitCounts[$am['slug']] = ($autoMatchHitCounts[$am['slug']] ?? 0) + 1;
+                        break 2;
+                    }
+                }
+            }
+        }
+        foreach ($autoMatchTags as $am) {
+            $count = $autoMatchHitCounts[$am['slug']] ?? 0;
+            if ($count === 0) {
+                continue;
+            }
+            $existing = $tagFacetByTag[$am['slug']] ?? null;
+            if ($existing === null || $existing['count'] < $count) {
+                $tagFacetByTag[$am['slug']] = [
+                    'slug' => $am['slug'],
+                    'label' => $am['label'],
+                    'color' => $am['color'],
+                    'boost' => $am['boost'],
+                    'count' => $count,
+                ];
+            }
+        }
+
         // Sortiert: häufigste Tags zuerst.
         $tagFacetList = array_values($tagFacetByTag);
         usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
 
         $response = new JsonResponse([
             'hits' => array_map(
-                static function ($h) use ($bySlug, $byLabelLower, $extensions): array {
+                static function ($h) use ($bySlug, $byLabelLower, $extensions, $autoMatchTags): array {
                     $resolvedById = [];
                     foreach ($h->tags as $raw) {
                         if ($raw === '' || \in_array(strtolower($raw), $extensions, true)) {
@@ -228,6 +260,20 @@ final class FrontendSearchController extends AbstractController
                         $rawSlug = preg_replace('/[^a-z0-9]+/', '-', $low) ?? $low;
                         $rawSlug = trim((string) $rawSlug, '-');
                         $resolvedById['raw:' . $low] = ['slug' => $rawSlug !== '' ? $rawSlug : $raw, 'label' => $raw, 'color' => 'gray', 'boost' => 1.0];
+                    }
+                    // Auto-Match-Tags: URL gegen Patterns prüfen, passende dazu.
+                    foreach ($autoMatchTags as $am) {
+                        foreach ($am['patterns'] as $pattern) {
+                            if (self::globMatch($pattern, (string) $h->url)) {
+                                $resolvedById[$am['slug']] = [
+                                    'slug' => $am['slug'],
+                                    'label' => $am['label'],
+                                    'color' => $am['color'],
+                                    'boost' => $am['boost'],
+                                ];
+                                break;
+                            }
+                        }
                     }
                     return [
                         'id' => $h->id,
@@ -270,6 +316,23 @@ final class FrontendSearchController extends AbstractController
         $response->setVary(['Cookie'], false);
 
         return $response;
+    }
+
+    /**
+     * Glob-Match (Wildcard * = beliebig viele Zeichen, ? = ein Zeichen).
+     * Case-insensitive, ohne Regex-Magie. Genutzt für Auto-Tag-Patterns.
+     */
+    public static function globMatch(string $pattern, string $url): bool
+    {
+        if ($pattern === '' || $url === '') {
+            return false;
+        }
+        $regex = '#' . str_replace(
+            ['\\*', '\\?'],
+            ['.*', '.'],
+            preg_quote($pattern, '#'),
+        ) . '#i';
+        return (bool) @preg_match($regex, $url);
     }
 
     /**

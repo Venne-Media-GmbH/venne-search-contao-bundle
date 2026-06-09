@@ -5,6 +5,8 @@ declare(strict_types=1);
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['title_legend'] = 'Tag';
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['description_legend'] = 'Beschreibung';
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['assignments_legend'] = 'Zugewiesene Seiten und Dateien';
+$GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_legend'] = 'Automatisch zuweisen über URL';
+$GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_pattern'] = ['URL-Pattern (Glob, optional)', 'Ein Pattern pro Zeile. Jeder Such-Treffer, dessen URL auf eines davon passt, bekommt den Tag automatisch — ohne manuelle Zuweisung. <code>*</code> = beliebige Zeichen. Beispiel: <code>*pressemitteilungen-detailseite*</code> → alle Pressemitteilungen erhalten den Tag.'];
 
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['label'] = ['Bezeichnung', 'Was Besucher als Tag-Chip neben Treffern sehen.'];
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['color'] = ['Farbe', 'Wird in Such-Treffern als Chip-Farbe verwendet.'];

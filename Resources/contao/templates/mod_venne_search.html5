@@ -791,6 +791,9 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         var currentSort = 'relevance';
         var currentExtGroups = [];
         var lastTagFacets = [];
+        // Snapshot der vollen Type-Facets ohne Type-Filter — bleibt sichtbar
+        // damit alle Pills auch nach Filter-Klick angezeigt werden.
+        var lastFullTypeFacets = {};
 
         // URL-State (siehe v2.1.0)
         var hashPrefix = 'vs' + (box.dataset.moduleId || '0');
@@ -1111,7 +1114,13 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             // Recent: erfolgreiche Query speichern (für Empty-State im Modal)
             if (!append && q && lastTotalHits > 0) pushRecent(q);
 
-            if (facetsBox && data.facets && data.facets.type) renderFacets(data.facets.type, lastTagFacets, q);
+            // Wenn KEIN Type-Filter aktiv → vollständige Facet-Verteilung übernehmen.
+            // Mit Type-Filter würde Meilisearch nur die gefilterten Counts liefern,
+            // andere Pills würden verschwinden.
+            if (data.facets && data.facets.type && currentTypeFilter === '') {
+                lastFullTypeFacets = data.facets.type;
+            }
+            if (facetsBox) renderFacets(lastFullTypeFacets, lastTagFacets, q);
             renderExtFilters((data.facets && data.facets.content_type) || {});
 
             if (!append && (!data.hits || data.hits.length === 0)) {
@@ -1331,6 +1340,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         }
 
         function renderFacets(typeFacets, tagFacets, q) {
+            typeFacets = typeFacets || {};
             var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel', crawled: 'Websiteinhalte' };
             var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">Alle</button>';
             Object.keys(typeFacets).forEach(function (type) {

@@ -159,36 +159,50 @@ final class PdfThumbnailGenerator
         // Stdin nicht benötigt — sofort schließen.
         fclose($pipes[0]);
 
-        // Stdout + Stderr non-blocking lesen mit Timeout.
-        stream_set_blocking($pipes[1], false);
-        stream_set_blocking($pipes[2], false);
-
-        $deadline = microtime(true) + self::GS_TIMEOUT_SECONDS;
+        // Stdout direkt verwerfen, stderr aggressiv puffern.
+        // Pipes BLOCKING lassen + komplette Streams lesen — sonst race condition:
+        // Wenn stderr-Buffer voll wird und wir nicht lesen, blockiert GS.
+        // stream_get_contents() liest bis EOF und blockiert bis GS exit.
         $stderrBuf = '';
-        while (microtime(true) < $deadline) {
-            $status = proc_get_status($process);
-            $stderrBuf .= (string) stream_get_contents($pipes[2]);
-            // Stdout nicht puffern — gs schreibt da eh nix Relevantes.
-            stream_get_contents($pipes[1]);
-            if (!$status['running']) {
-                break;
+        $stdoutDone = false;
+        $stderrDone = false;
+        $startedAt = microtime(true);
+        while (!($stdoutDone && $stderrDone)) {
+            if (microtime(true) - $startedAt > self::GS_TIMEOUT_SECONDS) {
+                @proc_terminate($process, 9);
+                @unlink($tmpOut);
+                @fclose($pipes[1]);
+                @fclose($pipes[2]);
+                proc_close($process);
+                $this->logger->warning('venne_search.thumbnail.gs_timeout', ['pdf' => $absolutePdf]);
+                return false;
             }
-            usleep(50_000); // 50ms
+            $read = [$pipes[1], $pipes[2]];
+            $w = null; $e = null;
+            $n = @stream_select($read, $w, $e, 1, 0);
+            if ($n === false || $n === 0) {
+                // Kein Daten-Event, aber schau ob GS schon weg ist
+                $status = proc_get_status($process);
+                if (!$status['running']) {
+                    // Restliche Pipes leer-saugen
+                    $stderrBuf .= (string) stream_get_contents($pipes[2]);
+                    stream_get_contents($pipes[1]);
+                    break;
+                }
+                continue;
+            }
+            foreach ($read as $stream) {
+                $chunk = fread($stream, 8192);
+                if ($chunk === '' || $chunk === false) {
+                    if ($stream === $pipes[1]) $stdoutDone = true;
+                    if ($stream === $pipes[2]) $stderrDone = true;
+                } elseif ($stream === $pipes[2]) {
+                    $stderrBuf .= $chunk;
+                }
+            }
         }
-        $status = proc_get_status($process);
-        if ($status['running']) {
-            // Über Timeout — kill.
-            @proc_terminate($process, 9);
-            @unlink($tmpOut);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            proc_close($process);
-            $this->logger->warning('venne_search.thumbnail.gs_timeout', ['pdf' => $absolutePdf]);
-            return false;
-        }
-
-        fclose($pipes[1]);
-        fclose($pipes[2]);
+        @fclose($pipes[1]);
+        @fclose($pipes[2]);
         $exitCode = proc_close($process);
 
         if ($exitCode !== 0 || !is_file($tmpOut) || filesize($tmpOut) === 0) {

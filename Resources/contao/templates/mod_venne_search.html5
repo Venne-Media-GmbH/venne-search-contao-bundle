@@ -218,6 +218,9 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vsearch__clear:hover { background: rgba(0,0,0,.12) !important; color: var(--vs-text) !important; }
     .vsearch__clear[hidden] { display: none !important; }
+    /* Im Modal ist der runde Close-Button oben rechts der primäre Reset —
+       Input-Clear wäre Doppel-X direkt daneben. */
+    .vsearch--modal .vsearch__clear { display: none !important; }
 
     /* Toolbar */
     .vsearch__toolbar { padding: .5rem 0 1rem; border-bottom: 1px solid var(--vs-border); margin-bottom: 1.1rem; }
@@ -670,17 +673,56 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
 
     /* === Mobile-Breakpoints === */
     @media (max-width: 600px) {
-        .vsearch__input { font-size: 1rem; padding: .75rem 2.4rem .75rem 2.6rem; }
-        .vsearch__shell--modal { padding: 4vh .5rem 1rem; }
-        .vsearch__shell--modal .vsearch__panel { padding: 1rem .9rem .8rem; border-radius: 10px; }
-        .vsearch__list a { padding: .8rem .85rem; gap: .75rem; }
-        .vs-icon { width: 44px; height: 44px; }
+        /* Modal-Shell: Vollbild auf Mobile statt Fenster mit Rand */
+        .vsearch__shell--modal { padding: 0; align-items: stretch; }
+        .vsearch__shell--modal .vsearch__panel {
+            max-width: 100%; width: 100%; height: 100%;
+            border-radius: 0;
+            padding: 1rem 1rem .75rem;
+            display: flex; flex-direction: column;
+            box-shadow: none;
+        }
+        /* Modal-Close größer + immer top-rechts */
+        .vsearch__close { top: .5rem !important; right: .5rem !important; width: 40px !important; height: 40px !important; }
+        .vsearch__shell--modal .vsearch__form { padding-right: 3rem; margin-bottom: .65rem; }
+        /* Suchfeld größer (Mobile Daumen-freundlich) */
+        .vsearch__input { font-size: 1rem; padding: .9rem 1rem .9rem 2.8rem; }
+        .vsearch__inputicon { left: 1rem; }
+
+        /* Toolbar als 2-Reihen-Layout: Treffer-Count + Filter-Button oben, Sort-Pills horizontal scrollbar */
+        .vsearch__toolbar { padding: .35rem 0 .7rem; margin-bottom: .7rem; }
+        .vsearch__toolbar-row { gap: .5rem; flex-wrap: wrap; }
+        .vsearch__sort-pills {
+            order: 3; width: 100%;
+            overflow-x: auto; flex-wrap: nowrap;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .vsearch__sort-pills::-webkit-scrollbar { display: none; }
+        .vsearch__sort-pill { flex-shrink: 0; padding: .45rem 1rem !important; font-size: .82rem !important; }
+
+        /* Body: einspaltig, Sidebar wird zum Drawer (siehe @820px-Regel) */
+        .vsearch__body { gap: .8rem; }
+        .vsearch__results { max-height: calc(100vh - 200px); flex: 1; }
+
+        /* Treffer-Karten kompakter */
+        .vsearch__list a { padding: .9rem .85rem; gap: .85rem; }
+        .vsearch--modal .vsearch__list a { padding: 1rem .5rem; gap: .9rem; }
+        .vs-icon--cover { width: 80px !important; min-height: 80px !important; }
+        .vs-icon--big { width: 80px !important; min-height: 80px !important; }
+        .vsearch--modal .vs-icon--cover, .vsearch--modal .vs-icon--big { width: 90px !important; min-height: 90px !important; }
         .vs-title { font-size: .95rem; white-space: normal; }
+        .vsearch--modal .vs-title { font-size: 1rem !important; }
         .vs-snippet { font-size: .85rem; -webkit-line-clamp: 3; }
+        .vsearch--modal .vs-snippet { -webkit-line-clamp: 2; font-size: .85rem; }
         .vs-meta { font-size: .72rem; }
-        .vs-url { display: none; }
-        .vsearch__toolbar-row { gap: .5rem; }
-        .vsearch__sort-label { display: none; }
+        .vsearch--modal .vs-url { font-size: .75rem; }
+
+        /* Filter-Toggle größer und prominent */
+        .vsearch__filter-toggle { padding: .55rem 1rem !important; font-size: .9rem !important; }
+
+        /* Initial-State zentriert mit etwas Luft */
+        .vsearch__empty-initial { padding: 3rem 1rem; }
     }
 </style>
 

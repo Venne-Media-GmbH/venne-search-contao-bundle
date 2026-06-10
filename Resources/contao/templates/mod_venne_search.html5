@@ -811,11 +811,16 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         var currentSort = 'relevance';
         var currentExtGroups = [];
         var lastTagFacets = [];
-        // Snapshot der vollen Type-Facets ohne Type-Filter — bleibt sichtbar
-        // damit alle Pills auch nach Filter-Klick angezeigt werden.
+        // Snapshot-Strategie fuer Sidebar-Pills:
+        // - lastFullTypeFacets: Type-Counts ohne irgendwelche Filter (Tag oder Type).
+        //   Wird genutzt wenn auch der Tag-Filter inaktiv ist.
+        // - lastTagFilteredTypeFacets: Type-Counts mit aktivem Tag-Filter,
+        //   aber OHNE Type-Filter. Wird genutzt wenn der User einen Type-Filter
+        //   ueber einem Tag-Filter setzt — die anderen Pills muessen sichtbar
+        //   bleiben, aber mit Counts die zum Tag-Filter passen.
+        // - lastFullTagFacets: Tag-Counts ohne Type-Filter.
         var lastFullTypeFacets = {};
-        // Selbes Spiel fuer Tag-Facets: bei aktivem Type-Filter sind die Tag-Counts
-        // verzerrt (oder leer), wir wollen aber die Tag-Pills sichtbar halten.
+        var lastTagFilteredTypeFacets = {};
         var lastFullTagFacets = [];
         // Cache für "Initial-State"-Tag-Cloud: einmal pro Modal-Session laden
         // damit das leere Such-Panel direkt populäre Tags zum Anklicken anbietet.
@@ -1141,25 +1146,39 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             // Recent: erfolgreiche Query speichern (für Empty-State im Modal)
             if (!append && q && lastTotalHits > 0) pushRecent(q);
 
-            // Cache-Strategie fuer Type- und Tag-Facets:
-            // - Ohne aktive Filter cachen wir die volle Verteilung — beim Klick auf
-            //   einen Type-Filter bleiben alle Pills sichtbar.
-            // - Sobald ein Tag-Filter aktiv ist, sind Type-Counts nicht mehr
-            //   austauschbar (Server berechnet sie post-gefiltert). Dann zeigen
-            //   wir die FRISCHEN Counts der aktuellen API-Antwort statt Cache,
-            //   sonst luegt die Sidebar (zB 'Dateien (10)' bei 0 Treffern).
-            if (data.facets && data.facets.type && currentTypeFilter === '' && currentTagFilters.length === 0) {
-                lastFullTypeFacets = data.facets.type;
+            // Cache-Strategie fuer Sidebar-Pills (Type & Tag):
+            //  1) Ohne Filter cachen wir die VOLLE Type-Verteilung als Universal-Snapshot.
+            //  2) Mit Tag-Filter aber ohne Type-Filter cachen wir die Type-Verteilung
+            //     getrennt — diese „tag-gefilterten" Counts brauchen wir, wenn der
+            //     User zusaetzlich einen Type-Filter setzt: andere Type-Pills muessen
+            //     dann sichtbar bleiben, aber mit korrekten Counts zum aktiven Tag.
+            //  3) Tag-Facets cachen wir ohne Type-Filter, damit bei Type-Filter-Klick
+            //     der Tag-Bereich nicht verschwindet.
+            if (data.facets && data.facets.type && currentTypeFilter === '') {
+                if (currentTagFilters.length === 0) {
+                    lastFullTypeFacets = data.facets.type;
+                } else {
+                    lastTagFilteredTypeFacets = data.facets.type;
+                }
             }
-            if (Array.isArray(data.tagFacets) && data.tagFacets.length && currentTypeFilter === '' && currentTagFilters.length === 0) {
+            if (Array.isArray(data.tagFacets) && data.tagFacets.length && currentTypeFilter === '') {
                 lastFullTagFacets = data.tagFacets;
             }
-            var typeFacetsForSidebar = currentTagFilters.length > 0
-                ? (data.facets && data.facets.type ? data.facets.type : {})
-                : lastFullTypeFacets;
-            var tagFacetsForSidebar = currentTagFilters.length > 0
-                ? (Array.isArray(data.tagFacets) && data.tagFacets.length ? data.tagFacets : lastFullTagFacets)
-                : (lastFullTagFacets.length ? lastFullTagFacets : lastTagFacets);
+            // Render-Auswahl:
+            // - Type-Pills: Tag aktiv → tag-gefilterter Snapshot, sonst Universal.
+            // - Tag-Pills: voller Tag-Snapshot wenn vorhanden, sonst Live-Daten.
+            var typeFacetsForSidebar;
+            if (currentTagFilters.length > 0) {
+                // Bei aktivem Type+Tag: cached tag-gefiltert (ohne type), sonst fresh.
+                typeFacetsForSidebar = (currentTypeFilter !== '' && Object.keys(lastTagFilteredTypeFacets).length > 0)
+                    ? lastTagFilteredTypeFacets
+                    : (data.facets && data.facets.type ? data.facets.type : lastTagFilteredTypeFacets);
+            } else {
+                typeFacetsForSidebar = lastFullTypeFacets;
+            }
+            var tagFacetsForSidebar = lastFullTagFacets.length
+                ? lastFullTagFacets
+                : (Array.isArray(data.tagFacets) && data.tagFacets.length ? data.tagFacets : lastTagFacets);
             if (facetsBox) renderFacets(typeFacetsForSidebar, tagFacetsForSidebar, q);
             renderExtFilters((data.facets && data.facets.content_type) || {});
 

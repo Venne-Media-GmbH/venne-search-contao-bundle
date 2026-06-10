@@ -678,43 +678,41 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vsearch__sort-select:focus { outline: 2px solid var(--vs-accent); outline-offset: 1px; }
 
-    /* Sort-Pills (Segmented-Control mit Icons + Glow) */
+    /* Sort-Pills — minimalistisch, Underline-Indikator wie Apple/Linear */
     .vsearch__sort-pills {
-        display: inline-flex; gap: 2px; align-items: center;
-        padding: 4px;
-        background: linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.02));
-        border: 1px solid rgba(0,0,0,.08); border-radius: 999px;
-        box-shadow: inset 0 1px 2px rgba(0,0,0,.05);
+        display: inline-flex; align-items: center; gap: .15rem;
+        padding: 0; background: transparent !important;
+        border: 0 !important; border-radius: 0 !important;
+        box-shadow: none !important;
     }
     .vsearch__sort-pill {
         position: relative;
-        display: inline-flex !important; align-items: center; gap: .4rem;
-        padding: .45rem .95rem !important; border: 0 !important;
-        background: transparent !important; color: var(--vs-text-muted) !important;
-        border-radius: 999px !important; font-size: .82rem !important; font-weight: 500 !important;
+        display: inline-flex !important; align-items: center; gap: .35rem;
+        padding: .35rem .7rem !important; border: 0 !important;
+        background: transparent !important; color: #6b7280 !important;
+        border-radius: 6px !important; font-size: .8rem !important; font-weight: 500 !important;
         cursor: pointer;
-        transition: background .2s ease, color .2s ease, transform .15s ease, box-shadow .25s ease;
+        transition: color .15s ease, background .15s ease;
         box-shadow: none !important; line-height: 1.2 !important;
         white-space: nowrap;
     }
     .vsearch__sort-pill .vsearch__sort-icon {
-        flex-shrink: 0; opacity: .65; transition: opacity .2s ease, transform .25s ease;
+        flex-shrink: 0; opacity: .55;
     }
-    .vsearch__sort-pill:hover {
-        background: rgba(0,0,0,.04) !important; color: var(--vs-text) !important;
-    }
-    .vsearch__sort-pill:hover .vsearch__sort-icon { opacity: 1; }
-    .vsearch__sort-pill:active { transform: scale(.96); }
+    .vsearch__sort-pill:hover { color: var(--vs-text) !important; background: rgba(0,0,0,.03) !important; }
+    .vsearch__sort-pill:hover .vsearch__sort-icon { opacity: .85; }
     .vsearch__sort-pill--active {
-        background: linear-gradient(180deg, var(--vs-accent) 0%, var(--vs-accent-strong) 100%) !important;
-        color: #fff !important;
-        box-shadow:
-            0 2px 6px -1px rgba(74,128,135,.45),
-            0 0 0 1px rgba(74,128,135,.15),
-            inset 0 1px 0 rgba(255,255,255,.18) !important;
+        color: var(--vs-accent-strong) !important;
+        background: transparent !important;
         font-weight: 600 !important;
     }
-    .vsearch__sort-pill--active .vsearch__sort-icon { opacity: 1; transform: scale(1.05); }
+    .vsearch__sort-pill--active .vsearch__sort-icon { opacity: 1; color: var(--vs-accent-strong); }
+    .vsearch__sort-pill--active::after {
+        content: ""; position: absolute;
+        left: .7rem; right: .7rem; bottom: -2px;
+        height: 2px; border-radius: 2px;
+        background: var(--vs-accent-strong);
+    }
     .vsearch__sort-pill:focus-visible {
         outline: 2px solid var(--vs-accent); outline-offset: 2px;
     }

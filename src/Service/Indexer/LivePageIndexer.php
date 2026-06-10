@@ -102,10 +102,16 @@ final class LivePageIndexer
             return;
         }
 
+        // Title/Pagetitle/Article/Content alles durch den Insert-Tag-Stripper
+        // jagen — sonst landen rohe „{{file::...}}"/„{{link::42}}"-Tags im
+        // Index und werden im Frontend als haesslicher Text gerendert.
+        $rawTitle = (string) ($pageRow['pageTitle'] ?: ($pageRow['title'] ?? ''));
+        $cleanTitle = $this->stripInsertTags($rawTitle);
+
         $contentParts = [
-            (string) ($pageRow['pageTitle'] ?: ($pageRow['title'] ?? '')),
-            (string) ($pageRow['description'] ?? ''),
-            (string) ($pageRow['keywords'] ?? ''),
+            $cleanTitle,
+            $this->stripInsertTags((string) ($pageRow['description'] ?? '')),
+            $this->stripInsertTags((string) ($pageRow['keywords'] ?? '')),
         ];
 
         $articles = $this->db->fetchAllAssociative(
@@ -114,15 +120,15 @@ final class LivePageIndexer
         );
 
         foreach ($articles as $article) {
-            $contentParts[] = (string) ($article['title'] ?? '');
-            $contentParts[] = (string) ($article['teaser'] ?? '');
+            $contentParts[] = $this->stripInsertTags((string) ($article['title'] ?? ''));
+            $contentParts[] = $this->stripInsertTags((string) ($article['teaser'] ?? ''));
             $elements = $this->db->fetchAllAssociative(
                 "SELECT headline, text FROM tl_content WHERE pid = ? AND ptable = 'tl_article' AND invisible = '' ORDER BY sorting",
                 [(int) $article['id']]
             );
             foreach ($elements as $el) {
-                $contentParts[] = $this->extractHeadlineText((string) ($el['headline'] ?? ''));
-                $contentParts[] = strip_tags((string) ($el['text'] ?? ''));
+                $contentParts[] = $this->stripInsertTags($this->extractHeadlineText((string) ($el['headline'] ?? '')));
+                $contentParts[] = $this->stripInsertTags(strip_tags((string) ($el['text'] ?? '')));
             }
         }
 
@@ -157,7 +163,7 @@ final class LivePageIndexer
             id: 'page-'.$pageId,
             type: 'page',
             locale: (string) ($pageRow['language'] ?: 'de'),
-            title: (string) ($pageRow['pageTitle'] ?: ($pageRow['title'] ?? '')),
+            title: $cleanTitle !== '' ? $cleanTitle : (string) ($pageRow['title'] ?? ''),
             url: $url,
             content: $normalizedContent,
             tags: $tags,
@@ -361,6 +367,29 @@ final class LivePageIndexer
     {
         $cleaned = preg_replace('/[-_]+/', ' ', $filename) ?? $filename;
         return ucwords(mb_strtolower(trim($cleaned)));
+    }
+
+    /**
+     * Entfernt Contao-Insert-Tags wie {{file::...}}, {{link::42}}, {{date::...}} etc.
+     * aus Indexier-Inputs. Wir loesen sie NICHT auf — beim Indexieren gibt es
+     * keinen Request-Kontext (kein FrontendUser, kein Page-Model im Scope),
+     * und Tags wie {{file::scripte/foo.php}} liefern eh nichts Sinnvolles
+     * fuer den Volltext-Index. Doppel-geschachtelte Tags werden iterativ entfernt.
+     */
+    private function stripInsertTags(string $input): string
+    {
+        if ($input === '' || strpos($input, '{{') === false) {
+            return $input;
+        }
+        $prev = '';
+        $current = $input;
+        // Iterativ, weil Insert-Tags geschachtelt sein koennen.
+        // Limit auf 5 Runden — sollte fuer alle realen Faelle reichen.
+        for ($i = 0; $i < 5 && $prev !== $current; $i++) {
+            $prev = $current;
+            $current = preg_replace('/\{\{[^{}]+\}\}/', '', $current) ?? $current;
+        }
+        return trim(preg_replace('/\s+/', ' ', $current) ?? $current);
     }
 
     /**

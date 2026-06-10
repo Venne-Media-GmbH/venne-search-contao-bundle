@@ -1387,7 +1387,12 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     input.value = '';
                     lastQuery = '';
                     toggleClearBtn();
-                    // Tag-only-Browse — leere Query, Filter aktiv
+                    // Tag-only-Browse: ohne Volltext-Query gibt es keinen Score,
+                    // also direkt chronologisch sortieren (Neueste oben). User
+                    // kann das per Sort-Pill bei Bedarf umschalten.
+                    currentSort = 'date_desc';
+                    if (sortSelect) sortSelect.value = 'date_desc';
+                    syncSortPills('date_desc');
                     runSearch('');
                 });
             });
@@ -1446,6 +1451,14 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                             var idx = currentTagFilters.indexOf(slug);
                             if (idx === -1) currentTagFilters.push(slug);
                             else currentTagFilters.splice(idx, 1);
+                            // Wenn jetzt keine Volltext-Query mehr aktiv ist, auf
+                            // chronologisch umstellen — ohne Score wuerde Meilisearch
+                            // sonst eine willkuerliche Reihenfolge liefern.
+                            if (!q || q.trim() === '') {
+                                currentSort = 'date_desc';
+                                if (sortSelect) sortSelect.value = 'date_desc';
+                                syncSortPills('date_desc');
+                            }
                             runSearch(q);
                         });
                     });

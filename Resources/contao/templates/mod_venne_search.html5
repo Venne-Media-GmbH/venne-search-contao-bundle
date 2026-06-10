@@ -34,12 +34,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     <div class="vsearch__shell<?= $isModal ? ' vsearch__shell--modal' : '' ?>"<?= $isModal ? ' data-vsearch-shell hidden' : '' ?>>
         <div class="vsearch__panel">
             <?php if ($isModal): ?>
-                <button type="button" class="vsearch__close" data-vsearch-close aria-label="Schließen">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true">
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                    </svg>
-                </button>
+                <button type="button" class="vsearch__close" data-vsearch-close aria-label="Schließen"></button>
             <?php endif; ?>
 
             <?php if ($this->headline && !$isModal): ?>
@@ -192,9 +187,15 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         flex: none !important;
     }
     .vsearch__close:hover { background: rgba(0,0,0,.12) !important; color: rgba(0,0,0,.85) !important; }
-    .vsearch__close svg { display: none !important; }
-    .vsearch__close::before { content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px; background: currentColor; transform: translate(-50%, -50%) rotate(45deg); }
-    .vsearch__close::after { content: "" !important; position: absolute; left: 50%; top: 50%; width: 16px; height: 2px; background: currentColor; transform: translate(-50%, -50%) rotate(-45deg); }
+    .vsearch__close::before,
+    .vsearch__close::after {
+        content: "" !important; position: absolute !important;
+        left: 50% !important; top: 50% !important;
+        width: 14px !important; height: 2px !important;
+        background: currentColor !important; border-radius: 2px !important;
+    }
+    .vsearch__close::before { transform: translate(-50%, -50%) rotate(45deg) !important; }
+    .vsearch__close::after  { transform: translate(-50%, -50%) rotate(-45deg) !important; }
     .vsearch__shell--modal .vsearch__form { padding-right: 2.8rem; }
 
     /* Suchfeld */
@@ -612,6 +613,17 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         cursor: pointer; transition: all .12s;
     }
     .vsearch__empty-tip:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
+    /* Tag-Variante im Initial-State — übernimmt Farbpalette der Tag-Chips,
+       damit der User „Beliebte Tags" sofort als Tag-Vorschläge erkennt. */
+    .vsearch__empty-tip--tag                  { background: #dbeafe; color: #1e40af; border-color: transparent; }
+    .vsearch__empty-tip--tag[data-color="green"]  { background: #d1fae5; color: #065f46; }
+    .vsearch__empty-tip--tag[data-color="red"]    { background: #fee2e2; color: #991b1b; }
+    .vsearch__empty-tip--tag[data-color="orange"] { background: #fed7aa; color: #9a3412; }
+    .vsearch__empty-tip--tag[data-color="purple"] { background: #e9d5ff; color: #6b21a8; }
+    .vsearch__empty-tip--tag[data-color="pink"]   { background: #fce7f3; color: #9d174d; }
+    .vsearch__empty-tip--tag[data-color="gray"]   { background: #e5e7eb; color: #374151; }
+    .vsearch__empty-tip--tag[data-color="teal"]   { background: #ccfbf1; color: #115e59; }
+    .vsearch__empty-tip--tag:hover { filter: brightness(.95); border-color: transparent; }
 
     /* Skeleton-Loading */
     .vsearch__skeleton { list-style: none !important; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .6rem; }
@@ -794,6 +806,10 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         // Snapshot der vollen Type-Facets ohne Type-Filter — bleibt sichtbar
         // damit alle Pills auch nach Filter-Klick angezeigt werden.
         var lastFullTypeFacets = {};
+        // Cache für "Initial-State"-Tag-Cloud: einmal pro Modal-Session laden
+        // damit das leere Such-Panel direkt populäre Tags zum Anklicken anbietet.
+        var initialTagFacets = null;
+        var initialTagFacetsLoading = false;
 
         // URL-State (siehe v2.1.0)
         var hashPrefix = 'vs' + (box.dataset.moduleId || '0');
@@ -1274,8 +1290,10 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         }
 
         function showInitialState() {
-            // Vor erster Query: zeige Welcome-Panel mit Recent Searches + Hinweis.
+            // Vor erster Query: zeige Welcome-Panel mit Recent Searches + populären Tags.
+            // Tags werden lazy einmalig per leerem Search-Call geholt (siehe loadInitialTagFacets).
             var recents = readRecent();
+            var tags = Array.isArray(initialTagFacets) ? initialTagFacets : [];
             var html = '<li class="vsearch__empty vsearch__empty-initial">' +
                 '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
                     '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
@@ -1289,6 +1307,15 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 });
                 html += '</div></div>';
             }
+            if (tags.length > 0) {
+                var topTags = tags.slice(0, 8);
+                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">Beliebte Tags</div><div class="vsearch__empty-tips">';
+                topTags.forEach(function (t) {
+                    html += '<button type="button" class="vsearch__empty-tip vsearch__empty-tip--tag" data-color="' + escapeHtml(t.color || 'gray') + '" data-vsearch-empty-tag="' + escapeHtml(t.slug) + '">' +
+                        escapeHtml(t.label) + '</button>';
+                });
+                html += '</div></div>';
+            }
             html += '</li>';
             resultsList.innerHTML = html;
             attachEmptyTipHandlers();
@@ -1298,6 +1325,30 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 bodyBox.classList.add('vs-no-sidebar');
             }
             if (toolbar) toolbar.hidden = true;
+            // Lazy nachladen, falls Tags noch nicht vorliegen
+            if (!Array.isArray(initialTagFacets) && !initialTagFacetsLoading) {
+                loadInitialTagFacets();
+            }
+        }
+
+        function loadInitialTagFacets() {
+            initialTagFacetsLoading = true;
+            // Leere Query liefert Top-Tags via facetDistribution — minimaler Payload (limit=0)
+            var url = apiUrl + '?q=&locale=' + encodeURIComponent(locale) + '&limit=0';
+            fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    initialTagFacets = Array.isArray(data.tagFacets) ? data.tagFacets : [];
+                    initialTagFacetsLoading = false;
+                    // Nur neu rendern, wenn das Initial-Panel noch sichtbar ist (User hat
+                    // nicht zwischenzeitlich getippt). Erkennbar am .vsearch__empty-initial.
+                    if (resultsList.querySelector('.vsearch__empty-initial')) {
+                        showInitialState();
+                    }
+                })
+                .catch(function () {
+                    initialTagFacetsLoading = false;
+                });
         }
 
         function syncSortPills(sort) {

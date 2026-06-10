@@ -1141,20 +1141,26 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             // Recent: erfolgreiche Query speichern (für Empty-State im Modal)
             if (!append && q && lastTotalHits > 0) pushRecent(q);
 
-            // Wenn KEIN Type-Filter aktiv → vollständige Facet-Verteilung übernehmen.
-            // Mit Type-Filter würde Meilisearch nur die gefilterten Counts liefern,
-            // andere Pills würden verschwinden.
-            if (data.facets && data.facets.type && currentTypeFilter === '') {
+            // Cache-Strategie fuer Type- und Tag-Facets:
+            // - Ohne aktive Filter cachen wir die volle Verteilung — beim Klick auf
+            //   einen Type-Filter bleiben alle Pills sichtbar.
+            // - Sobald ein Tag-Filter aktiv ist, sind Type-Counts nicht mehr
+            //   austauschbar (Server berechnet sie post-gefiltert). Dann zeigen
+            //   wir die FRISCHEN Counts der aktuellen API-Antwort statt Cache,
+            //   sonst luegt die Sidebar (zB 'Dateien (10)' bei 0 Treffern).
+            if (data.facets && data.facets.type && currentTypeFilter === '' && currentTagFilters.length === 0) {
                 lastFullTypeFacets = data.facets.type;
             }
-            // Selbes Spiel fuer Tag-Facets: Snapshot ohne Type-Filter cachen,
-            // damit der Tag-Bereich in der Sidebar nicht verschwindet wenn der
-            // User auf einen Type-Filter klickt.
-            if (Array.isArray(data.tagFacets) && data.tagFacets.length && currentTypeFilter === '') {
+            if (Array.isArray(data.tagFacets) && data.tagFacets.length && currentTypeFilter === '' && currentTagFilters.length === 0) {
                 lastFullTagFacets = data.tagFacets;
             }
-            var tagFacetsForSidebar = lastFullTagFacets.length ? lastFullTagFacets : lastTagFacets;
-            if (facetsBox) renderFacets(lastFullTypeFacets, tagFacetsForSidebar, q);
+            var typeFacetsForSidebar = currentTagFilters.length > 0
+                ? (data.facets && data.facets.type ? data.facets.type : {})
+                : lastFullTypeFacets;
+            var tagFacetsForSidebar = currentTagFilters.length > 0
+                ? (Array.isArray(data.tagFacets) && data.tagFacets.length ? data.tagFacets : lastFullTagFacets)
+                : (lastFullTagFacets.length ? lastFullTagFacets : lastTagFacets);
+            if (facetsBox) renderFacets(typeFacetsForSidebar, tagFacetsForSidebar, q);
             renderExtFilters((data.facets && data.facets.content_type) || {});
 
             if (!append && (!data.hits || data.hits.length === 0)) {

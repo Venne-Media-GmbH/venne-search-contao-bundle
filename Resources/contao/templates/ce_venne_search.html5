@@ -814,6 +814,9 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         // Snapshot der vollen Type-Facets ohne Type-Filter — bleibt sichtbar
         // damit alle Pills auch nach Filter-Klick angezeigt werden.
         var lastFullTypeFacets = {};
+        // Selbes Spiel fuer Tag-Facets: bei aktivem Type-Filter sind die Tag-Counts
+        // verzerrt (oder leer), wir wollen aber die Tag-Pills sichtbar halten.
+        var lastFullTagFacets = [];
         // Cache für "Initial-State"-Tag-Cloud: einmal pro Modal-Session laden
         // damit das leere Such-Panel direkt populäre Tags zum Anklicken anbietet.
         var initialTagFacets = null;
@@ -1144,7 +1147,14 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             if (data.facets && data.facets.type && currentTypeFilter === '') {
                 lastFullTypeFacets = data.facets.type;
             }
-            if (facetsBox) renderFacets(lastFullTypeFacets, lastTagFacets, q);
+            // Selbes Spiel fuer Tag-Facets: Snapshot ohne Type-Filter cachen,
+            // damit der Tag-Bereich in der Sidebar nicht verschwindet wenn der
+            // User auf einen Type-Filter klickt.
+            if (Array.isArray(data.tagFacets) && data.tagFacets.length && currentTypeFilter === '') {
+                lastFullTagFacets = data.tagFacets;
+            }
+            var tagFacetsForSidebar = lastFullTagFacets.length ? lastFullTagFacets : lastTagFacets;
+            if (facetsBox) renderFacets(lastFullTypeFacets, tagFacetsForSidebar, q);
             renderExtFilters((data.facets && data.facets.content_type) || {});
 
             if (!append && (!data.hits || data.hits.length === 0)) {

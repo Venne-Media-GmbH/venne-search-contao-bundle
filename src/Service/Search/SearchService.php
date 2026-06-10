@@ -181,7 +181,7 @@ final class SearchService
                 altText: (string) ($hit['alt_text'] ?? ''),
                 coverUrl: (string) ($hit['cover_url'] ?? ''),
                 contentType: (string) ($hit['content_type'] ?? ($hit['type'] ?? '')),
-                publishedAt: (int) ($hit['published_at'] ?? 0),
+                publishedAt: self::sanitizePublishedAt((int) ($hit['published_at'] ?? 0)),
                 fileSize: (int) ($hit['file_size'] ?? 0),
             );
         }
@@ -323,6 +323,25 @@ final class SearchService
      *
      * @return list<string>
      */
+    /**
+     * Crawler-Default-Datum erkennen: Wenn ein gecrawltes Dokument kein
+     * erkennbares Inhaltsdatum hat, traegt der externe Crawler den
+     * Indexier-Zeitpunkt ein — typischerweise 31.12. eines Jahres exakt
+     * Mitternacht UTC. Solche Defaults verzerren die Sortierung nach Datum,
+     * deshalb mappen wir sie auf 0 (= "unbekannt").
+     */
+    private static function sanitizePublishedAt(int $ts): int
+    {
+        if ($ts <= 0) {
+            return 0;
+        }
+        // Pruefe gegen 31.12.YYYY 00:00:00 UTC
+        if (gmdate('m-d H:i:s', $ts) === '12-31 00:00:00') {
+            return 0;
+        }
+        return $ts;
+    }
+
     private function buildSortClause(string $sort): array
     {
         return match ($sort) {

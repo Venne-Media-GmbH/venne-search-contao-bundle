@@ -77,14 +77,13 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                             Filter
                         </button>
                     <?php endif; ?>
-                    <?php if ($this->showSort): ?>
-                        <div class="vsearch__sort-pills" role="tablist" aria-label="Sortierung" data-vsearch-sort-pills>
-                            <button type="button" class="vsearch__sort-pill vsearch__sort-pill--active" data-sort="relevance" aria-pressed="true">Relevanz</button>
-                            <button type="button" class="vsearch__sort-pill" data-sort="date_desc" aria-pressed="false">Neueste</button>
-                            <button type="button" class="vsearch__sort-pill" data-sort="date_asc" aria-pressed="false">Älteste</button>
-                            <button type="button" class="vsearch__sort-pill" data-sort="type_asc" aria-pressed="false">Art</button>
-                        </div>
-                    <?php endif; ?>
+                    <?php /* Sort-Pills immer rendern — User muss zwischen Relevanz/Neueste/Aelteste umschalten koennen. Backend-Setting wird ignoriert. */ ?>
+                    <div class="vsearch__sort-pills" role="tablist" aria-label="Sortierung" data-vsearch-sort-pills>
+                        <button type="button" class="vsearch__sort-pill vsearch__sort-pill--active" data-sort="relevance" aria-pressed="true">Relevanz</button>
+                        <button type="button" class="vsearch__sort-pill" data-sort="date_desc" aria-pressed="false">Neueste</button>
+                        <button type="button" class="vsearch__sort-pill" data-sort="date_asc" aria-pressed="false">Älteste</button>
+                        <button type="button" class="vsearch__sort-pill" data-sort="type_asc" aria-pressed="false">Art</button>
+                    </div>
                 </div>
             </div>
 
@@ -1254,7 +1253,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 else typeKey = 'page';
                 var typeLabel = TYPE_LABELS[typeKey] || typeKey.toUpperCase();
                 var metaParts = ['<span class="vs-badge vs-badge--' + escapeHtml(typeKey) + '">' + escapeHtml(typeLabel) + '</span>'];
-                if (hit.publishedAt && hit.publishedAt > 0) {
+                if (hit.publishedAt && hit.publishedAt > 0 && !isCrawlDefaultDate(hit.publishedAt)) {
                     metaParts.push('<span class="vs-meta-dot">·</span><span class="vs-date">' + escapeHtml(formatDate(hit.publishedAt)) + '</span>');
                 }
                 if (hit.fileSize && hit.fileSize > 0) {
@@ -1524,6 +1523,18 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             var dd = String(d.getDate()).padStart(2, '0');
             var mm = String(d.getMonth() + 1).padStart(2, '0');
             return dd + '.' + mm + '.' + d.getFullYear();
+        }
+        // Crawler-Default-Datum: bei Crawler-Hits ohne erkennbares Inhaltsdatum
+        // wird der Indexier-Zeitpunkt eingetragen (typisch 31.12. eines Jahres,
+        // Mitternacht UTC). Diese Daten sind keine echten Veroeffentlichungs-
+        // daten und sollten in der UI weder angezeigt noch fuer Sort genutzt
+        // werden. Heuristik: 31.12. eines beliebigen Jahres, exakt Mitternacht UTC.
+        function isCrawlDefaultDate(ts) {
+            if (!ts || ts <= 0) return true;
+            var d = new Date(ts * 1000);
+            if (isNaN(d.getTime())) return true;
+            return d.getUTCMonth() === 11 && d.getUTCDate() === 31
+                && d.getUTCHours() === 0 && d.getUTCMinutes() === 0 && d.getUTCSeconds() === 0;
         }
         function iconFile(ext) {
             var label = (ext || 'FILE').toUpperCase().substring(0, 4);

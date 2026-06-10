@@ -131,12 +131,27 @@ final class FrontendSearchController extends AbstractController
             $filters['type'] = $type;
         }
         // v2.0.0: ?tags[]=spongebob&tags[]=krabbenburger
+        // Tags trennen wir auf in zwei Klassen:
+        //   - „echte" Tags (im Index als tags[] vorhanden) → harter Meili-Filter
+        //   - Auto-Match-Tags (URL-Pattern, im Index NICHT taggable) → werden
+        //     hier ausgeklammert und unten via globMatch nach-gefiltert.
         $tagsParam = $request->query->all('tags');
+        $autoMatchTagsAll = $tags->findAutoMatchTags();
+        $autoMatchBySlug = [];
+        foreach ($autoMatchTagsAll as $am) {
+            $autoMatchBySlug[$am['slug']] = $am;
+        }
+        $autoMatchFilterTags = [];
         if (\is_array($tagsParam)) {
             $cleanTags = [];
             foreach ($tagsParam as $t) {
                 $clean = preg_replace('/[^a-z0-9-]/', '', (string) $t) ?? '';
-                if ($clean !== '' && \strlen($clean) <= 64) {
+                if ($clean === '' || \strlen($clean) > 64) {
+                    continue;
+                }
+                if (isset($autoMatchBySlug[$clean])) {
+                    $autoMatchFilterTags[] = $autoMatchBySlug[$clean];
+                } else {
                     $cleanTags[] = $clean;
                 }
             }
@@ -171,13 +186,18 @@ final class FrontendSearchController extends AbstractController
 
         $userGroups = $this->resolveCurrentUserGroups();
 
+        // Wenn Auto-Match-Tag-Filter gesetzt sind, holen wir bis zu 200 Treffer
+        // und filtern danach in PHP per globMatch. Sonst nur das angefragte Limit.
+        $serviceLimit = $autoMatchFilterTags !== [] ? max($limit, 200) : $limit;
+        $serviceOffset = $autoMatchFilterTags !== [] ? 0 : $offset;
+
         try {
             $result = $service->search(
                 query: $query,
                 locale: $locale,
                 filters: $filters,
-                limit: $limit,
-                offset: $offset,
+                limit: $serviceLimit,
+                offset: $serviceOffset,
                 userGroups: $userGroups,
                 locales: $locales,
                 sort: $sort,
@@ -195,6 +215,43 @@ final class FrontendSearchController extends AbstractController
         } catch (\Throwable $e) {
             // Letzter Fallback für Meilisearch- oder unerwartete Fehler.
             return $this->errorResponse(500, 'search_failed', 'Unerwarteter Fehler bei der Suche.');
+        }
+
+        // Auto-Match-Tag-Post-Filter: Treffer behalten, deren URL gegen MINDESTENS
+        // ein Pattern eines angefragten Auto-Match-Tags matched (logisches AND
+        // ueber alle angefragten Auto-Match-Tags, OR ueber Patterns innerhalb).
+        if ($autoMatchFilterTags !== []) {
+            $filtered = [];
+            foreach ($result->hits as $h) {
+                $url = (string) $h->url;
+                $allTagsMatch = true;
+                foreach ($autoMatchFilterTags as $am) {
+                    $oneMatched = false;
+                    foreach ($am['patterns'] as $pattern) {
+                        if (self::globMatch($pattern, $url)) {
+                            $oneMatched = true;
+                            break;
+                        }
+                    }
+                    if (!$oneMatched) {
+                        $allTagsMatch = false;
+                        break;
+                    }
+                }
+                if ($allTagsMatch) {
+                    $filtered[] = $h;
+                }
+            }
+            $totalAfter = \count($filtered);
+            $paged = \array_slice($filtered, $offset, $limit);
+            $result = new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
+                hits: $paged,
+                totalHits: $totalAfter,
+                offset: $offset,
+                limit: $limit,
+                facets: $result->facets,
+                queryTimeMs: $result->queryTimeMs,
+            );
         }
 
         // v2.0.0: Anonymes Analytics-Tracking. Niemals den Such-Pfad blockieren.

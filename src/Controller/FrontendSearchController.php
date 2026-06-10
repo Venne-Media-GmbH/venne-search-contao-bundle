@@ -254,6 +254,28 @@ final class FrontendSearchController extends AbstractController
                     $filtered[] = $h;
                 }
             }
+            // Nach Sort-Mode sortieren — Meilisearch hat den Pool zwar mit dem
+            // angefragten Sort geholt, aber durch die Volltext-Pattern-Query
+            // sind Hits mit hohem Score nach oben gewandert. Wir muessen den
+            // Sort nach dem Post-Filter selbst nochmal anwenden, sonst stehen
+            // bei date_desc plotzlich aelterer Treffer ueber neueren.
+            if ($sort === SearchService::SORT_DATE_DESC) {
+                usort($filtered, static fn ($a, $b): int => $b->publishedAt <=> $a->publishedAt);
+            } elseif ($sort === SearchService::SORT_DATE_ASC) {
+                usort($filtered, static function ($a, $b): int {
+                    if ($a->publishedAt === 0 && $b->publishedAt === 0) return 0;
+                    if ($a->publishedAt === 0) return 1;
+                    if ($b->publishedAt === 0) return -1;
+                    return $a->publishedAt <=> $b->publishedAt;
+                });
+            } elseif ($sort === SearchService::SORT_TYPE_ASC) {
+                usort($filtered, static function ($a, $b): int {
+                    $cmp = strcmp($a->contentType, $b->contentType);
+                    if ($cmp !== 0) return $cmp;
+                    return $b->score <=> $a->score;
+                });
+            }
+            // Bei SORT_RELEVANCE behalten wir die Reihenfolge von Meilisearch.
             $totalAfter = \count($filtered);
             $paged = \array_slice($filtered, $offset, $limit);
             $result = new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(

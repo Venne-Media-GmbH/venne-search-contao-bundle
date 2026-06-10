@@ -79,10 +79,22 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     <?php endif; ?>
                     <?php /* Sort-Pills immer rendern — User muss zwischen Relevanz/Neueste/Aelteste umschalten koennen. Backend-Setting wird ignoriert. */ ?>
                     <div class="vsearch__sort-pills" role="tablist" aria-label="Sortierung" data-vsearch-sort-pills>
-                        <button type="button" class="vsearch__sort-pill vsearch__sort-pill--active" data-sort="relevance" aria-pressed="true">Relevanz</button>
-                        <button type="button" class="vsearch__sort-pill" data-sort="date_desc" aria-pressed="false">Neueste</button>
-                        <button type="button" class="vsearch__sort-pill" data-sort="date_asc" aria-pressed="false">Älteste</button>
-                        <button type="button" class="vsearch__sort-pill" data-sort="type_asc" aria-pressed="false">Art</button>
+                        <button type="button" class="vsearch__sort-pill vsearch__sort-pill--active" data-sort="relevance" aria-pressed="true">
+                            <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l2.39 7.36H22l-6.19 4.5 2.39 7.36L12 16.72l-6.19 4.5 2.39-7.36L2 9.36h7.61L12 2z"/></svg>
+                            <span>Relevanz</span>
+                        </button>
+                        <button type="button" class="vsearch__sort-pill" data-sort="date_desc" aria-pressed="false">
+                            <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M7 20l-4-4M7 20l4-4M14 6h7M14 12h5M14 18h3"/></svg>
+                            <span>Neueste</span>
+                        </button>
+                        <button type="button" class="vsearch__sort-pill" data-sort="date_asc" aria-pressed="false">
+                            <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20V4M7 4l-4 4M7 4l4 4M14 6h3M14 12h5M14 18h7"/></svg>
+                            <span>Älteste</span>
+                        </button>
+                        <button type="button" class="vsearch__sort-pill" data-sort="type_asc" aria-pressed="false">
+                            <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                            <span>Art</span>
+                        </button>
                     </div>
                 </div>
             </div>
@@ -666,23 +678,45 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     }
     .vsearch__sort-select:focus { outline: 2px solid var(--vs-accent); outline-offset: 1px; }
 
-    /* Sort-Pills (Tabs-Optik) */
+    /* Sort-Pills (Segmented-Control mit Icons + Glow) */
     .vsearch__sort-pills {
-        display: inline-flex; gap: .25rem; align-items: center;
-        padding: .25rem; background: var(--vs-bg-soft);
-        border: 1px solid var(--vs-border); border-radius: 999px;
+        display: inline-flex; gap: 2px; align-items: center;
+        padding: 4px;
+        background: linear-gradient(180deg, rgba(0,0,0,.04), rgba(0,0,0,.02));
+        border: 1px solid rgba(0,0,0,.08); border-radius: 999px;
+        box-shadow: inset 0 1px 2px rgba(0,0,0,.05);
     }
     .vsearch__sort-pill {
-        padding: .35rem .85rem !important; border: 0 !important;
+        position: relative;
+        display: inline-flex !important; align-items: center; gap: .4rem;
+        padding: .45rem .95rem !important; border: 0 !important;
         background: transparent !important; color: var(--vs-text-muted) !important;
         border-radius: 999px !important; font-size: .82rem !important; font-weight: 500 !important;
-        cursor: pointer; transition: background .15s, color .15s;
+        cursor: pointer;
+        transition: background .2s ease, color .2s ease, transform .15s ease, box-shadow .25s ease;
         box-shadow: none !important; line-height: 1.2 !important;
+        white-space: nowrap;
     }
-    .vsearch__sort-pill:hover { background: rgba(0,0,0,.04) !important; color: var(--vs-text) !important; }
+    .vsearch__sort-pill .vsearch__sort-icon {
+        flex-shrink: 0; opacity: .65; transition: opacity .2s ease, transform .25s ease;
+    }
+    .vsearch__sort-pill:hover {
+        background: rgba(0,0,0,.04) !important; color: var(--vs-text) !important;
+    }
+    .vsearch__sort-pill:hover .vsearch__sort-icon { opacity: 1; }
+    .vsearch__sort-pill:active { transform: scale(.96); }
     .vsearch__sort-pill--active {
-        background: var(--vs-bg) !important; color: var(--vs-accent-strong) !important;
-        box-shadow: 0 1px 2px rgba(0,0,0,.06) !important; font-weight: 600 !important;
+        background: linear-gradient(180deg, var(--vs-accent) 0%, var(--vs-accent-strong) 100%) !important;
+        color: #fff !important;
+        box-shadow:
+            0 2px 6px -1px rgba(74,128,135,.45),
+            0 0 0 1px rgba(74,128,135,.15),
+            inset 0 1px 0 rgba(255,255,255,.18) !important;
+        font-weight: 600 !important;
+    }
+    .vsearch__sort-pill--active .vsearch__sort-icon { opacity: 1; transform: scale(1.05); }
+    .vsearch__sort-pill:focus-visible {
+        outline: 2px solid var(--vs-accent); outline-offset: 2px;
     }
 
     .vsearch__ext-filters {
@@ -727,7 +761,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             scrollbar-width: none;
         }
         .vsearch__sort-pills::-webkit-scrollbar { display: none; }
-        .vsearch__sort-pill { flex-shrink: 0; padding: .45rem 1rem !important; font-size: .82rem !important; }
+        .vsearch__sort-pill { flex-shrink: 0; padding: .5rem .85rem !important; font-size: .82rem !important; gap: .35rem !important; }
 
         /* Body: einspaltig, Sidebar wird zum Drawer (siehe @820px-Regel) */
         .vsearch__body { gap: .8rem; }

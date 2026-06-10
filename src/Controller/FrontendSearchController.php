@@ -51,11 +51,41 @@ final class FrontendSearchController extends AbstractController
         $offset = (int) $request->query->get('offset', 0);
 
         // Facets-Only-Modus: leere Query + limit=0 ist ein expliziter Call vom
-        // Frontend, um Tag-Cloud im Initial-Modal („Was suchst du?") zu füllen,
-        // ohne Treffer zu liefern. Wir laufen die Suche durch (gibt facets zurück)
-        // — überspringen aber nur den UX-Guard für leere Queries.
+        // Frontend, um die Tag-Cloud im Initial-Modal („Was suchst du?") zu füllen.
+        // Wir gehen NICHT durch Meilisearch — bei leerer Query + Permission-Filter
+        // gibt facetDistribution dort oft 0 zurück. Stattdessen lesen wir alle
+        // Tags inkl. Zuweisungs-Counts direkt aus der DB. Schneller + verlässlich.
         $facetsOnly = $query === '' && !$hasTagFilter && $limit === 0;
-        if ($query === '' && !$hasTagFilter && !$facetsOnly) {
+        if ($facetsOnly) {
+            $allTagsWithCount = $tags->findAllWithCounts();
+            // Nur Tags mit mind. 1 Zuweisung — leere Tags füllen die Cloud nur unnötig.
+            $tagFacetList = [];
+            foreach ($allTagsWithCount as $t) {
+                if ($t['count'] <= 0) {
+                    continue;
+                }
+                $tagFacetList[] = [
+                    'slug' => $t['slug'],
+                    'label' => $t['label'],
+                    'color' => $t['color'],
+                    'boost' => $t['boost'],
+                    'count' => $t['count'],
+                ];
+            }
+            usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+
+            $facetsResp = new JsonResponse([
+                'hits' => [],
+                'totalHits' => 0,
+                'queryTimeMs' => 0,
+                'facets' => [],
+                'tagFacets' => $tagFacetList,
+            ]);
+            $facetsResp->setPrivate();
+            $facetsResp->setMaxAge(60);
+            return $facetsResp;
+        }
+        if ($query === '' && !$hasTagFilter) {
             return new JsonResponse([
                 'hits' => [],
                 'totalHits' => 0,
@@ -63,9 +93,6 @@ final class FrontendSearchController extends AbstractController
                 'message' => 'Kein Suchbegriff angegeben.',
             ]);
         }
-        // Meilisearch verlangt limit >= 1 — bei facets-only zwingen wir 1 und
-        // verwerfen die Treffer in der Response.
-        $serviceLimit = $facetsOnly ? 1 : $limit;
 
         // v2.0.0: optionales Multi-Locale via ?locales[]=de&locales[]=en
         $localesParam = $request->query->all('locales');
@@ -130,7 +157,7 @@ final class FrontendSearchController extends AbstractController
                 query: $query,
                 locale: $locale,
                 filters: $filters,
-                limit: $serviceLimit,
+                limit: $limit,
                 offset: $offset,
                 userGroups: $userGroups,
                 locales: $locales,
@@ -152,13 +179,9 @@ final class FrontendSearchController extends AbstractController
         }
 
         // v2.0.0: Anonymes Analytics-Tracking. Niemals den Such-Pfad blockieren.
-        // Facets-Only-Calls (leere Query + limit=0) sind Modal-Bootstrap, keine
-        // echten Suchanfragen — die würden die Analytics-Stats verzerren.
-        if (!$facetsOnly) {
-            try {
-                $analytics->record($query, $locale, $result->totalHits);
-            } catch (\Throwable) {
-            }
+        try {
+            $analytics->record($query, $locale, $result->totalHits);
+        } catch (\Throwable) {
         }
 
         // v2.0.0: Tag-Daten anreichern. Im Index liegen pro Tag ZWEI Einträge —
@@ -247,9 +270,6 @@ final class FrontendSearchController extends AbstractController
         $tagFacetList = array_values($tagFacetByTag);
         usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
 
-        // Facets-Only: Hits verwerfen, der Caller braucht nur tagFacets/facets.
-        $responseHits = $facetsOnly ? [] : $result->hits;
-
         $response = new JsonResponse([
             'hits' => array_map(
                 static function ($h) use ($bySlug, $byLabelLower, $extensions, $autoMatchTags): array {
@@ -313,9 +333,9 @@ final class FrontendSearchController extends AbstractController
                         'fileSize' => $h->fileSize,
                     ];
                 },
-                $responseHits,
+                $result->hits,
             ),
-            'totalHits' => $facetsOnly ? 0 : $result->totalHits,
+            'totalHits' => $result->totalHits,
             'offset' => $result->offset,
             'limit' => $result->limit,
             'facets' => $result->facets,

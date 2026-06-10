@@ -233,10 +233,7 @@ final class FrontendSearchController extends AbstractController
         // ein Pattern eines angefragten Auto-Match-Tags matched (logisches AND
         // ueber alle angefragten Auto-Match-Tags, OR ueber Patterns innerhalb).
         if ($autoMatchFilterTags !== []) {
-            $filtered = [];
-            foreach ($result->hits as $h) {
-                $url = (string) $h->url;
-                $allTagsMatch = true;
+            $matchAuto = static function (string $url) use ($autoMatchFilterTags): bool {
                 foreach ($autoMatchFilterTags as $am) {
                     $oneMatched = false;
                     foreach ($am['patterns'] as $pattern) {
@@ -246,19 +243,21 @@ final class FrontendSearchController extends AbstractController
                         }
                     }
                     if (!$oneMatched) {
-                        $allTagsMatch = false;
-                        break;
+                        return false;
                     }
                 }
-                if ($allTagsMatch) {
+                return true;
+            };
+            $filtered = [];
+            foreach ($result->hits as $h) {
+                if ($matchAuto((string) $h->url)) {
                     $filtered[] = $h;
                 }
             }
             // Nach Sort-Mode sortieren — Meilisearch hat den Pool zwar mit dem
             // angefragten Sort geholt, aber durch die Volltext-Pattern-Query
             // sind Hits mit hohem Score nach oben gewandert. Wir muessen den
-            // Sort nach dem Post-Filter selbst nochmal anwenden, sonst stehen
-            // bei date_desc plotzlich aelterer Treffer ueber neueren.
+            // Sort nach dem Post-Filter selbst nochmal anwenden.
             if ($sort === SearchService::SORT_DATE_DESC) {
                 usort($filtered, static fn ($a, $b): int => $b->publishedAt <=> $a->publishedAt);
             } elseif ($sort === SearchService::SORT_DATE_ASC) {
@@ -275,7 +274,18 @@ final class FrontendSearchController extends AbstractController
                     return $b->score <=> $a->score;
                 });
             }
-            // Bei SORT_RELEVANCE behalten wir die Reihenfolge von Meilisearch.
+            // Type-Facet-Counts aus dem post-gefilterten Pool neu berechnen,
+            // sonst zeigt die Sidebar inkonsistente Counts an (z.B. "Dateien (10)"
+            // weil Meilisearch 10 Volltext-Dateien gefunden hat, aber unser
+            // URL-Glob-Filter keine davon akzeptiert).
+            $typeCounts = [];
+            foreach ($filtered as $h) {
+                $t = (string) $h->type;
+                $typeCounts[$t] = ($typeCounts[$t] ?? 0) + 1;
+            }
+            $newFacets = $result->facets;
+            $newFacets['type'] = $typeCounts;
+
             $totalAfter = \count($filtered);
             $paged = \array_slice($filtered, $offset, $limit);
             $result = new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
@@ -283,7 +293,7 @@ final class FrontendSearchController extends AbstractController
                 totalHits: $totalAfter,
                 offset: $offset,
                 limit: $limit,
-                facets: $result->facets,
+                facets: $newFacets,
                 queryTimeMs: $result->queryTimeMs,
             );
         }

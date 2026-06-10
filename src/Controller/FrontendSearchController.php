@@ -52,24 +52,43 @@ final class FrontendSearchController extends AbstractController
 
         // Facets-Only-Modus: leere Query + limit=0 ist ein expliziter Call vom
         // Frontend, um die Tag-Cloud im Initial-Modal („Was suchst du?") zu füllen.
-        // Wir gehen NICHT durch Meilisearch — bei leerer Query + Permission-Filter
-        // gibt facetDistribution dort oft 0 zurück. Stattdessen lesen wir alle
-        // Tags inkl. Zuweisungs-Counts direkt aus der DB. Schneller + verlässlich.
+        // Wir liefern hier alle im Backend angelegten Tags zurück (auch ohne
+        // explizite Assignments, weil Auto-Match-Tags zur Laufzeit erst über
+        // URL-Patterns vergeben werden und nicht in tl_venne_search_tag_assignment
+        // landen). Counts berechnen wir best-effort via Meilisearch-facetDistribution
+        // mit einem Wildcard-Search; klappt das nicht (Permission/Empty-Index),
+        // fallen wir auf 0 zurück.
         $facetsOnly = $query === '' && !$hasTagFilter && $limit === 0;
         if ($facetsOnly) {
-            $allTagsWithCount = $tags->findAllWithCounts();
-            // Nur Tags mit mind. 1 Zuweisung — leere Tags füllen die Cloud nur unnötig.
-            $tagFacetList = [];
-            foreach ($allTagsWithCount as $t) {
-                if ($t['count'] <= 0) {
-                    continue;
+            $allTags = $tags->findAll();
+            $tagCounts = [];
+            try {
+                $facetResult = $service->search(
+                    query: '',
+                    locale: $locale,
+                    filters: [],
+                    limit: 1,
+                    offset: 0,
+                    userGroups: $this->resolveCurrentUserGroups(),
+                    locales: [],
+                    sort: SearchService::SORT_RELEVANCE,
+                );
+                $rawTagFacet = (array) ($facetResult->facets['tags'] ?? []);
+                foreach ($rawTagFacet as $token => $count) {
+                    $tagCounts[(string) $token] = (int) $count;
                 }
+            } catch (\Throwable) {
+                // Index leer, Auth-Issue etc. — wir liefern Tags trotzdem mit Count 0.
+            }
+            $tagFacetList = [];
+            foreach ($allTags as $t) {
+                $count = $tagCounts[$t['slug']] ?? $tagCounts[mb_strtolower($t['label'])] ?? 0;
                 $tagFacetList[] = [
                     'slug' => $t['slug'],
                     'label' => $t['label'],
                     'color' => $t['color'],
                     'boost' => $t['boost'],
-                    'count' => $t['count'],
+                    'count' => $count,
                 ];
             }
             usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);

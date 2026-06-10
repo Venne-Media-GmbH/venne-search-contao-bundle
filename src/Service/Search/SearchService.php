@@ -86,7 +86,9 @@ final class SearchService
         $indexUid = \sprintf('%s_%s', $config->indexPrefix, $locale);
 
         $params = [
-            'limit' => max(1, min(100, $limit)),
+            // Cap bei 1000 — für Auto-Match-Post-Filter im Controller, der einen
+            // grossen Pool braucht um per URL-Pattern nachzufiltern.
+            'limit' => max(1, min(1000, $limit)),
             'offset' => max(0, $offset),
             // Highlighting: Treffer in Title + Content mit <mark>...</mark> markieren.
             'attributesToHighlight' => ['title', 'content'],

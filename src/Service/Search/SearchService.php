@@ -186,6 +186,26 @@ final class SearchService
             );
         }
 
+        // Bei Datums-Sort nochmal in PHP nachsortieren, weil Meilisearch
+        // publishedAt-Werte die wir gerade auf 0 normalisiert haben (Crawler-
+        // Default 31.12.YYYY) als gueltige Sortier-Werte behandelt hat und
+        // sie ggf. an die falsche Stelle einsortiert. Wir wollen 0 immer am Ende.
+        if ($sort === self::SORT_DATE_DESC) {
+            usort($hits, static function ($a, $b): int {
+                if ($a->publishedAt === 0 && $b->publishedAt === 0) return 0;
+                if ($a->publishedAt === 0) return 1;
+                if ($b->publishedAt === 0) return -1;
+                return $b->publishedAt <=> $a->publishedAt;
+            });
+        } elseif ($sort === self::SORT_DATE_ASC) {
+            usort($hits, static function ($a, $b): int {
+                if ($a->publishedAt === 0 && $b->publishedAt === 0) return 0;
+                if ($a->publishedAt === 0) return 1;
+                if ($b->publishedAt === 0) return -1;
+                return $a->publishedAt <=> $b->publishedAt;
+            });
+        }
+
         return new SearchResult(
             hits: $hits,
             totalHits: (int) ($raw['estimatedTotalHits'] ?? \count($hits)),

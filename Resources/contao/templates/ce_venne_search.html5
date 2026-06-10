@@ -211,10 +211,13 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         color: var(--vs-text-muted); pointer-events: none;
     }
     .vsearch__input {
-        width: 100%; padding: .85rem 2.6rem .85rem 2.8rem; font-size: 1.05rem;
+        width: 100% !important; max-width: none !important; min-width: 0 !important;
+        box-sizing: border-box !important;
+        padding: .85rem 2.6rem .85rem 2.8rem !important; font-size: 1.05rem;
         border: 1px solid var(--vs-border-strong); border-radius: 10px;
         background: var(--vs-bg); color: var(--vs-text);
         transition: border-color .15s, box-shadow .15s;
+        display: block !important;
     }
     .vsearch__input:focus { outline: 0; border-color: var(--vs-accent); box-shadow: 0 0 0 3px var(--vs-accent-soft); }
     /* v2.2.0: Clear-Button im Input — sichtbar sobald Inhalt drin ist.

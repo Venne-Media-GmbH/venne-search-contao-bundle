@@ -186,9 +186,12 @@ final class FrontendSearchController extends AbstractController
 
         $userGroups = $this->resolveCurrentUserGroups();
 
-        // Wenn Auto-Match-Tag-Filter gesetzt sind, holen wir bis zu 200 Treffer
-        // und filtern danach in PHP per globMatch. Sonst nur das angefragte Limit.
-        $serviceLimit = $autoMatchFilterTags !== [] ? max($limit, 200) : $limit;
+        // Wenn Auto-Match-Tag-Filter gesetzt sind, holen wir einen grossen Pool
+        // (Meilisearch-Maxi-Limit = 1000) und filtern danach in PHP per globMatch.
+        // Bei leerer Query sind viele relevante URLs sonst gar nicht in den Top-N
+        // der Suche — der grosse Pool stellt sicher dass das Pattern alle
+        // passenden Docs findet. Sonst nur das angefragte Limit.
+        $serviceLimit = $autoMatchFilterTags !== [] ? 1000 : $limit;
         $serviceOffset = $autoMatchFilterTags !== [] ? 0 : $offset;
 
         try {

@@ -186,17 +186,26 @@ final class FrontendSearchController extends AbstractController
 
         $userGroups = $this->resolveCurrentUserGroups();
 
-        // Wenn Auto-Match-Tag-Filter gesetzt sind, holen wir einen grossen Pool
-        // (Meilisearch-Maxi-Limit = 1000) und filtern danach in PHP per globMatch.
-        // Bei leerer Query sind viele relevante URLs sonst gar nicht in den Top-N
-        // der Suche — der grosse Pool stellt sicher dass das Pattern alle
-        // passenden Docs findet. Sonst nur das angefragte Limit.
-        $serviceLimit = $autoMatchFilterTags !== [] ? 1000 : $limit;
-        $serviceOffset = $autoMatchFilterTags !== [] ? 0 : $offset;
+        // Auto-Match-Tag-Filter: wir holen den Pool gezielt per Volltext-Suche
+        // mit den signifikanten Pattern-Termen (zwischen den * in Glob-Patterns),
+        // sonst landen einzelne Detail-URLs nicht in den Top-N einer leeren
+        // Wildcard-Suche. Beispiel Pattern „*pressemitteilungen-detailseite*"
+        // → Suchterm „pressemitteilungen-detailseite" → trifft alle Docs mit
+        //   diesem URL-Fragment. Anschliessend in PHP per globMatch nachfiltern.
+        $effectiveQuery = $query;
+        $serviceLimit = $limit;
+        $serviceOffset = $offset;
+        if ($autoMatchFilterTags !== []) {
+            $serviceLimit = 1000;
+            $serviceOffset = 0;
+            if ($query === '') {
+                $effectiveQuery = self::buildPatternQuery($autoMatchFilterTags);
+            }
+        }
 
         try {
             $result = $service->search(
-                query: $query,
+                query: $effectiveQuery,
                 locale: $locale,
                 filters: $filters,
                 limit: $serviceLimit,
@@ -429,6 +438,36 @@ final class FrontendSearchController extends AbstractController
         $response->setMaxAge(30);
         $response->setVary(['Cookie'], false);
         return $response;
+    }
+
+    /**
+     * Baut aus Auto-Match-Patterns eine Volltext-Query, mit der Meilisearch
+     * die relevanten Docs im Index aufstoebert. Pattern „*pressemitteilungen-detailseite*"
+     * wird zu Suchterm „pressemitteilungen-detailseite". Mehrere Tags / Patterns
+     * werden mit Leerzeichen zusammengefuegt — Meilisearch findet dann Docs die
+     * MINDESTENS einen der Terme enthalten (Default-Matching-Strategy „last").
+     *
+     * @param list<array{patterns:list<string>}> $autoMatchTags
+     */
+    private static function buildPatternQuery(array $autoMatchTags): string
+    {
+        $terms = [];
+        foreach ($autoMatchTags as $am) {
+            foreach ($am['patterns'] as $pattern) {
+                // Aufteilen an Wildcards: signifikante Token zwischen den * / ? extrahieren.
+                $parts = preg_split('/[*?]+/', $pattern) ?: [];
+                foreach ($parts as $p) {
+                    $p = trim((string) $p);
+                    // URL-Trennzeichen rauswerfen damit Meilisearch tokenisieren kann.
+                    $p = str_replace(['/', '\\', '?', '#', '&', '=', '.'], ' ', $p);
+                    $p = trim(preg_replace('/\s+/', ' ', $p) ?? '');
+                    if ($p !== '' && \strlen($p) >= 3) {
+                        $terms[] = $p;
+                    }
+                }
+            }
+        }
+        return implode(' ', array_unique($terms));
     }
 
     /**

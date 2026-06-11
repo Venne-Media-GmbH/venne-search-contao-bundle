@@ -13,6 +13,12 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
     'config' => [
         'dataContainer' => class_exists(\Contao\DC_Table::class) ? \Contao\DC_Table::class : 'Table',
         'enableVersioning' => true,
+        'ondelete_callback' => [
+            [
+                \VenneMedia\VenneSearchContaoBundle\EventListener\TagDeleteListener::class,
+                'onDelete',
+            ],
+        ],
         'sql' => [
             'keys' => [
                 'id' => 'primary',

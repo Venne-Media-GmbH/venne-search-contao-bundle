@@ -114,7 +114,44 @@ final class DocumentIndexer
         private readonly Client $meilisearch,
         private readonly SettingsRepository $settings,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?\VenneMedia\VenneSearchContaoBundle\Service\Synonym\SynonymRepository $synonyms = null,
     ) {
+    }
+
+    /**
+     * Liefert die Synonym-Map fuer eine Locale: DB-Custom-Synonyme (User-gepflegt)
+     * gemerged mit den DEFAULT_SYNONYMS_DE. User-Eintraege gewinnen bei Konflikt.
+     *
+     * @return array<string, list<string>>
+     */
+    private function buildSynonyms(string $locale): array
+    {
+        $base = $locale === 'de' ? self::DEFAULT_SYNONYMS_DE : [];
+        if ($this->synonyms === null) {
+            return $base;
+        }
+        $custom = $this->synonyms->buildMeilisearchSynonyms();
+        // Custom ueberschreibt Base.
+        return array_merge($base, $custom);
+    }
+
+    /**
+     * Schreibt die aktuelle Synonym-Map in den Meilisearch-Index. Wird vom
+     * Synonym-Save-Listener nach jedem DB-Change gerufen, damit Aenderungen
+     * sofort wirksam sind (ohne Reindex).
+     */
+    public function pushSynonyms(string $locale): void
+    {
+        $indexUid = $this->indexName($locale);
+        try {
+            $index = $this->meilisearch->index($indexUid);
+            $index->updateSynonyms($this->buildSynonyms($locale));
+        } catch (\Throwable $e) {
+            $this->logger->warning('venne_search.synonyms.push_failed', [
+                'locale' => $locale,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -140,8 +177,10 @@ final class DocumentIndexer
         $index->updateFilterableAttributes(self::FILTERABLE_ATTRIBUTES);
         $index->updateSortableAttributes(self::SORTABLE_ATTRIBUTES);
 
-        if ($locale === 'de') {
-            $index->updateSynonyms(self::DEFAULT_SYNONYMS_DE);
+        // Synonyme = Default-Map (z.B. Maße/Masse) + User-gepflegte Synonyme aus DB.
+        $synonyms = $this->buildSynonyms($locale);
+        if ($synonyms !== []) {
+            $index->updateSynonyms($synonyms);
         }
 
         // Such-Strenge: typoTolerance + prefix-search entsprechend setzen.

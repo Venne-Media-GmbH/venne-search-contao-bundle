@@ -67,6 +67,13 @@ services:
     VenneMedia\VenneSearchContaoBundle\EventListener\FileTagFieldListener:
         public: true
 
+    # CLI-Command zum Reindexieren einer einzelnen Datei.
+    VenneMedia\VenneSearchContaoBundle\Command\ReindexFileCommand:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+        tags:
+            - { name: console.command }
+
     # Synonym-Save-Listener wird per DCA-onsubmit/ondelete_callback als Service-ID
     # aufgerufen — Contao 4.13 ruft System::getContainer()->get(self::class), das
     # braucht public Sichtbarkeit. Sonst „ServiceNotFoundException".

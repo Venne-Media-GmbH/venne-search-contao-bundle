@@ -63,6 +63,10 @@ services:
     VenneMedia\VenneSearchContaoBundle\EventListener\TagPatternTranslationsFieldListener:
         public: true
 
+    # Tag-Picker im Datei-Edit-Form (tl_files), analog PageTagFieldListener.
+    VenneMedia\VenneSearchContaoBundle\EventListener\FileTagFieldListener:
+        public: true
+
     # Synonym-Save-Listener wird per DCA-onsubmit/ondelete_callback als Service-ID
     # aufgerufen — Contao 4.13 ruft System::getContainer()->get(self::class), das
     # braucht public Sichtbarkeit. Sonst „ServiceNotFoundException".

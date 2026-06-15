@@ -474,7 +474,7 @@ HTML;
         </div>
         <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
             <a href="{$manageUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
-            <a href="{$synonymUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;background:#6366f1;">Synonyme verwalten</a>
+            <a href="{$synonymUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Synonyme verwalten</a>
         </div>
     </div>
     <div id="vsearch-tag-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;max-height:600px;overflow-y:auto;">

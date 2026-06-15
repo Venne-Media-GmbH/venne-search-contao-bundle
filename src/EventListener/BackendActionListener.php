@@ -563,9 +563,8 @@ final class BackendActionListener
 
     /**
      * Quick-Navigation: Direkt-Links zu Tags, Synonyme, Index-Browser oben im
-     * Settings-Edit-Form, weil das BE_MOD den User direkt in die Settings-Edit-
-     * Form schiebt (Singleton) und die Sub-Tabellen sonst nicht erreichbar
-     * sind ohne dass der User die URL kennt.
+     * Settings-Edit-Form. Cards mit Inline-SVG statt Emojis — Backend-Look
+     * passend zu Contao (dezente Outline-Icons, Hover-Effekt, kein Bunt).
      */
     public static function renderQuickNav(): string
     {
@@ -573,14 +572,28 @@ final class BackendActionListener
         $tags = '/contao?do=venne_search&table=tl_venne_search_tag&rt=' . $rt;
         $synonyms = '/contao?do=venne_search&table=tl_venne_search_synonym&rt=' . $rt;
         $browser = '/contao/venne-search/index';
-        return <<<HTML
-<div class="widget" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;">
-    <strong style="margin-right:.4rem;color:#0f172a;font-size:.95rem;">Schnellzugriff:</strong>
-    <a href="{$tags}" class="tl_submit" style="text-decoration:none;background:#3a7178;color:#fff;padding:.4rem .85rem;border-radius:6px;font-weight:500;font-size:.85rem;">🏷  Tags verwalten</a>
-    <a href="{$synonyms}" class="tl_submit" style="text-decoration:none;background:#6366f1;color:#fff;padding:.4rem .85rem;border-radius:6px;font-weight:500;font-size:.85rem;">🔀  Synonyme verwalten</a>
-    <a href="{$browser}" class="tl_submit" style="text-decoration:none;background:#0ea5e9;color:#fff;padding:.4rem .85rem;border-radius:6px;font-weight:500;font-size:.85rem;">📊  Index-Browser</a>
-</div>
-HTML;
+
+        $svgTag = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+        $svgSyn = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+        $svgIdx = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>';
+
+        $card = static function (string $href, string $svg, string $title, string $desc): string {
+            return '<a href="' . $href . '" style="display:flex;gap:.85rem;align-items:flex-start;padding:1rem 1.1rem;background:#fff;border:1px solid #d1d5db;border-radius:8px;text-decoration:none;color:inherit;transition:border-color .15s,box-shadow .15s,transform .15s;flex:1;min-width:200px;"'
+                . ' onmouseover="this.style.borderColor=&quot;#3a7178&quot;;this.style.boxShadow=&quot;0 2px 8px -2px rgba(58,113,120,.25)&quot;;"'
+                . ' onmouseout="this.style.borderColor=&quot;#d1d5db&quot;;this.style.boxShadow=&quot;none&quot;;">'
+                . '<span style="flex-shrink:0;color:#3a7178;display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;background:#f0fdfa;border-radius:6px;">' . $svg . '</span>'
+                . '<span style="display:flex;flex-direction:column;gap:.15rem;">'
+                . '<span style="font-weight:600;color:#0f172a;font-size:.92rem;">' . $title . '</span>'
+                . '<span style="font-size:.78rem;color:#64748b;line-height:1.4;">' . $desc . '</span>'
+                . '</span>'
+                . '</a>';
+        };
+
+        return '<div class="widget" style="margin:0 0 1.2rem;display:flex;gap:.8rem;flex-wrap:wrap;">'
+            . $card($tags, $svgTag, 'Tags verwalten', 'Boost-Faktor, Auto-Match-Patterns, Übersetzungen pro Sprache.')
+            . $card($synonyms, $svgSyn, 'Synonyme verwalten', 'Wort-Mapping: Suche nach „Messe" findet auch „Ausstellung".')
+            . $card($browser, $svgIdx, 'Index-Browser', 'Alle indexierten Dokumente durchsuchen + entfernen.')
+            . '</div>';
     }
 
     /**

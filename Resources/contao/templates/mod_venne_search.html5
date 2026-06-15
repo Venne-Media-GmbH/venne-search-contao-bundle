@@ -1296,6 +1296,22 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
             }
             if (append && (!data.hits || data.hits.length === 0)) return;
 
+            // Generische Cover/Snippets erkennen: wenn ein Cover-Bild oder ein
+            // Text-Snippet auf vielen Treffern wiederkehrt, ist es meist
+            // Site-Logo/Header bzw. ein gemeinsamer Footer-Text. Solche werden
+            // ausgeblendet — sonst sehen alle Karten identisch aus.
+            var coverCounts = {};
+            var snippetCounts = {};
+            (data.hits || []).forEach(function (h) {
+                if (h.coverUrl) coverCounts[h.coverUrl] = (coverCounts[h.coverUrl] || 0) + 1;
+                if (h.snippet) {
+                    var key = h.snippet.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().substring(0,120);
+                    if (key) snippetCounts[key] = (snippetCounts[key] || 0) + 1;
+                }
+            });
+            var GENERIC_COVER_THRESHOLD = 3; // ab 3-fach gleichem Cover gilt's als generisch
+            var GENERIC_SNIPPET_THRESHOLD = 3;
+
             data.hits.forEach(function (hit) {
                 var li = document.createElement('li');
                 var a = document.createElement('a');
@@ -1321,8 +1337,10 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
                 else iconClass += ' vs-icon--page';
 
                 // Cover ODER großes Icon-Placeholder
+                // Generisches Cover (Site-Logo, das bei zig Treffern wiederkehrt) ausblenden.
+                var isGenericCover = hit.coverUrl && (coverCounts[hit.coverUrl] || 0) >= GENERIC_COVER_THRESHOLD;
                 var visualHtml;
-                if (hit.coverUrl) {
+                if (hit.coverUrl && !isGenericCover) {
                     var titleNoTags = (hit.title || '').replace(/<[^>]+>/g, '');
                     var coverAlt = hit.altText || titleNoTags || 'Vorschaubild';
                     // Bei Bildfehler: Cover-Container in Icon-Placeholder umwandeln statt entfernen
@@ -1370,7 +1388,15 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
                 metaParts.push('<span class="vs-meta-dot">·</span><span class="vs-url">' + escapeHtml(prettifyUrl(hit.url, hit.type)) + '</span>');
                 var metaHtml = '<span class="vs-meta">' + metaParts.join('') + '</span>';
 
-                var snippet = hit.snippet ? sanitizeWithMark(hit.snippet) : '';
+                // Snippet ausblenden wenn's auf vielen Treffern wiederkehrt (Footer/Boilerplate).
+                var snippet = '';
+                if (hit.snippet) {
+                    var snippetKey = hit.snippet.replace(/<[^>]+>/g,'').replace(/\s+/g,' ').trim().substring(0,120);
+                    var isGenericSnippet = snippetKey && (snippetCounts[snippetKey] || 0) >= GENERIC_SNIPPET_THRESHOLD;
+                    if (!isGenericSnippet) {
+                        snippet = sanitizeWithMark(hit.snippet);
+                    }
+                }
 
                 a.innerHTML =
                     visualHtml +

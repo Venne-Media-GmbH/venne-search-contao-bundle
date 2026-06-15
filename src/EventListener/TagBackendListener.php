@@ -461,6 +461,7 @@ HTML;
         // Contao 4.13/5.x: Backend-Links brauchen den Request-Token (rt-Parameter),
         // sonst bringt Contao eine "Ungültiges Token"-Bestätigungsseite.
         $manageUrl = $this->buildBackendUrl('do=venne_search&table=tl_venne_search_tag');
+        $synonymUrl = $this->buildBackendUrl('do=venne_search&table=tl_venne_search_synonym');
 
         return <<<HTML
 <div style="margin:14px 18px;padding:18px 22px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">
@@ -471,7 +472,10 @@ HTML;
                 Auf "+" klicken, um eine einzelne Seite zu taggen. Mehrere Seiten? Häkchen setzen → unten auswählen, was sie alle bekommen.
             </div>
         </div>
-        <a href="{$manageUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{$manageUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
+            <a href="{$synonymUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;background:#6366f1;">Synonyme verwalten</a>
+        </div>
     </div>
     <div id="vsearch-tag-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;max-height:600px;overflow-y:auto;">
         {$treeHtml}

@@ -562,6 +562,28 @@ final class BackendActionListener
     }
 
     /**
+     * Quick-Navigation: Direkt-Links zu Tags, Synonyme, Index-Browser oben im
+     * Settings-Edit-Form, weil das BE_MOD den User direkt in die Settings-Edit-
+     * Form schiebt (Singleton) und die Sub-Tabellen sonst nicht erreichbar
+     * sind ohne dass der User die URL kennt.
+     */
+    public static function renderQuickNav(): string
+    {
+        $rt = htmlspecialchars((string) ($_GET['rt'] ?? ''), ENT_QUOTES);
+        $tags = '/contao?do=venne_search&table=tl_venne_search_tag&rt=' . $rt;
+        $synonyms = '/contao?do=venne_search&table=tl_venne_search_synonym&rt=' . $rt;
+        $browser = '/contao/venne-search/index';
+        return <<<HTML
+<div class="widget" style="margin:0 0 1rem;padding:.85rem 1rem;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;display:flex;gap:.6rem;flex-wrap:wrap;align-items:center;">
+    <strong style="margin-right:.4rem;color:#0f172a;font-size:.95rem;">Schnellzugriff:</strong>
+    <a href="{$tags}" class="tl_submit" style="text-decoration:none;background:#3a7178;color:#fff;padding:.4rem .85rem;border-radius:6px;font-weight:500;font-size:.85rem;">🏷  Tags verwalten</a>
+    <a href="{$synonyms}" class="tl_submit" style="text-decoration:none;background:#6366f1;color:#fff;padding:.4rem .85rem;border-radius:6px;font-weight:500;font-size:.85rem;">🔀  Synonyme verwalten</a>
+    <a href="{$browser}" class="tl_submit" style="text-decoration:none;background:#0ea5e9;color:#fff;padding:.4rem .85rem;border-radius:6px;font-weight:500;font-size:.85rem;">📊  Index-Browser</a>
+</div>
+HTML;
+    }
+
+    /**
      * Gemeinsamer Stylesheet-Block für alle Bundle-Backend-Panels.
      * Überschreibt unsere Light-Mode-Inline-Styles wenn Contao auf Dark-Mode
      * umschaltet (`html[data-color-scheme=dark]` oder `prefers-color-scheme`),

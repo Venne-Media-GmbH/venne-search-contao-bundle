@@ -96,8 +96,8 @@ final class TagPatternTranslationsFieldListener
                 . '</div>';
         }
 
-        return '<div class="vsearch-translations-wrap" style="margin-bottom:.6rem;">'
-            . '<p class="tl_help tl_tip" style="margin-bottom:.8rem;">'
+        return '<div class="vsearch-translations-wrap" style="margin:.8rem 1rem 1.2rem;padding:0;box-sizing:border-box;">'
+            . '<p class="tl_help tl_tip" style="margin:0 0 1rem;">'
             . 'Eine URL-Pattern-Liste pro Sprache (eine Zeile pro Pattern). Wenn ein Sprach-Feld leer ist, faellt der Auto-Match auf das Standard-Pattern oben zurueck.<br>'
             . 'Beispiel — Deutsch: <code>*pressemitteilungen-detailseite*</code>, Englisch: <code>*press-release-detail*</code>'
             . '</p>'

@@ -100,8 +100,8 @@ final class TagTranslationsFieldListener
                 . '</div>';
         }
 
-        return '<div class="vsearch-translations-wrap" style="margin-bottom:.6rem;">'
-            . '<p class="tl_help tl_tip" style="margin-bottom:.8rem;">'
+        return '<div class="vsearch-translations-wrap" style="margin:.8rem 1rem 1.2rem;padding:0;box-sizing:border-box;">'
+            . '<p class="tl_help tl_tip" style="margin:0 0 1rem;">'
             . 'Pro aktive Sprache eine Übersetzung. Felder leer lassen, wenn die Standard-Bezeichnung verwendet werden soll.'
             . '</p>'
             . $rows

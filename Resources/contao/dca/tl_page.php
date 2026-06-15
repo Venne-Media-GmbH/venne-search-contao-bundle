@@ -47,12 +47,13 @@ if (isset($GLOBALS['TL_DCA']['tl_page']['palettes'])) {
 }
 
 // Operation "Tags" pro Page-Zeile in der Seitenstruktur. Zeigt ein Icon das
-// auf das DCA-Edit-Form springt (direkt mit Fokus auf das Tag-Feld via Anchor).
-// Funktioniert auf Contao 4.13 + 5.x identisch — Standard-href-Notation.
+// auf das DCA-Edit-Form springt. Contao 4.13 wuerde einen #-Anchor im href
+// als Teil des `act=`-Parameters interpretieren — daher hier KEIN Anchor.
+// Der User landet auf der Edit-Form, kann selbst zum Such-Tags-Feld scrollen.
 if (isset($GLOBALS['TL_DCA']['tl_page']['list']['operations'])) {
     $GLOBALS['TL_DCA']['tl_page']['list']['operations']['vsearch_tags'] = [
         'label' => &$GLOBALS['TL_LANG']['tl_page']['vsearch_tags_op'],
-        'href' => 'act=edit#pal_vsearch_legend',
+        'href' => 'act=edit',
         'icon' => 'bundles/vennesearchcontao/icons/tag.svg',
         'attributes' => 'title="Such-Tags vergeben"',
     ];

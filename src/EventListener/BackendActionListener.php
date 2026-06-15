@@ -591,9 +591,11 @@ final class BackendActionListener
                 . '</a>';
         };
 
-        // Wrapper-Style: deutliches Padding, Abstand zwischen Cards, kein Bunt
-        return '<div class="widget" style="margin:0 0 1.8rem;padding:0;">'
-            . '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.2rem;">'
+        // Wrapper-Style: oben deutlich Luft zum Backend-Header („Zurück"-Leiste),
+        // unten Abstand zur Verbindung-Sektion. Grid statt Flex damit alle
+        // Cards exakt gleich gross sind und sauber umbrechen.
+        return '<div class="widget" style="margin:1.5rem 0 2rem;padding:0;clear:both;">'
+            . '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.4rem;">'
             . $card($tags, $svgTag, 'Tags verwalten', 'Boost-Faktor, Auto-Match-Patterns, Übersetzungen pro Sprache.')
             . $card($synonyms, $svgSyn, 'Synonyme verwalten', 'Wort-Mapping: Suche nach „Messe" findet auch „Ausstellung".')
             . $card($platform, $svgExt, 'Plattform öffnen', 'Account, API-Keys, Crawler-Config auf venne-search.de verwalten.', true)

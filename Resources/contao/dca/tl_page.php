@@ -15,36 +15,28 @@ declare(strict_types=1);
  * und vermeiden Klassen-Referenzen die zwischen den Versionen variieren.
  */
 
-// Tag-Feld zur SEO-Palette hinzufügen (existiert in 4.13, 5.x).
-// __selector__ NICHT anfassen — wir wollen kein subpalette.
-if (isset($GLOBALS['TL_DCA']['tl_page']['palettes'])) {
+// Tag-Feld in die Palette einfuegen — als onload_callback, damit es NACH
+// allen anderen DCA-Plugins laeuft. Auf FFA gibt es opengraph3, rocksolid_
+// mega_menu, custom Page-DCAs etc., die die Palette evtl. ueberschreiben.
+$GLOBALS['TL_DCA']['tl_page']['config']['onload_callback'][] = static function (): void {
+    if (!isset($GLOBALS['TL_DCA']['tl_page']['palettes']) || !\is_array($GLOBALS['TL_DCA']['tl_page']['palettes'])) {
+        return;
+    }
     foreach ($GLOBALS['TL_DCA']['tl_page']['palettes'] as $key => &$palette) {
         if ($key === '__selector__' || !\is_string($palette)) {
             continue;
         }
-        // Wir hängen das Feld an die "meta_legend"-Gruppe (SEO-Bereich) an,
-        // falls vorhanden — sonst an "expert_legend" oder ans Ende.
-        if (str_contains($palette, '{meta_legend')) {
-            $palette = preg_replace(
-                '/(\{meta_legend[^}]*\}[^;]*)/',
-                '$1,vsearch_tags',
-                $palette,
-                1,
-            );
-        } elseif (str_contains($palette, '{expert_legend')) {
-            $palette = preg_replace(
-                '/(\{expert_legend[^}]*\}[^;]*)/',
-                '$1,vsearch_tags',
-                $palette,
-                1,
-            );
-        } else {
-            // Letzter Ausweg: an alle Palette anhängen unter eigenem Legend.
-            $palette .= ';{vsearch_legend},vsearch_tags';
+        // Schon drin? Skip.
+        if (str_contains($palette, 'vsearch_tags')) {
+            continue;
         }
+        // Eigene Legend ans Ende der Palette anhaengen — robust gegen alle
+        // anderen Plugin-Manipulationen, weil wir NICHTS Existierendes
+        // ersetzen oder erweitern.
+        $palette .= ';{vsearch_legend},vsearch_tags';
     }
     unset($palette);
-}
+};
 
 // Operation "Tags" pro Page-Zeile in der Seitenstruktur. Zeigt ein Icon das
 // auf das DCA-Edit-Form springt. Contao 4.13 wuerde einen #-Anchor im href

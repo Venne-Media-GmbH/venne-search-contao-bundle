@@ -560,9 +560,37 @@ final class LivePageIndexer
     /**
      * Identisch zu IndexableItemProcessor::resolvePageCoverUrl — siehe dort
      * für die Begründung. Unterstützt Standard-singleSRC UND RSCE-JSON-UUIDs.
+     * Prio 1: OpenGraph-Bild (wenn Plugin installiert), Prio 2: singleSRC, Prio 3: RSCE.
      */
     private function resolvePageCoverUrl(int $pageId): string
     {
+        // Prio 1: OpenGraph-Bild aus tl_page (numero2/opengraph3 oder
+        // andere SEO-Plugins). Spaltenname wird zur Laufzeit erkannt — wir
+        // probieren die gaengigen Namen durch.
+        try {
+            $cols = $this->ogImageColumns();
+            if ($cols !== []) {
+                $select = implode(', ', array_map(static fn ($c) => 'p.' . $c, $cols));
+                $row = $this->db->fetchAssociative(
+                    'SELECT ' . $select . ' FROM tl_page p WHERE p.id = ?',
+                    [$pageId],
+                );
+                if (\is_array($row)) {
+                    foreach ($cols as $col) {
+                        $uuid = (string) ($row[$col] ?? '');
+                        if ($uuid === '') {
+                            continue;
+                        }
+                        $url = $this->lookupFileByUuidBin($uuid);
+                        if ($url !== '') {
+                            return $url;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
         try {
             $row = $this->db->fetchAssociative(
                 "SELECT c.singleSRC
@@ -608,6 +636,36 @@ final class LivePageIndexer
         } catch (\Throwable) {
         }
         return '';
+    }
+
+    /**
+     * Erkennt welche OG-Image-Spalten in tl_page existieren — verschiedene
+     * SEO-Plugins benutzen unterschiedliche Namen. Cache pro Request.
+     *
+     * @return list<string>
+     */
+    private function ogImageColumns(): array
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        $candidates = [
+            // numero2/contao-opengraph3
+            'og_image',
+            // alternative Naming-Konventionen anderer SEO-Plugins
+            'og_picture', 'opengraph_image', 'opengraph_picture',
+            'social_image', 'share_image', 'meta_image',
+            // Contao 5 SERP / generic
+            'metaImage',
+        ];
+        try {
+            $cols = array_keys($this->db->createSchemaManager()->listTableColumns('tl_page'));
+            $cached = array_values(array_filter($candidates, static fn ($c) => \in_array($c, $cols, true)));
+        } catch (\Throwable) {
+            $cached = [];
+        }
+        return $cached;
     }
 
     private function lookupFileByUuidBin(string $uuidBin): string

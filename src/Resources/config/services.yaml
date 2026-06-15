@@ -54,6 +54,10 @@ services:
     VenneMedia\VenneSearchContaoBundle\EventListener\PageTagFieldListener:
         public: true
 
+    # Selbes Pattern fuer das Tag-Uebersetzungs-Feld (dynamische Inputs pro Locale).
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagTranslationsFieldListener:
+        public: true
+
     # v2.2.0: Crawler-Panel im DCA, gleiches Pattern wie Tag-Feld (public).
     VenneMedia\VenneSearchContaoBundle\EventListener\CrawlerPanelListener:
         public: true

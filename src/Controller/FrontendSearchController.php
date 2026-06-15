@@ -85,7 +85,7 @@ final class FrontendSearchController extends AbstractController
                 $count = $tagCounts[$t['slug']] ?? $tagCounts[mb_strtolower($t['label'])] ?? 0;
                 $tagFacetList[] = [
                     'slug' => $t['slug'],
-                    'label' => $t['label'],
+                    'label' => TagRepository::translateLabel($t, $locale),
                     'color' => $t['color'],
                     'boost' => $t['boost'],
                     'count' => $count,
@@ -347,7 +347,7 @@ final class FrontendSearchController extends AbstractController
             if (!isset($tagFacetByTag[$key]) || $tagFacetByTag[$key]['count'] < $count) {
                 $tagFacetByTag[$key] = [
                     'slug' => $tag['slug'],
-                    'label' => $tag['label'],
+                    'label' => TagRepository::translateLabel($tag, $locale),
                     'color' => $tag['color'],
                     'boost' => (float) ($tag['boost'] ?? 1.0),
                     'count' => $count,
@@ -378,7 +378,7 @@ final class FrontendSearchController extends AbstractController
             if ($existing === null || $existing['count'] < $count) {
                 $tagFacetByTag[$am['slug']] = [
                     'slug' => $am['slug'],
-                    'label' => $am['label'],
+                    'label' => TagRepository::translateLabel($am, $locale),
                     'color' => $am['color'],
                     'boost' => $am['boost'],
                     'count' => $count,
@@ -392,7 +392,7 @@ final class FrontendSearchController extends AbstractController
 
         $response = new JsonResponse([
             'hits' => array_map(
-                static function ($h) use ($bySlug, $byLabelLower, $extensions, $autoMatchTags): array {
+                static function ($h) use ($bySlug, $byLabelLower, $extensions, $autoMatchTags, $locale): array {
                     $resolvedById = [];
                     foreach ($h->tags as $raw) {
                         if ($raw === '' || \in_array(strtolower($raw), $extensions, true)) {
@@ -400,13 +400,25 @@ final class FrontendSearchController extends AbstractController
                         }
                         // Treffer per Slug?
                         if (isset($bySlug[$raw])) {
-                            $resolvedById[$bySlug[$raw]['slug']] = $bySlug[$raw];
+                            $t = $bySlug[$raw];
+                            $resolvedById[$t['slug']] = [
+                                'slug' => $t['slug'],
+                                'label' => TagRepository::translateLabel($t, $locale),
+                                'color' => $t['color'],
+                                'boost' => $t['boost'] ?? 1.0,
+                            ];
                             continue;
                         }
                         // Treffer per Label?
                         $low = mb_strtolower($raw);
                         if (isset($byLabelLower[$low])) {
-                            $resolvedById[$byLabelLower[$low]['slug']] = $byLabelLower[$low];
+                            $t = $byLabelLower[$low];
+                            $resolvedById[$t['slug']] = [
+                                'slug' => $t['slug'],
+                                'label' => TagRepository::translateLabel($t, $locale),
+                                'color' => $t['color'],
+                                'boost' => $t['boost'] ?? 1.0,
+                            ];
                             continue;
                         }
                         // Unbekannter Tag (Legacy aus tl_page.keywords ODER Tag aus
@@ -422,7 +434,7 @@ final class FrontendSearchController extends AbstractController
                             if (self::globMatch($pattern, (string) $h->url)) {
                                 $resolvedById[$am['slug']] = [
                                     'slug' => $am['slug'],
-                                    'label' => $am['label'],
+                                    'label' => TagRepository::translateLabel($am, $locale),
                                     'color' => $am['color'],
                                     'boost' => $am['boost'],
                                 ];

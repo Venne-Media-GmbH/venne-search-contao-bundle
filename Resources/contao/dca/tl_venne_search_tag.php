@@ -19,6 +19,39 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
                 'onDelete',
             ],
         ],
+        'onsubmit_callback' => [
+            // POST['translations'][locale] = label → JSON-Map in DB schreiben.
+            static function ($dc) {
+                if (!\is_object($dc) || (int) ($dc->id ?? 0) <= 0) {
+                    return;
+                }
+                $raw = $_POST['translations'] ?? null;
+                $tagId = (int) $dc->id;
+                $container = \Contao\System::getContainer();
+                $db = $container?->get('database_connection');
+                if ($db === null) {
+                    return;
+                }
+                $out = [];
+                if (\is_array($raw)) {
+                    foreach ($raw as $loc => $val) {
+                        $loc = preg_replace('/[^a-z]/', '', strtolower((string) $loc)) ?? '';
+                        $val = trim((string) $val);
+                        if ($loc !== '' && \strlen($loc) <= 5 && $val !== '') {
+                            $out[$loc] = $val;
+                        }
+                    }
+                }
+                $json = $out === [] ? null : json_encode($out, JSON_UNESCAPED_UNICODE);
+                try {
+                    $db->executeStatement(
+                        'UPDATE tl_venne_search_tag SET translations = ? WHERE id = ?',
+                        [$json, $tagId],
+                    );
+                } catch (\Throwable) {
+                }
+            },
+        ],
         'sql' => [
             'keys' => [
                 'id' => 'primary',
@@ -58,7 +91,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
         ],
     ],
     'palettes' => [
-        'default' => '{title_legend},label,color,boost;{auto_match_legend},auto_match_pattern;{description_legend:hide},description;{assignments_legend},assignments_panel',
+        'default' => '{title_legend},label,color,boost;{translations_legend},translations;{auto_match_legend},auto_match_pattern;{description_legend:hide},description;{assignments_legend},assignments_panel',
     ],
     'fields' => [
         'id' => [
@@ -242,6 +275,18 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
                     return $normalized;
                 },
             ],
+        ],
+        'translations' => [
+            // Pro aktive Locale ein eigenes Text-Input via input_field_callback.
+            // Beim Submit ueberschreibt unser onsubmit-Hook tl_venne_search_tag
+            // die JSON-Map in der `translations`-Spalte basierend auf POST.
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['translations'],
+            'input_field_callback' => [
+                \VenneMedia\VenneSearchContaoBundle\EventListener\TagTranslationsFieldListener::class,
+                'render',
+            ],
+            'eval' => ['doNotShow' => false, 'doNotCopy' => true],
+            'sql' => 'text NULL',
         ],
         'auto_match_pattern' => [
             // Glob-Patterns (eines pro Zeile) — jede URL eines Treffers, die

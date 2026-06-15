@@ -41,10 +41,12 @@ class ContentVenneSearch extends ContentElement
     {
         $this->Template->moduleId = 'ce-'.$this->id;
         $this->Template->displayMode = $this->vsearch_display_mode ?: 'inline';
-        $this->Template->triggerLabel = $this->vsearch_trigger_label ?: 'Suche öffnen';
-        $this->Template->placeholder = $this->vsearch_placeholder ?: 'Suche…';
-        $this->Template->buttonLabel = $this->vsearch_button_label ?: 'Suchen';
-        $this->Template->locale = $this->getLocale();
+        $locale = $this->getLocale();
+        $defaults = \VenneMedia\VenneSearchContaoBundle\Module\ModuleVenneSearch::defaultLabels($locale);
+        $this->Template->triggerLabel = $this->vsearch_trigger_label ?: $defaults['trigger'];
+        $this->Template->placeholder = $this->vsearch_placeholder ?: $defaults['placeholder'];
+        $this->Template->buttonLabel = $this->vsearch_button_label ?: $defaults['button'];
+        $this->Template->locale = $locale;
         $this->Template->apiUrl = '/vsearch/api';
         $this->Template->minChars = (int) ($this->vsearch_min_chars ?: 3);
         // Default 100 = Meilisearch-Hard-Cap. Wenn der Admin im Backend keinen

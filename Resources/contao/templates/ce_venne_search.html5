@@ -6,6 +6,68 @@
  * @var \Contao\FrontendTemplate $this
  */
 $isModal = ($this->displayMode ?? 'inline') === 'modal';
+
+// i18n-Map fuer alle UI-Strings im JS — basierend auf Page-Locale.
+// User-Werte aus dem Modul-Setting koennen nicht alle Strings ueberschreiben,
+// deshalb hier eine Default-Tabelle pro Sprache; Fallback ist Englisch.
+$vsLocale = strtolower(substr((string) $this->locale, 0, 2));
+$vsI18nMap = [
+    'de' => [
+        'close' => 'Schließen',
+        'filter' => 'Filter',
+        'loading' => 'Lädt …',
+        'loadMore' => 'Mehr laden ({n} weitere)',
+        'hits' => '{n} Treffer · {ms} ms',
+        'noResults' => 'Keine Treffer für „{q}"',
+        'noResultsHint' => 'Versuche ein anderes Wort, prüfe die Schreibweise oder kürze den Suchbegriff.',
+        'recent' => 'Zuletzt gesucht',
+        'popularTags' => 'Beliebte Tags',
+        'whatLookingFor' => 'Was suchst du?',
+        'initialHint' => 'Tippe ein Suchwort ein — Treffer erscheinen sofort.',
+        'searchError' => 'Fehler bei der Suche',
+        'searchErrorHint' => 'Bitte versuche es erneut.',
+        'contentType' => 'Inhaltsart',
+        'fileType' => 'Dateityp',
+        'tags' => 'Tags',
+        'all' => 'Alle',
+        'sortRelevance' => 'Relevanz',
+        'sortNewest' => 'Neueste',
+        'sortOldest' => 'Älteste',
+        'sortType' => 'Art',
+        'typePage' => 'Seite',  'typeFile' => 'Datei', 'typeArticle' => 'Artikel', 'typeCrawled' => 'Webseite',
+        'typePages' => 'Seiten', 'typeFiles' => 'Dateien', 'typeArticles' => 'Artikel', 'typeCrawledPl' => 'Websiteinhalte',
+        'lockedTitle' => 'Nur für Mitglieder sichtbar',
+        'lockedAria' => 'Geschützter Inhalt',
+    ],
+    'en' => [
+        'close' => 'Close',
+        'filter' => 'Filter',
+        'loading' => 'Loading …',
+        'loadMore' => 'Load more ({n} remaining)',
+        'hits' => '{n} results · {ms} ms',
+        'noResults' => 'No results for „{q}"',
+        'noResultsHint' => 'Try a different word, check spelling or shorten the term.',
+        'recent' => 'Recent searches',
+        'popularTags' => 'Popular tags',
+        'whatLookingFor' => 'What are you looking for?',
+        'initialHint' => 'Type a keyword — results appear instantly.',
+        'searchError' => 'Search error',
+        'searchErrorHint' => 'Please try again.',
+        'contentType' => 'Content type',
+        'fileType' => 'File type',
+        'tags' => 'Tags',
+        'all' => 'All',
+        'sortRelevance' => 'Relevance',
+        'sortNewest' => 'Newest',
+        'sortOldest' => 'Oldest',
+        'sortType' => 'Type',
+        'typePage' => 'Page',  'typeFile' => 'File', 'typeArticle' => 'Article', 'typeCrawled' => 'Web page',
+        'typePages' => 'Pages', 'typeFiles' => 'Files', 'typeArticles' => 'Articles', 'typeCrawledPl' => 'Web content',
+        'lockedTitle' => 'Members only',
+        'lockedAria' => 'Protected content',
+    ],
+];
+$vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
 ?>
 <!-- venne-search-bundle template v2.2.0-dev — Wenn du ein anderes Layout siehst, ist das Bundle nicht aktuell. Update: composer require venne-media/venne-search-contao-bundle:^2.2 -->
 <div class="vsearch mod_venne_search vsearch--<?= $isModal ? 'modal' : 'inline' ?><?= $this->cssID && $this->cssID[1] ? ' '.$this->cssID[1] : '' ?>"<?= $this->cssID && $this->cssID[0] ? ' id="'.$this->cssID[0].'"' : '' ?>
@@ -19,7 +81,8 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
      data-module-id="<?= $this->moduleId ?>"
      data-show-sort="<?= $this->showSort ? '1' : '0' ?>"
      data-show-filetype-filter="<?= $this->showFiletypeFilter ? '1' : '0' ?>"
-     data-open-new-tab="<?= $this->openInNewTab ? '1' : '0' ?>">
+     data-open-new-tab="<?= $this->openInNewTab ? '1' : '0' ?>"
+     data-i18n="<?= htmlspecialchars(json_encode($vsI18n, JSON_UNESCAPED_UNICODE), ENT_QUOTES) ?>">
 
     <?php if ($isModal): ?>
         <button type="button" class="vsearch__trigger" data-vsearch-trigger>
@@ -34,7 +97,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
     <div class="vsearch__shell<?= $isModal ? ' vsearch__shell--modal' : '' ?>"<?= $isModal ? ' data-vsearch-shell hidden' : '' ?>>
         <div class="vsearch__panel">
             <?php if ($isModal): ?>
-                <button type="button" class="vsearch__close" data-vsearch-close aria-label="Schließen"></button>
+                <button type="button" class="vsearch__close" data-vsearch-close aria-label="<?= htmlspecialchars($vsI18n['close'], ENT_QUOTES) ?>"></button>
             <?php endif; ?>
 
             <?php if ($this->headline && !$isModal): ?>
@@ -47,7 +110,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                         <circle cx="11" cy="11" r="7"/>
                         <line x1="21" y1="21" x2="16.65" y2="16.65"/>
                     </svg>
-                    <label class="vsearch__sr" for="vsearch-input-<?= $this->moduleId ?>">Suche</label>
+                    <label class="vsearch__sr" for="vsearch-input-<?= $this->moduleId ?>"><?= htmlspecialchars($vsI18n['sortRelevance'] === 'Relevance' ? 'Search' : 'Suche') ?></label>
                     <input
                         id="vsearch-input-<?= $this->moduleId ?>"
                         class="vsearch__input"
@@ -58,7 +121,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                         spellcheck="false"
                         data-vsearch-input
                     >
-                    <button type="button" class="vsearch__clear" data-vsearch-clear hidden aria-label="Eingabe l&ouml;schen">
+                    <button type="button" class="vsearch__clear" data-vsearch-clear hidden aria-label="<?= htmlspecialchars($vsI18n['close'], ENT_QUOTES) ?>">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
                             <line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/>
                         </svg>
@@ -70,30 +133,30 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 <div class="vsearch__toolbar-row">
                     <p class="vsearch__meta" data-vsearch-meta></p>
                     <?php if ($this->showFacets): ?>
-                        <button type="button" class="vsearch__filter-toggle" data-vsearch-filter-toggle aria-label="Filter">
+                        <button type="button" class="vsearch__filter-toggle" data-vsearch-filter-toggle aria-label="<?= htmlspecialchars($vsI18n['filter'], ENT_QUOTES) ?>">
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <line x1="3" y1="6" x2="21" y2="6"/><line x1="6" y1="12" x2="18" y2="12"/><line x1="10" y1="18" x2="14" y2="18"/>
                             </svg>
-                            Filter
+                            <?= htmlspecialchars($vsI18n['filter']) ?>
                         </button>
                     <?php endif; ?>
                     <?php /* Sort-Pills immer rendern — User muss zwischen Relevanz/Neueste/Aelteste umschalten koennen. Backend-Setting wird ignoriert. */ ?>
-                    <div class="vsearch__sort-pills" role="tablist" aria-label="Sortierung" data-vsearch-sort-pills>
+                    <div class="vsearch__sort-pills" role="tablist" aria-label="<?= htmlspecialchars($vsI18n['sortRelevance'], ENT_QUOTES) ?>" data-vsearch-sort-pills>
                         <button type="button" class="vsearch__sort-pill vsearch__sort-pill--active" data-sort="relevance" aria-pressed="true">
                             <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l2.39 7.36H22l-6.19 4.5 2.39 7.36L12 16.72l-6.19 4.5 2.39-7.36L2 9.36h7.61L12 2z"/></svg>
-                            <span>Relevanz</span>
+                            <span><?= htmlspecialchars($vsI18n['sortRelevance']) ?></span>
                         </button>
                         <button type="button" class="vsearch__sort-pill" data-sort="date_desc" aria-pressed="false">
                             <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4v16M7 20l-4-4M7 20l4-4M14 6h7M14 12h5M14 18h3"/></svg>
-                            <span>Neueste</span>
+                            <span><?= htmlspecialchars($vsI18n['sortNewest']) ?></span>
                         </button>
                         <button type="button" class="vsearch__sort-pill" data-sort="date_asc" aria-pressed="false">
                             <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 20V4M7 4l-4 4M7 4l4 4M14 6h3M14 12h5M14 18h7"/></svg>
-                            <span>Älteste</span>
+                            <span><?= htmlspecialchars($vsI18n['sortOldest']) ?></span>
                         </button>
                         <button type="button" class="vsearch__sort-pill" data-sort="type_asc" aria-pressed="false">
                             <svg class="vsearch__sort-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-                            <span>Art</span>
+                            <span><?= htmlspecialchars($vsI18n['sortType']) ?></span>
                         </button>
                     </div>
                 </div>
@@ -103,17 +166,17 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 <?php if ($this->showFacets): ?>
                     <aside class="vsearch__sidebar" data-vsearch-sidebar>
                         <div class="vsearch__sidebar-section" data-vsearch-sidebar-types>
-                            <h3 class="vsearch__sidebar-title">Inhaltsart</h3>
+                            <h3 class="vsearch__sidebar-title"><?= htmlspecialchars($vsI18n['contentType']) ?></h3>
                             <div class="vsearch__facets" data-vsearch-facets></div>
                         </div>
                         <?php if ($this->showFiletypeFilter): ?>
                             <div class="vsearch__sidebar-section" data-vsearch-sidebar-ext>
-                                <h3 class="vsearch__sidebar-title">Dateityp</h3>
+                                <h3 class="vsearch__sidebar-title"><?= htmlspecialchars($vsI18n['fileType']) ?></h3>
                                 <div class="vsearch__ext-filters" data-vsearch-ext-filters hidden></div>
                             </div>
                         <?php endif; ?>
                         <div class="vsearch__sidebar-section" data-vsearch-sidebar-tags hidden>
-                            <h3 class="vsearch__sidebar-title">Tags</h3>
+                            <h3 class="vsearch__sidebar-title"><?= htmlspecialchars($vsI18n['tags']) ?></h3>
                             <div class="vsearch__tag-cloud" data-vsearch-tag-cloud></div>
                         </div>
                     </aside>
@@ -815,6 +878,19 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         var limit = parseInt(box.dataset.limit, 10) || 10;
         var openInNewTab = box.dataset.openNewTab === '1';
         var showFiletypeFilter = box.dataset.showFiletypeFilter === '1';
+        // i18n-Map vom PHP-Template (pro Page-Locale). T(key) liefert den
+        // uebersetzten String, fallback ist der Schluessel selbst.
+        var I18N = {};
+        try { I18N = JSON.parse(box.dataset.i18n || '{}'); } catch (e) { I18N = {}; }
+        function T(key, vars) {
+            var s = I18N[key] || key;
+            if (vars) {
+                Object.keys(vars).forEach(function (k) {
+                    s = s.replace('{' + k + '}', vars[k]);
+                });
+            }
+            return s;
+        }
 
         var FILETYPE_GROUPS = [
             { key: 'pdf',   label: 'PDF',     exts: ['pdf'] },
@@ -826,7 +902,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
         ];
 
         var TYPE_LABELS = {
-            page: 'Seite', file: 'Datei', article: 'Artikel', crawled: 'Webseite',
+            page: T('typePage'), file: T('typeFile'), article: T('typeArticle'), crawled: T('typeCrawled'),
             pdf: 'PDF', docx: 'DOCX', doc: 'DOC',
             xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT',
             odt: 'ODT', rtf: 'RTF', txt: 'TXT', md: 'MD'
@@ -1066,7 +1142,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 .catch(function (err) {
                     if (err.name === 'AbortError') return;
                     resultsList.classList.remove('vs-is-loading');
-                    resultsList.innerHTML = '<li class="vsearch__empty"><p class="vsearch__empty-title">Fehler bei der Suche</p><p class="vsearch__empty-hint">Bitte versuche es erneut.</p></li>';
+                    resultsList.innerHTML = '<li class="vsearch__empty"><p class="vsearch__empty-title">' + escapeHtml(T('searchError')) + '</p><p class="vsearch__empty-hint">' + escapeHtml(T('searchErrorHint')) + '</p></li>';
                 });
         }
 
@@ -1173,7 +1249,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
 
             if (toolbar) toolbar.hidden = false;
             if (bodyBox) { bodyBox.hidden = false; bodyBox.classList.remove('vs-no-sidebar'); }
-            meta.textContent = lastTotalHits + ' Treffer · ' + (data.queryTimeMs || 0) + ' ms';
+            meta.textContent = T('hits', { n: lastTotalHits, ms: (data.queryTimeMs || 0) });
             // Recent: erfolgreiche Query speichern (für Empty-State im Modal)
             if (!append && q && lastTotalHits > 0) pushRecent(q);
 
@@ -1275,7 +1351,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 }
 
                 var lockBadge = hit.isProtected
-                    ? '<span class="vs-lock" title="Nur für Mitglieder sichtbar" aria-label="Geschützter Inhalt">' + iconLock() + '</span>'
+                    ? '<span class="vs-lock" title="' + escapeHtml(T('lockedTitle')) + '" aria-label="' + escapeHtml(T('lockedAria')) + '">' + iconLock() + '</span>'
                     : '';
 
                 // Meta-Zeile
@@ -1317,10 +1393,10 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 var btn = document.createElement('button');
                 btn.type = 'button';
                 btn.className = 'vsearch__loadmore';
-                btn.textContent = 'Mehr laden (' + (lastTotalHits - currentOffset) + ' weitere)';
+                btn.textContent = T('loadMore', { n: (lastTotalHits - currentOffset) });
                 btn.addEventListener('click', function () {
                     btn.disabled = true;
-                    btn.textContent = 'Lädt …';
+                    btn.textContent = T('loading');
                     runSearch(q, {append: true});
                 });
                 resultsList.parentNode.appendChild(btn);
@@ -1337,12 +1413,12 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                     '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
                         '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
                     '</svg>' +
-                    '<p class="vsearch__empty-title">Keine Treffer für „' + escapeHtml(q) + '"</p>' +
-                    '<p class="vsearch__empty-hint">Versuche ein anderes Wort, prüfe die Schreibweise oder kürze den Suchbegriff.</p>';
+                    '<p class="vsearch__empty-title">' + escapeHtml(T('noResults', { q: q })) + '</p>' +
+                    '<p class="vsearch__empty-hint">' + escapeHtml(T('noResultsHint')) + '</p>';
 
             var recents = readRecent().filter(function (x) { return x.toLowerCase() !== q.toLowerCase(); });
             if (recents.length > 0) {
-                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">Zuletzt gesucht</div><div class="vsearch__empty-tips">';
+                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">' + escapeHtml(T('recent')) + '</div><div class="vsearch__empty-tips">';
                 recents.forEach(function (r) {
                     html += '<button type="button" class="vsearch__empty-tip" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>';
                 });
@@ -1352,7 +1428,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
             // Wenn Tags bekannt sind: top 6 anzeigen als „Vielleicht meinst du …"-Vorschläge
             if (Array.isArray(tagFacets) && tagFacets.length > 0) {
                 var top = tagFacets.slice(0, 6);
-                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">Beliebte Tags</div><div class="vsearch__empty-tips">';
+                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">' + escapeHtml(T('popularTags')) + '</div><div class="vsearch__empty-tips">';
                 top.forEach(function (t) {
                     html += '<button type="button" class="vsearch__empty-tip" data-vsearch-empty-tag="' + escapeHtml(t.slug) + '">' +
                         escapeHtml(t.label) + '</button>';
@@ -1372,12 +1448,12 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 '<svg class="vsearch__empty-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">' +
                     '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>' +
                 '</svg>' +
-                '<p class="vsearch__empty-title">Was suchst du?</p>' +
-                '<p class="vsearch__empty-hint">Tippe ein Suchwort ein — Treffer erscheinen sofort.</p>';
+                '<p class="vsearch__empty-title">' + escapeHtml(T('whatLookingFor')) + '</p>' +
+                '<p class="vsearch__empty-hint">' + escapeHtml(T('initialHint')) + '</p>';
             // Reihenfolge: Tags zuerst (Discoverability) — dann erst „Zuletzt gesucht".
             if (tags.length > 0) {
                 var topTags = tags.slice(0, 8);
-                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">Beliebte Tags</div><div class="vsearch__empty-tips">';
+                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">' + escapeHtml(T('popularTags')) + '</div><div class="vsearch__empty-tips">';
                 topTags.forEach(function (t) {
                     html += '<button type="button" class="vsearch__empty-tip vsearch__empty-tip--tag" data-color="' + escapeHtml(t.color || 'gray') + '" data-vsearch-empty-tag="' + escapeHtml(t.slug) + '">' +
                         escapeHtml(t.label) + '</button>';
@@ -1385,7 +1461,7 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
                 html += '</div></div>';
             }
             if (recents.length > 0) {
-                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">Zuletzt gesucht</div><div class="vsearch__empty-tips">';
+                html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">' + escapeHtml(T('recent')) + '</div><div class="vsearch__empty-tips">';
                 recents.forEach(function (r) {
                     html += '<button type="button" class="vsearch__empty-tip" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>';
                 });
@@ -1472,8 +1548,8 @@ $isModal = ($this->displayMode ?? 'inline') === 'modal';
 
         function renderFacets(typeFacets, tagFacets, q) {
             typeFacets = typeFacets || {};
-            var labels = { page: 'Seiten', file: 'Dateien', article: 'Artikel', crawled: 'Websiteinhalte' };
-            var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">Alle</button>';
+            var labels = { page: T('typePages'), file: T('typeFiles'), article: T('typeArticles'), crawled: T('typeCrawledPl') };
+            var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">' + escapeHtml(T('all')) + '</button>';
             Object.keys(typeFacets).forEach(function (type) {
                 var active = currentTypeFilter === type ? ' vsearch__facet--active' : '';
                 var label = labels[type] || type;

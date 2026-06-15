@@ -27,7 +27,7 @@ final class TagRepository
      * jede Treffer-URL gematcht und automatisch zugewiesen. Spart Backfill
      * und funktioniert für gecrawlte externe URLs genauso wie für interne.
      *
-     * @return list<array{slug:string, label:string, color:string, boost:float, patterns:list<string>}>
+     * @return list<array{slug:string, label:string, color:string, boost:float, patterns:list<string>, translations:?string}>
      */
     public function findAutoMatchTags(): array
     {
@@ -35,9 +35,11 @@ final class TagRepository
             return [];
         }
         $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
+        $hasTrans = $this->translationsColumnAvailable();
+        $transExpr = $hasTrans ? 't.translations' : 'NULL AS translations';
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.auto_match_pattern
+                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.auto_match_pattern, ' . $transExpr . '
                  FROM ' . self::TAG_TABLE . ' t
                  WHERE t.auto_match_pattern IS NOT NULL AND t.auto_match_pattern <> \'\'',
             );
@@ -64,6 +66,7 @@ final class TagRepository
                 'color' => (string) $r['color'],
                 'boost' => (float) $r['boost'],
                 'patterns' => $patterns,
+                'translations' => $r['translations'] !== null ? (string) $r['translations'] : null,
             ];
         }
 
@@ -115,7 +118,7 @@ final class TagRepository
     }
 
     /**
-     * @return list<array{id:int, slug:string, label:string, color:string, boost:float}>
+     * @return list<array{id:int, slug:string, label:string, color:string, boost:float, translations:?string}>
      */
     public function findAll(): array
     {
@@ -123,9 +126,11 @@ final class TagRepository
             return [];
         }
         $boostExpr = $this->boostColumnAvailable() ? 'boost' : "'1.00'";
+        $hasTranslations = $this->translationsColumnAvailable();
+        $translationsExpr = $hasTranslations ? 'translations' : "NULL AS translations";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT id, slug, label, color, ' . $boostExpr . ' AS boost FROM ' . self::TAG_TABLE . ' ORDER BY label ASC',
+                'SELECT id, slug, label, color, ' . $boostExpr . ' AS boost, ' . $translationsExpr . ' FROM ' . self::TAG_TABLE . ' ORDER BY label ASC',
             );
         } catch (\Throwable) {
             return [];
@@ -138,9 +143,47 @@ final class TagRepository
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
                 'boost' => (float) ($r['boost'] ?? 1.0),
+                'translations' => $r['translations'] !== null ? (string) $r['translations'] : null,
             ];
         }
         return $out;
+    }
+
+    /**
+     * Liefert das uebersetzte Label fuer eine Locale, fallback Default-Label.
+     *
+     * @param array{label:string, translations?:?string} $tag
+     */
+    public static function translateLabel(array $tag, string $locale): string
+    {
+        $default = (string) ($tag['label'] ?? '');
+        $raw = $tag['translations'] ?? null;
+        if (!\is_string($raw) || $raw === '') {
+            return $default;
+        }
+        $decoded = json_decode($raw, true);
+        if (!\is_array($decoded)) {
+            return $default;
+        }
+        $locale = strtolower(substr($locale, 0, 2));
+        if (isset($decoded[$locale]) && $decoded[$locale] !== '') {
+            return (string) $decoded[$locale];
+        }
+        return $default;
+    }
+
+    private function translationsColumnAvailable(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            $cols = $this->db->createSchemaManager()->listTableColumns(self::TAG_TABLE);
+            return $cached = isset($cols['translations']);
+        } catch (\Throwable) {
+            return $cached = false;
+        }
     }
 
     /**

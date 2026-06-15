@@ -7,9 +7,10 @@ declare(strict_types=1);
  * unter "System" angezeigt.
  */
 $GLOBALS['TL_LANG']['MOD']['venne_search'] = ['Venne Search', 'Volltextsuche für deine Site verwalten — API-Key, Indexierung, Status, Daten-Browser, Synonyme.'];
-$GLOBALS['TL_LANG']['MOD']['tl_venne_search_synonym'] = ['Synonyme', 'Suchbegriff-Synonyme verwalten (z.B. „Messe" ↔ „Ausstellung").'];
-$GLOBALS['TL_LANG']['MOD']['tl_venne_search_tag'] = ['Tags', 'Tag-System für Boost + Auto-Match-URL-Patterns.'];
-$GLOBALS['TL_LANG']['MOD']['tl_venne_search_settings'] = ['Einstellungen', 'API-Key, Sprachen, PDF-Indexing, Crawler.'];
+// Tabellen-Untertitel im Breadcrumb erwarten Contao 4.13 als String, nicht als Array.
+$GLOBALS['TL_LANG']['MOD']['tl_venne_search_synonym'] = 'Synonyme';
+$GLOBALS['TL_LANG']['MOD']['tl_venne_search_tag'] = 'Tags';
+$GLOBALS['TL_LANG']['MOD']['tl_venne_search_settings'] = 'Einstellungen';
 
 // Frontend-Modul-Label im Backend (Themes → Frontend-Module → Typ)
 $GLOBALS['TL_LANG']['FMD']['venne_search'] = ['Venne Search', 'Suchfeld mit AJAX-Live-Vorschau für Besucher der Website.'];

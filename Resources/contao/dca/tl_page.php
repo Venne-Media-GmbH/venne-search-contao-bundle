@@ -53,7 +53,7 @@ if (isset($GLOBALS['TL_DCA']['tl_page']['list']['operations'])) {
     $GLOBALS['TL_DCA']['tl_page']['list']['operations']['vsearch_tags'] = [
         'label' => &$GLOBALS['TL_LANG']['tl_page']['vsearch_tags_op'],
         'href' => 'act=edit#pal_vsearch_legend',
-        'icon' => 'bundles/vennemediavennesearchcontao/icons/tag.svg',
+        'icon' => 'bundles/vennesearchcontao/icons/tag.svg',
         'attributes' => 'title="Such-Tags vergeben"',
     ];
 }

@@ -298,6 +298,13 @@ final class FrontendSearchController extends AbstractController
             );
         }
 
+        // URL-Deduplizierung: derselbe Inhalt kann doppelt im Index liegen
+        // (z.B. als Contao-Page UND als crawled-Hit von der gleichen URL).
+        // Wir behalten pro normalisierter URL nur den qualitativ besten Hit.
+        // Prioritaet: page/file/article > crawled (interne Daten gewinnen,
+        // weil sie strukturiert sind und korrekte Permissions/Tags haben).
+        $result = self::dedupeByUrl($result);
+
         // v2.0.0: Anonymes Analytics-Tracking. Niemals den Such-Pfad blockieren.
         try {
             $analytics->record($query, $locale, $result->totalHits);
@@ -482,6 +489,79 @@ final class FrontendSearchController extends AbstractController
         $response->setMaxAge(30);
         $response->setVary(['Cookie'], false);
         return $response;
+    }
+
+    /**
+     * URL-Deduplizierung: Wenn derselbe Inhalt mehrfach im Index liegt
+     * (z.B. als Contao-Page UND als gecrawltes Dokument von der gleichen URL),
+     * behalten wir nur die qualitativ beste Variante.
+     * Prio: page/file/article > crawled (interne Quellen gewinnen).
+     * Facet-Counts werden entsprechend neu gezaehlt.
+     */
+    private static function dedupeByUrl(\VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult $result): \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult
+    {
+        $priority = ['page' => 4, 'file' => 3, 'article' => 2, 'crawled' => 1];
+        $byUrl = [];
+        $dropped = 0;
+        foreach ($result->hits as $h) {
+            $key = self::normalizeUrl((string) $h->url);
+            if ($key === '') {
+                // Kein URL → nicht deduplizierbar, behalten.
+                $byUrl[spl_object_hash($h)] = $h;
+                continue;
+            }
+            if (!isset($byUrl[$key])) {
+                $byUrl[$key] = $h;
+                continue;
+            }
+            $existing = $byUrl[$key];
+            $existingPrio = $priority[$existing->type] ?? 0;
+            $newPrio = $priority[$h->type] ?? 0;
+            if ($newPrio > $existingPrio) {
+                $byUrl[$key] = $h;
+            }
+            $dropped++;
+        }
+        if ($dropped === 0) {
+            return $result;
+        }
+        $hits = array_values($byUrl);
+        // Type-Facets neu zaehlen.
+        $typeCounts = [];
+        foreach ($hits as $h) {
+            $t = (string) $h->type;
+            $typeCounts[$t] = ($typeCounts[$t] ?? 0) + 1;
+        }
+        $facets = $result->facets;
+        $facets['type'] = $typeCounts;
+        return new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
+            hits: $hits,
+            totalHits: max(0, $result->totalHits - $dropped),
+            offset: $result->offset,
+            limit: $result->limit,
+            facets: $facets,
+            queryTimeMs: $result->queryTimeMs,
+        );
+    }
+
+    /**
+     * Normalisiert URLs fuer Dedup-Vergleich: protokoll + host weg, www. weg,
+     * trailing slash weg, query bleibt drin (`?meldung=xyz` differenziert
+     * unterschiedliche Detail-Seiten). Leere/relative URLs → leer.
+     */
+    private static function normalizeUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        // Protokoll + Host raus
+        $url = preg_replace('#^https?://(www\.)?[^/]+#i', '', $url) ?? $url;
+        // Falls KEIN Protokoll war, evtl. fuehrendes "www.host" trotzdem entfernen.
+        $url = preg_replace('#^(www\.)?[^/]+\.[a-z]{2,}#i', '', $url) ?? $url;
+        $url = strtolower($url);
+        $url = rtrim($url, '/');
+        return $url;
     }
 
     /**

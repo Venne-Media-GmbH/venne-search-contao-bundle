@@ -591,10 +591,10 @@ final class BackendActionListener
                 . '</a>';
         };
 
-        // Wrapper-Style: oben deutlich Luft zum Backend-Header („Zurück"-Leiste),
-        // unten Abstand zur Verbindung-Sektion. Grid statt Flex damit alle
-        // Cards exakt gleich gross sind und sauber umbrechen.
-        return '<div class="widget" style="margin:1.5rem 0 2rem;padding:0;clear:both;">'
+        // Wrapper-Style: rundum Luft — oben/unten zu Header/Sektion, links/rechts
+        // zum DCA-Container-Rand. Grid damit Cards gleich gross sind und
+        // sauber umbrechen.
+        return '<div class="widget" style="margin:1.5rem 1.25rem 2rem;padding:0;clear:both;">'
             . '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.4rem;">'
             . $card($tags, $svgTag, 'Tags verwalten', 'Boost-Faktor, Auto-Match-Patterns, Übersetzungen pro Sprache.')
             . $card($synonyms, $svgSyn, 'Synonyme verwalten', 'Wort-Mapping: Suche nach „Messe" findet auch „Ausstellung".')

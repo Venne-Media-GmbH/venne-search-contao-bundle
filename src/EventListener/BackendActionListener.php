@@ -1192,7 +1192,10 @@ final class BackendActionListener
         // Toolbar (Light-Mode)
         $rt = htmlspecialchars((string) ($_GET['rt'] ?? ''));
         $id = htmlspecialchars((string) ($_GET['id'] ?? '1'));
-        $base = sprintf('?do=venne_search&act=edit&id=%s&rt=%s', $id, $rt);
+        // Wichtig: ABSOLUT mit /contao-Prefix. Relativ („?do=...") loest der
+        // Browser je nach Current-Path auf — auf FFA-Production fuehrte das
+        // beim Klick auf „Filtern" zu https://www.ffa.de/?do=... (ohne /contao).
+        $base = sprintf('/contao?do=venne_search&act=edit&id=%s&rt=%s', $id, $rt);
         // Wichtig: KEIN <form> hier — die DCA-Edit-Maske wickelt unsere
         // Felder bereits in ein <form method="post"> ein, und HTML kennt
         // keine verschachtelten Formulare. Browser ignoriert das innere

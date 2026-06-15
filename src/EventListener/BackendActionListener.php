@@ -562,43 +562,42 @@ final class BackendActionListener
     }
 
     /**
-     * Quick-Navigation: Direkt-Links zu Tags, Synonyme, Index-Browser oben im
-     * Settings-Edit-Form. Cards mit Inline-SVG statt Emojis — Backend-Look
-     * passend zu Contao (dezente Outline-Icons, Hover-Effekt, kein Bunt).
+     * Hub-Navigation oben im Settings-Edit-Form: Direkt-Links zu allen
+     * Bereichen des Bundles. Cards mit Inline-SVG, dezent im Contao-Look.
+     * Index-Browser-Card wurde entfernt, weil das documents_panel weiter
+     * unten in derselben Seite das gleiche bereits zeigt.
      */
     public static function renderQuickNav(): string
     {
         $rt = htmlspecialchars((string) ($_GET['rt'] ?? ''), ENT_QUOTES);
-        $id = htmlspecialchars((string) ($_GET['id'] ?? '1'), ENT_QUOTES);
         $tags = '/contao?do=venne_search&table=tl_venne_search_tag&rt=' . $rt;
         $synonyms = '/contao?do=venne_search&table=tl_venne_search_synonym&rt=' . $rt;
-        // Wichtig: Index-Browser im Edit-Form (documents_panel) statt
-        // Standalone-Page, damit Contao-Backend-Chrome (Sidebar, Header,
-        // Padding) korrekt drumherum gerendert wird. Anchor alleine reicht
-        // nicht — Contao-Backend hat ein <base>-Tag und resolved den
-        // Hash dann zur Domain-Root.
-        $browser = '/contao?do=venne_search&act=edit&id=' . $id . '&rt=' . $rt . '#pal_documents_legend';
+        $platform = 'https://venne-search.de';
 
-        $svgTag = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
-        $svgSyn = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
-        $svgIdx = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>';
+        $svgTag = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+        $svgSyn = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+        $svgExt = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
 
-        $card = static function (string $href, string $svg, string $title, string $desc): string {
-            return '<a href="' . $href . '" style="display:flex;gap:.85rem;align-items:flex-start;padding:1rem 1.1rem;background:#fff;border:1px solid #d1d5db;border-radius:8px;text-decoration:none;color:inherit;transition:border-color .15s,box-shadow .15s,transform .15s;flex:1;min-width:200px;"'
-                . ' onmouseover="this.style.borderColor=&quot;#3a7178&quot;;this.style.boxShadow=&quot;0 2px 8px -2px rgba(58,113,120,.25)&quot;;"'
-                . ' onmouseout="this.style.borderColor=&quot;#d1d5db&quot;;this.style.boxShadow=&quot;none&quot;;">'
-                . '<span style="flex-shrink:0;color:#3a7178;display:inline-flex;width:32px;height:32px;align-items:center;justify-content:center;background:#f0fdfa;border-radius:6px;">' . $svg . '</span>'
-                . '<span style="display:flex;flex-direction:column;gap:.15rem;">'
-                . '<span style="font-weight:600;color:#0f172a;font-size:.92rem;">' . $title . '</span>'
-                . '<span style="font-size:.78rem;color:#64748b;line-height:1.4;">' . $desc . '</span>'
+        $card = static function (string $href, string $svg, string $title, string $desc, bool $external = false): string {
+            $extAttr = $external ? ' target="_blank" rel="noopener"' : '';
+            return '<a href="' . $href . '"' . $extAttr . ' style="display:flex;gap:1rem;align-items:flex-start;padding:1.25rem 1.4rem;background:#fff;border:1px solid #d1d5db;border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s,box-shadow .15s,transform .15s;flex:1;min-width:240px;box-sizing:border-box;"'
+                . ' onmouseover="this.style.borderColor=&quot;#3a7178&quot;;this.style.boxShadow=&quot;0 4px 12px -3px rgba(58,113,120,.28)&quot;;this.style.transform=&quot;translateY(-1px)&quot;;"'
+                . ' onmouseout="this.style.borderColor=&quot;#d1d5db&quot;;this.style.boxShadow=&quot;none&quot;;this.style.transform=&quot;none&quot;;">'
+                . '<span style="flex-shrink:0;color:#3a7178;display:inline-flex;width:40px;height:40px;align-items:center;justify-content:center;background:#f0fdfa;border-radius:8px;">' . $svg . '</span>'
+                . '<span style="display:flex;flex-direction:column;gap:.3rem;line-height:1.4;">'
+                . '<span style="font-weight:600;color:#0f172a;font-size:.95rem;">' . $title . '</span>'
+                . '<span style="font-size:.8rem;color:#64748b;">' . $desc . '</span>'
                 . '</span>'
                 . '</a>';
         };
 
-        return '<div class="widget" style="margin:0 0 1.2rem;display:flex;gap:.8rem;flex-wrap:wrap;">'
+        // Wrapper-Style: deutliches Padding, Abstand zwischen Cards, kein Bunt
+        return '<div class="widget" style="margin:0 0 1.8rem;padding:0;">'
+            . '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1.2rem;">'
             . $card($tags, $svgTag, 'Tags verwalten', 'Boost-Faktor, Auto-Match-Patterns, Übersetzungen pro Sprache.')
             . $card($synonyms, $svgSyn, 'Synonyme verwalten', 'Wort-Mapping: Suche nach „Messe" findet auch „Ausstellung".')
-            . $card($browser, $svgIdx, 'Index-Browser', 'Alle indexierten Dokumente durchsuchen + entfernen.')
+            . $card($platform, $svgExt, 'Plattform öffnen', 'Account, API-Keys, Crawler-Config auf venne-search.de verwalten.', true)
+            . '</div>'
             . '</div>';
     }
 

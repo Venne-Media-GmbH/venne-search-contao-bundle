@@ -8,6 +8,7 @@ $GLOBALS['TL_LANG']['tl_venne_search_tag']['assignments_legend'] = 'Zugewiesene 
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_legend'] = 'Automatisch zuweisen über URL';
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['translations_legend'] = 'Übersetzungen';
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['translations'] = ['Übersetzungen pro Sprache', 'Eine Zeile pro Sprache im Format <code>locale: Label</code>. Beispiel:<br><code>en: Press Releases</code><br><code>fr: Communiqués</code><br>Wird auf Seiten mit passender Sprache statt der Standard-Bezeichnung angezeigt.'];
+$GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_pattern_translations'] = ['URL-Pattern pro Sprache (optional)', 'Sprachspezifische URL-Patterns, weil englische Detail-Seiten oft andere URL-Struktur haben. Felder leer lassen → fällt auf das Standard-Pattern oben zurück.'];
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_pattern'] = ['URL-Pattern (Glob, optional)', 'Ein Pattern pro Zeile. Jeder Such-Treffer, dessen URL auf eines davon passt, bekommt den Tag automatisch — ohne manuelle Zuweisung. <code>*</code> = beliebige Zeichen. Beispiel: <code>*pressemitteilungen-detailseite*</code> → alle Pressemitteilungen erhalten den Tag.'];
 
 $GLOBALS['TL_LANG']['tl_venne_search_tag']['label'] = ['Bezeichnung', 'Was Besucher als Tag-Chip neben Treffern sehen.'];

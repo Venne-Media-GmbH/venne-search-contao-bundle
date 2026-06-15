@@ -50,6 +50,27 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
                     );
                 } catch (\Throwable) {
                 }
+
+                // Selbes Spiel fuer Auto-Match-Pattern-Uebersetzungen pro Locale.
+                $patternsRaw = $_POST['auto_match_pattern_translations'] ?? null;
+                $patternsOut = [];
+                if (\is_array($patternsRaw)) {
+                    foreach ($patternsRaw as $loc => $val) {
+                        $loc = preg_replace('/[^a-z]/', '', strtolower((string) $loc)) ?? '';
+                        $val = trim((string) $val);
+                        if ($loc !== '' && \strlen($loc) <= 5 && $val !== '') {
+                            $patternsOut[$loc] = $val;
+                        }
+                    }
+                }
+                $patternsJson = $patternsOut === [] ? null : json_encode($patternsOut, JSON_UNESCAPED_UNICODE);
+                try {
+                    $db->executeStatement(
+                        'UPDATE tl_venne_search_tag SET auto_match_pattern_translations = ? WHERE id = ?',
+                        [$patternsJson, $tagId],
+                    );
+                } catch (\Throwable) {
+                }
             },
         ],
         'sql' => [
@@ -91,7 +112,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
         ],
     ],
     'palettes' => [
-        'default' => '{title_legend},label,color,boost;{translations_legend},translations;{auto_match_legend},auto_match_pattern;{description_legend:hide},description;{assignments_legend},assignments_panel',
+        'default' => '{title_legend},label,color,boost;{translations_legend},translations;{auto_match_legend},auto_match_pattern,auto_match_pattern_translations;{description_legend:hide},description;{assignments_legend},assignments_panel',
     ],
     'fields' => [
         'id' => [
@@ -293,9 +314,22 @@ $GLOBALS['TL_DCA']['tl_venne_search_tag'] = [
             // matched, bekommt diesen Tag automatisch in der Such-Antwort.
             // Funktioniert für Contao-Pages, Files und externe gecrawlte URLs.
             // Beispiel: *pressemitteilungen-detailseite* → Tag "Pressemitteilung"
+            // Sprachen-Override: siehe `auto_match_pattern_translations`.
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_pattern'],
             'inputType' => 'textarea',
             'eval' => ['tl_class' => 'clr long', 'rows' => 4, 'decodeEntities' => true],
+            'sql' => 'text NULL',
+        ],
+        'auto_match_pattern_translations' => [
+            // Patterns pro Locale — englische Detail-Seiten haben oft andere
+            // URL-Struktur (z.B. /press-release-detail/ statt /pressemitteilungen-
+            // detailseite/). Speichert als JSON-Map {locale: patterns-string}.
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_tag']['auto_match_pattern_translations'],
+            'input_field_callback' => [
+                \VenneMedia\VenneSearchContaoBundle\EventListener\TagPatternTranslationsFieldListener::class,
+                'render',
+            ],
+            'eval' => ['doNotShow' => false, 'doNotCopy' => true],
             'sql' => 'text NULL',
         ],
         'description' => [

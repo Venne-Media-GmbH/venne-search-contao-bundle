@@ -199,7 +199,7 @@ final class FrontendSearchController extends AbstractController
             $serviceLimit = 1000;
             $serviceOffset = 0;
             if ($query === '') {
-                $effectiveQuery = self::buildPatternQuery($autoMatchFilterTags);
+                $effectiveQuery = self::buildPatternQuery($autoMatchFilterTags, $locale);
             }
         }
 
@@ -233,10 +233,10 @@ final class FrontendSearchController extends AbstractController
         // ein Pattern eines angefragten Auto-Match-Tags matched (logisches AND
         // ueber alle angefragten Auto-Match-Tags, OR ueber Patterns innerhalb).
         if ($autoMatchFilterTags !== []) {
-            $matchAuto = static function (string $url) use ($autoMatchFilterTags): bool {
+            $matchAuto = static function (string $url) use ($autoMatchFilterTags, $locale): bool {
                 foreach ($autoMatchFilterTags as $am) {
                     $oneMatched = false;
-                    foreach ($am['patterns'] as $pattern) {
+                    foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
                         if (self::globMatch($pattern, $url)) {
                             $oneMatched = true;
                             break;
@@ -361,7 +361,7 @@ final class FrontendSearchController extends AbstractController
         $autoMatchHitCounts = [];
         foreach ($result->hits as $h) {
             foreach ($autoMatchTags as $am) {
-                foreach ($am['patterns'] as $pattern) {
+                foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
                     if (self::globMatch($pattern, (string) $h->url)) {
                         $autoMatchHitCounts[$am['slug']] = ($autoMatchHitCounts[$am['slug']] ?? 0) + 1;
                         break 2;
@@ -430,7 +430,7 @@ final class FrontendSearchController extends AbstractController
                     }
                     // Auto-Match-Tags: URL gegen Patterns prüfen, passende dazu.
                     foreach ($autoMatchTags as $am) {
-                        foreach ($am['patterns'] as $pattern) {
+                        foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
                             if (self::globMatch($pattern, (string) $h->url)) {
                                 $resolvedById[$am['slug']] = [
                                     'slug' => $am['slug'],
@@ -493,11 +493,11 @@ final class FrontendSearchController extends AbstractController
      *
      * @param list<array{patterns:list<string>}> $autoMatchTags
      */
-    private static function buildPatternQuery(array $autoMatchTags): string
+    private static function buildPatternQuery(array $autoMatchTags, string $locale = 'de'): string
     {
         $terms = [];
         foreach ($autoMatchTags as $am) {
-            foreach ($am['patterns'] as $pattern) {
+            foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
                 // Aufteilen an Wildcards: signifikante Token zwischen den * / ? extrahieren.
                 $parts = preg_split('/[*?]+/', $pattern) ?: [];
                 foreach ($parts as $p) {

@@ -58,6 +58,11 @@ services:
     VenneMedia\VenneSearchContaoBundle\EventListener\TagTranslationsFieldListener:
         public: true
 
+    # Auto-Match-Pattern-Uebersetzungen pro Locale (englische Detail-Seiten
+    # haben andere URL-Pattern als deutsche).
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagPatternTranslationsFieldListener:
+        public: true
+
     # Synonym-Save-Listener wird per DCA-onsubmit/ondelete_callback als Service-ID
     # aufgerufen — Contao 4.13 ruft System::getContainer()->get(self::class), das
     # braucht public Sichtbarkeit. Sonst „ServiceNotFoundException".

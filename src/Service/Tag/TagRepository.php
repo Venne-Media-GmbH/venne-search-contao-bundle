@@ -27,7 +27,7 @@ final class TagRepository
      * jede Treffer-URL gematcht und automatisch zugewiesen. Spart Backfill
      * und funktioniert für gecrawlte externe URLs genauso wie für interne.
      *
-     * @return list<array{slug:string, label:string, color:string, boost:float, patterns:list<string>, translations:?string}>
+     * @return list<array{slug:string, label:string, color:string, boost:float, patterns:list<string>, translations:?string, patternTranslations:?string}>
      */
     public function findAutoMatchTags(): array
     {
@@ -37,11 +37,14 @@ final class TagRepository
         $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
         $hasTrans = $this->translationsColumnAvailable();
         $transExpr = $hasTrans ? 't.translations' : 'NULL AS translations';
+        $hasPatternTrans = $this->patternTranslationsColumnAvailable();
+        $patternTransExpr = $hasPatternTrans ? 't.auto_match_pattern_translations' : 'NULL AS auto_match_pattern_translations';
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.auto_match_pattern, ' . $transExpr . '
+                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.auto_match_pattern, ' . $transExpr . ', ' . $patternTransExpr . '
                  FROM ' . self::TAG_TABLE . ' t
-                 WHERE t.auto_match_pattern IS NOT NULL AND t.auto_match_pattern <> \'\'',
+                 WHERE (t.auto_match_pattern IS NOT NULL AND t.auto_match_pattern <> \'\')
+                    OR (' . ($hasPatternTrans ? 't.auto_match_pattern_translations IS NOT NULL AND t.auto_match_pattern_translations <> \'\'' : '0=1') . ')',
             );
         } catch (\Throwable) {
             // Spalte existiert noch nicht (Migration noch nicht gelaufen) — kein Auto-Match.
@@ -57,7 +60,9 @@ final class TagRepository
                     $patterns[] = $line;
                 }
             }
-            if ($patterns === []) {
+            $hasPatternTrans = $r['auto_match_pattern_translations'] !== null
+                && (string) $r['auto_match_pattern_translations'] !== '';
+            if ($patterns === [] && !$hasPatternTrans) {
                 continue;
             }
             $out[] = [
@@ -67,10 +72,57 @@ final class TagRepository
                 'boost' => (float) $r['boost'],
                 'patterns' => $patterns,
                 'translations' => $r['translations'] !== null ? (string) $r['translations'] : null,
+                'patternTranslations' => $r['auto_match_pattern_translations'] !== null
+                    ? (string) $r['auto_match_pattern_translations']
+                    : null,
             ];
         }
 
         return $out;
+    }
+
+    /**
+     * Liefert die Auto-Match-Patterns fuer eine bestimmte Locale. Wenn fuer
+     * die Locale ein Override existiert, wird der genutzt. Sonst fallback
+     * auf das Standard-Pattern (Sprache-unabhaengig).
+     *
+     * @param array{patterns?:list<string>, patternTranslations?:?string} $tag
+     * @return list<string>
+     */
+    public static function patternsForLocale(array $tag, string $locale): array
+    {
+        $locale = strtolower(substr($locale, 0, 2));
+        $raw = $tag['patternTranslations'] ?? null;
+        if (\is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (\is_array($decoded) && isset($decoded[$locale]) && \is_string($decoded[$locale]) && trim($decoded[$locale]) !== '') {
+                $patterns = [];
+                foreach (preg_split('/\r\n|\r|\n/', $decoded[$locale]) ?: [] as $line) {
+                    $line = trim($line);
+                    if ($line !== '') {
+                        $patterns[] = $line;
+                    }
+                }
+                if ($patterns !== []) {
+                    return $patterns;
+                }
+            }
+        }
+        return $tag['patterns'] ?? [];
+    }
+
+    private function patternTranslationsColumnAvailable(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            $cols = $this->db->createSchemaManager()->listTableColumns(self::TAG_TABLE);
+            return $cached = isset($cols['auto_match_pattern_translations']);
+        } catch (\Throwable) {
+            return $cached = false;
+        }
     }
 
     private function autoMatchColumnAvailable(): bool

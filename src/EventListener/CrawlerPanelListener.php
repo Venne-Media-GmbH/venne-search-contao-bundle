@@ -82,13 +82,30 @@ final class CrawlerPanelListener
     {$message}
     {$statusHtml}
 
-    <form method="post" action="" style="margin-top:1rem;">
-        <input type="hidden" name="vsearch_crawler_action" value="toggle">
+    <div style="margin-top:1rem;">
         <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:500;">
-            <input type="checkbox" name="crawler_active" value="1"{$checkedActive} onchange="this.form.submit()">
+            <input type="checkbox" data-vsearch-crawler-toggle value="1"{$checkedActive}>
             Externes Crawling aktiviert
         </label>
-    </form>
+        <span data-vsearch-crawler-toggle-msg style="display:inline-block;margin-top:.4rem;font-size:.8rem;color:#6b7280;"></span>
+    </div>
+    <script>(function(){
+        // Wichtig: KEIN nested <form> verwenden — das schliesst Contao's
+        // Outer-Form vorzeitig und die Save-Buttons werden zu Orphans.
+        // Stattdessen Toggle als AJAX-Request gegen den selben Endpoint.
+        var cb = document.querySelector('[data-vsearch-crawler-toggle]');
+        var msg = document.querySelector('[data-vsearch-crawler-toggle-msg]');
+        if (!cb) return;
+        cb.addEventListener('change', function(){
+            msg.textContent = 'Speichere…';
+            var fd = new FormData();
+            fd.append('vsearch_crawler_action', 'toggle');
+            if (cb.checked) fd.append('crawler_active', '1');
+            fetch(window.location.href, {method:'POST', body: fd, credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}})
+                .then(function(){ msg.textContent = 'Gespeichert ✓'; setTimeout(function(){ msg.textContent=''; }, 2000); })
+                .catch(function(){ msg.textContent = 'Fehler — bitte Seite neu laden.'; });
+        });
+    })();</script>
 </div>
 HTML;
     }

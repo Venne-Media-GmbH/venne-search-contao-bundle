@@ -58,6 +58,18 @@ services:
     VenneMedia\VenneSearchContaoBundle\EventListener\TagTranslationsFieldListener:
         public: true
 
+    # Synonym-Save-Listener wird per DCA-onsubmit/ondelete_callback als Service-ID
+    # aufgerufen — Contao 4.13 ruft System::getContainer()->get(self::class), das
+    # braucht public Sichtbarkeit. Sonst „ServiceNotFoundException".
+    VenneMedia\VenneSearchContaoBundle\EventListener\SynonymSaveListener:
+        public: true
+
+    # Tag-Delete-Listener — ebenfalls per Service-ID aus DCA-ondelete_callback.
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagDeleteListener:
+        public: true
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
     # v2.2.0: Crawler-Panel im DCA, gleiches Pattern wie Tag-Feld (public).
     VenneMedia\VenneSearchContaoBundle\EventListener\CrawlerPanelListener:
         public: true

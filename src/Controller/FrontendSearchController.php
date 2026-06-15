@@ -501,12 +501,13 @@ final class FrontendSearchController extends AbstractController
     private static function dedupeByUrl(\VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult $result): \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult
     {
         $priority = ['page' => 4, 'file' => 3, 'article' => 2, 'crawled' => 1];
+
+        // Phase 1: URL-Dedup. Prio-Loser wird verworfen, Prio-Sieger behalten.
         $byUrl = [];
         $dropped = 0;
         foreach ($result->hits as $h) {
             $key = self::normalizeUrl((string) $h->url);
             if ($key === '') {
-                // Kein URL → nicht deduplizierbar, behalten.
                 $byUrl[spl_object_hash($h)] = $h;
                 continue;
             }
@@ -515,27 +516,52 @@ final class FrontendSearchController extends AbstractController
                 continue;
             }
             $existing = $byUrl[$key];
-            $existingPrio = $priority[$existing->type] ?? 0;
-            $newPrio = $priority[$h->type] ?? 0;
-            if ($newPrio > $existingPrio) {
+            if (($priority[$h->type] ?? 0) > ($priority[$existing->type] ?? 0)) {
                 $byUrl[$key] = $h;
             }
             $dropped++;
         }
+
+        // Phase 2: Title-Dedup nur fuer crawled-Hits. Wenn der Crawler den
+        // gleichen <title> (typischerweise Site-Default) auf mehreren URLs
+        // gefunden hat, ist der Title fuer den User nicht unterscheidend.
+        // Behalte den ersten pro Title, verwerfe die weiteren — User sieht
+        // nicht mehr 6x „FFA - Die Filmfoerderung des Bundes" untereinander.
+        $deduped = [];
+        $crawledByTitle = [];
+        foreach ($byUrl as $h) {
+            if ($h->type !== 'crawled') {
+                $deduped[] = $h;
+                continue;
+            }
+            $title = strip_tags((string) $h->title);
+            $titleKey = mb_strtolower(trim(preg_replace('/\s+/', ' ', $title) ?? ''));
+            if ($titleKey === '') {
+                $deduped[] = $h;
+                continue;
+            }
+            if (!isset($crawledByTitle[$titleKey])) {
+                $crawledByTitle[$titleKey] = true;
+                $deduped[] = $h;
+            } else {
+                $dropped++;
+            }
+        }
+
         if ($dropped === 0) {
             return $result;
         }
-        $hits = array_values($byUrl);
+
         // Type-Facets neu zaehlen.
         $typeCounts = [];
-        foreach ($hits as $h) {
+        foreach ($deduped as $h) {
             $t = (string) $h->type;
             $typeCounts[$t] = ($typeCounts[$t] ?? 0) + 1;
         }
         $facets = $result->facets;
         $facets['type'] = $typeCounts;
         return new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
-            hits: $hits,
+            hits: $deduped,
             totalHits: max(0, $result->totalHits - $dropped),
             offset: $result->offset,
             limit: $result->limit,

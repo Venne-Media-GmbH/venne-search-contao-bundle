@@ -38,16 +38,21 @@ $GLOBALS['TL_DCA']['tl_page']['config']['onload_callback'][] = static function (
     unset($palette);
 };
 
-// Operation "Tags" pro Page-Zeile in der Seitenstruktur. Zeigt ein Icon das
-// auf das DCA-Edit-Form springt. Contao 4.13 wuerde einen #-Anchor im href
-// als Teil des `act=`-Parameters interpretieren — daher hier KEIN Anchor.
-// Der User landet auf der Edit-Form, kann selbst zum Such-Tags-Feld scrollen.
+// Operation "Such-Toggle" pro Page-Zeile in der Seitenstruktur. Lupe-Icon
+// das wie das Auge (publish) per Klick an/aus geschaltet wird. Toggle-Ziel
+// ist tl_page.noSearch (Standard-Contao-4.13-Feld), das vom Indexer ohnehin
+// schon respektiert wird — der Klick aktualisiert die DB UND synchronisiert
+// den Meilisearch-Index sofort (Page rein/raus).
 if (isset($GLOBALS['TL_DCA']['tl_page']['list']['operations'])) {
-    $GLOBALS['TL_DCA']['tl_page']['list']['operations']['vsearch_tags'] = [
-        'label' => &$GLOBALS['TL_LANG']['tl_page']['vsearch_tags_op'],
-        'href' => 'act=edit',
-        'icon' => 'bundles/vennesearchcontao/icons/tag.svg',
-        'attributes' => 'title="Such-Tags vergeben"',
+    $GLOBALS['TL_DCA']['tl_page']['list']['operations']['vsearch_toggle'] = [
+        'label' => &$GLOBALS['TL_LANG']['tl_page']['vsearch_toggle_op'],
+        'href' => '#',
+        'icon' => 'bundles/vennesearchcontao/icons/search-on.svg',
+        'attributes' => 'class="vsearch-page-toggle"',
+        'button_callback' => [
+            VenneMedia\VenneSearchContaoBundle\EventListener\PageSearchToggleListener::class,
+            'render',
+        ],
     ];
 }
 

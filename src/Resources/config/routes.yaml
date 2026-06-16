@@ -132,3 +132,12 @@ venne_search_backend_tag_suggest:
         _scope: backend
         _token_check: false
     methods: [GET]
+
+# v2.2.0: Toggle fuer tl_page.noSearch direkt aus der Seitenstruktur (Lupe-Icon).
+venne_search_backend_page_toggle_no_search:
+    path: /contao/venne-search/page/toggle-no-search
+    controller: VenneMedia\VenneSearchContaoBundle\Controller\Backend\PageSearchToggleController
+    defaults:
+        _scope: backend
+        _token_check: false
+    methods: [POST]

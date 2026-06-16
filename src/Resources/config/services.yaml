@@ -67,6 +67,10 @@ services:
     VenneMedia\VenneSearchContaoBundle\EventListener\FileTagFieldListener:
         public: true
 
+    # Lupen-Toggle in der Seitenstruktur — button_callback per Service-Lookup.
+    VenneMedia\VenneSearchContaoBundle\EventListener\PageSearchToggleListener:
+        public: true
+
     # CLI-Command zum Reindexieren einer einzelnen Datei.
     VenneMedia\VenneSearchContaoBundle\Command\ReindexFileCommand:
         arguments:

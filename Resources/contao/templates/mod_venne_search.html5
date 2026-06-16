@@ -698,6 +698,26 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         cursor: pointer; transition: all .12s;
     }
     .vsearch__empty-tip:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
+    /* Recent-Search-Chip: Label + ×-Button im Container — User kann einzeln
+       aus dem localStorage werfen. */
+    .vsearch__empty-tip--recent {
+        display: inline-flex; align-items: center; gap: .15rem;
+        padding: 0 .25rem 0 .55rem; font-size: .78rem; font-weight: 500;
+        border: 1px solid var(--vs-border); border-radius: 999px;
+        background: var(--vs-bg); color: var(--vs-text);
+        transition: border-color .12s, color .12s;
+    }
+    .vsearch__empty-tip--recent:hover { border-color: var(--vs-accent); color: var(--vs-accent); }
+    .vsearch__empty-tip-label {
+        all: unset; cursor: pointer; padding: .25rem 0; font: inherit; color: inherit;
+    }
+    .vsearch__empty-tip-remove {
+        all: unset; cursor: pointer; width: 18px; height: 18px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%; color: var(--vs-text-muted); font-size: .9rem; line-height: 1;
+        margin-left: .15rem;
+    }
+    .vsearch__empty-tip-remove:hover { background: rgba(0,0,0,.08); color: var(--vs-text); }
     /* Tag-Variante im Initial-State — übernimmt Farbpalette der Tag-Chips,
        damit der User „Beliebte Tags" sofort als Tag-Vorschläge erkennt. */
     .vsearch__empty-tip--tag                  { background: #dbeafe; color: #1e40af; border-color: transparent; }
@@ -1449,7 +1469,10 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
             if (recents.length > 0) {
                 html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">' + escapeHtml(T('recent')) + '</div><div class="vsearch__empty-tips">';
                 recents.forEach(function (r) {
-                    html += '<button type="button" class="vsearch__empty-tip" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>';
+                    html += '<span class="vsearch__empty-tip vsearch__empty-tip--recent">'
+                        + '<button type="button" class="vsearch__empty-tip-label" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>'
+                        + '<button type="button" class="vsearch__empty-tip-remove" data-vsearch-recent-remove="' + escapeHtml(r) + '" aria-label="Diesen Suchbegriff vergessen">×</button>'
+                        + '</span>';
                 });
                 html += '</div></div>';
             }
@@ -1492,7 +1515,10 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
             if (recents.length > 0) {
                 html += '<div class="vsearch__empty-recent"><div class="vsearch__empty-recent-label">' + escapeHtml(T('recent')) + '</div><div class="vsearch__empty-tips">';
                 recents.forEach(function (r) {
-                    html += '<button type="button" class="vsearch__empty-tip" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>';
+                    html += '<span class="vsearch__empty-tip vsearch__empty-tip--recent">'
+                        + '<button type="button" class="vsearch__empty-tip-label" data-vsearch-recent="' + escapeHtml(r) + '">' + escapeHtml(r) + '</button>'
+                        + '<button type="button" class="vsearch__empty-tip-remove" data-vsearch-recent-remove="' + escapeHtml(r) + '" aria-label="Diesen Suchbegriff vergessen">×</button>'
+                        + '</span>';
                 });
                 html += '</div></div>';
             }
@@ -1558,12 +1584,26 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
                 });
             });
             Array.from(resultsList.querySelectorAll('[data-vsearch-recent]')).forEach(function (btn) {
-                btn.addEventListener('click', function () {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
                     var q = btn.dataset.vsearchRecent;
                     input.value = q;
                     lastQuery = q;
                     toggleClearBtn();
                     runSearch(q);
+                });
+            });
+            // ×-Button auf Recent-Chip: einzelnen Suchbegriff aus dem
+            // localStorage werfen + Initial-State neu rendern.
+            Array.from(resultsList.querySelectorAll('[data-vsearch-recent-remove]')).forEach(function (btn) {
+                btn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    forgetRecent(btn.dataset.vsearchRecentRemove);
+                    // Re-render initial state damit der Chip verschwindet.
+                    if (typeof showInitialState === 'function') {
+                        showInitialState();
+                    }
                 });
             });
         }
@@ -1751,6 +1791,12 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         }
         function clearRecent() {
             try { window.localStorage.removeItem(RECENT_KEY); } catch (e) {}
+        }
+        function forgetRecent(q) {
+            try {
+                var list = readRecent().filter(function (x) { return x.toLowerCase() !== q.toLowerCase(); });
+                window.localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+            } catch (e) {}
         }
 
         // === Tastatur-Navigation in Trefferliste (↑/↓/Enter) ===

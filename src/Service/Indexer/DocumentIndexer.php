@@ -264,6 +264,51 @@ final class DocumentIndexer
         }
     }
 
+    /**
+     * Loescht alle Meili-Dokumente, deren `url`-Attribut exakt einem der
+     * uebergebenen Werte entspricht. Wird beim Toggle "nicht durchsuchbar"
+     * gebraucht, damit nicht nur das page-Dokument verschwindet, sondern auch
+     * etwaige crawled-Twins mit derselben URL.
+     *
+     * Da `url` nicht in den filterable-attributes liegt, koennen wir Meili
+     * nicht serverseitig filtern lassen. Stattdessen suchen wir mit der URL
+     * als Volltext-Query, filtern die Hits clientseitig auf exakte URL-Gleichheit
+     * und loeschen die getroffenen IDs einzeln.
+     *
+     * @param string[] $urls
+     */
+    public function deleteByUrls(array $urls, string $locale): void
+    {
+        $urls = array_values(array_filter(array_unique($urls), static fn ($u): bool => $u !== ''));
+        if ($urls === []) {
+            return;
+        }
+        try {
+            $index = $this->meilisearch->index($this->indexName($locale));
+            $toDelete = [];
+            foreach ($urls as $url) {
+                $result = $index->search($url, [
+                    'limit' => 50,
+                    'attributesToRetrieve' => ['id', 'url'],
+                ]);
+                $hits = $result->getHits();
+                foreach ($hits as $hit) {
+                    if (\is_array($hit) && (string) ($hit['url'] ?? '') === $url && isset($hit['id'])) {
+                        $toDelete[(string) $hit['id']] = true;
+                    }
+                }
+            }
+            if ($toDelete !== []) {
+                $index->deleteDocuments(array_keys($toDelete));
+            }
+        } catch (\Throwable $e) {
+            $this->logger->warning('venne_search.indexer.delete_by_urls_failed', [
+                'urls' => $urls,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function purge(string $locale): void
     {
         $indexUid = $this->indexName($locale);

@@ -63,8 +63,18 @@ final class PageSearchToggleController extends AbstractController
         // Index synchron halten: bei "nicht suchbar" loeschen, sonst reindexieren.
         try {
             if ($next === '1') {
-                foreach ($this->settings->load()->enabledLocales ?: ['de'] as $locale) {
+                $locales = $this->settings->load()->enabledLocales ?: ['de'];
+                $pageUrls = $this->collectPageUrlVariants($pageId);
+                foreach ($locales as $locale) {
+                    // 1) direktes page-Dokument loeschen
                     $this->indexer->delete('page-' . $pageId, $locale);
+                    // 2) gleichzeitig crawled-Twins entfernen — sonst bleibt
+                    //    der Inhalt unter derselben URL ueber den crawled-Hit
+                    //    weiter sichtbar. Beim Re-Enable rebuildet der Crawler
+                    //    diese Twins beim naechsten Cron-Lauf automatisch.
+                    if ($pageUrls !== []) {
+                        $this->indexer->deleteByUrls($pageUrls, $locale);
+                    }
                 }
             } else {
                 $this->processor->processItem(
@@ -82,5 +92,48 @@ final class PageSearchToggleController extends AbstractController
             'pageId' => $pageId,
             'searchable' => $next !== '1',
         ]);
+    }
+
+    /**
+     * Baut alle URL-Varianten unter denen die Page im Meili-Index liegen kann:
+     *   /alias.html, https://host/alias.html, http://host/alias.html
+     * Verwendet die Live-URL (Contao\PageModel) wenn verfuegbar, sonst greift
+     * der Fallback auf $alias.html.
+     *
+     * @return string[]
+     */
+    private function collectPageUrlVariants(int $pageId): array
+    {
+        try {
+            $row = $this->db->fetchAssociative('SELECT alias FROM tl_page WHERE id = :id', ['id' => $pageId]);
+        } catch (\Throwable) {
+            return [];
+        }
+        if (!\is_array($row)) {
+            return [];
+        }
+        $alias = (string) ($row['alias'] ?? '');
+        if ($alias === '') {
+            return [];
+        }
+        $path = '/' . ltrim($alias, '/') . '.html';
+        $variants = [$path];
+        // Host(s) aus root-Pages — fuer FFA typischerweise www.ffa.de, ffa.de.
+        try {
+            $hosts = $this->db->fetchFirstColumn(
+                "SELECT DISTINCT dns FROM tl_page WHERE type='root' AND dns IS NOT NULL AND dns != ''"
+            );
+        } catch (\Throwable) {
+            $hosts = [];
+        }
+        foreach ($hosts as $host) {
+            $host = (string) $host;
+            if ($host === '') {
+                continue;
+            }
+            $variants[] = 'https://' . $host . $path;
+            $variants[] = 'http://' . $host . $path;
+        }
+        return array_values(array_unique($variants));
     }
 }

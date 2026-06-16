@@ -523,7 +523,7 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         border-bottom-color: var(--vs-border) !important;
     }
     .vsearch--modal .vsearch__list a { padding: 1.5rem 1rem; gap: 1.5rem; }
-    .vsearch--modal .vs-icon--cover { width: 180px !important; min-height: 130px !important; border-radius: 4px !important; }
+    .vsearch--modal .vs-icon--cover { width: 240px !important; min-height: 0 !important; border-radius: 6px !important; }
     .vsearch--modal .vs-icon--big { width: 180px !important; min-height: 130px !important; border-radius: 4px !important; }
     .vs-title { font-size: 1.05rem !important; }
     .vsearch--modal .vs-title { font-size: 1.05rem !important; font-weight: 700 !important; white-space: normal !important; line-height: 1.4 !important; }
@@ -578,19 +578,22 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         background: #f3f4f6 !important;
         padding: 0 !important;
         overflow: hidden !important;
-        width: 120px !important;
+        /* OG-Standard 1200x630 (1.91:1) — Cover sieht in der Suche aus wie
+           die Social-Media-Vorschau auf Facebook/LinkedIn/Twitter. */
+        width: 200px !important;
+        aspect-ratio: 1200 / 630 !important;
         height: auto !important;
-        min-height: 120px !important;
+        min-height: 0 !important;
         flex-shrink: 0 !important;
         flex-grow: 0 !important;
         border: 0 !important;
-        border-radius: 14px !important;
-        align-self: stretch !important;
+        border-radius: 10px !important;
+        align-self: flex-start !important;
     }
     .vs-cover-img {
         width: 100% !important;
         height: 100% !important;
-        min-height: 120px !important;
+        min-height: 0 !important;
         object-fit: cover !important;
         object-position: center !important;
         display: block !important;

@@ -92,6 +92,10 @@ final class PageTagFieldListener
             <input type="text" id="vstag-input-{$pageIdJs}" class="vstag-input tl_text" placeholder="Tag suchen oder neu anlegen (z.B. Versammlung)…" autocomplete="off">
             <div class="vstag-suggest-list"></div>
         </div>
+        <div class="vstag-available-row">
+            <span class="vstag-available-label">Vorhandene Tags:</span>
+            <div class="vstag-available-chips" data-vstag-available></div>
+        </div>
     </div>
     <p class="tl_help tl_tip vstag-widget-help">Tags für die Volltextsuche. Beispiel: Tag „Versammlung" → diese Seite landet bei der Suche nach „Versammlung" weit oben, auch wenn das Wort nicht im Inhalt steht. <strong>Neue Tags entstehen</strong> indem du den Begriff tippst und auf „+ als neuen Tag anlegen" klickst. Änderungen wirken sofort — kein zusätzliches Speichern nötig.</p>
 </div>
@@ -185,6 +189,25 @@ final class PageTagFieldListener
     color:#9ca3af;font-style:italic;font-size:.88rem;
     padding-left:.15rem;
 }
+.vstag-available-row {
+    margin-top:.7rem;display:flex;align-items:flex-start;gap:.5rem;flex-wrap:wrap;
+}
+.vstag-available-label {
+    font-size:.78rem;color:#6b7280;font-weight:500;padding-top:.3rem;flex-shrink:0;
+}
+.vstag-available-chips {
+    display:flex;flex-wrap:wrap;gap:.3rem;flex:1;
+}
+.vstag-available-chip {
+    display:inline-flex;align-items:center;gap:.25rem;
+    padding:.2rem .55rem;border:1px solid #e5e7eb;border-radius:999px;
+    font-size:.78rem;font-weight:500;cursor:pointer;
+    background:#fff;transition:border-color .15s,background .15s;
+}
+.vstag-available-chip:hover { border-color:#3a7178;background:#f0fdfa; }
+.vstag-available-chip[data-assigned="1"] { opacity:.4;cursor:default;background:#f3f4f6; }
+.vstag-available-chip[data-assigned="1"]:hover { border-color:#e5e7eb;background:#f3f4f6; }
+.vstag-available-empty { font-size:.78rem;color:#9ca3af;font-style:italic; }
 .vstag-toast {
     position:fixed;bottom:1.2rem;right:1.2rem;
     padding:.75rem 1.15rem;border-radius:6px;background:#1f2937;color:#fff;
@@ -208,6 +231,7 @@ final class PageTagFieldListener
     var input = field.querySelector('.vstag-input');
     var suggestList = field.querySelector('.vstag-suggest-list');
     var emptyHint = field.querySelector('.vstag-empty');
+    var availableBox = field.querySelector('[data-vstag-available]');
 
     var debounceTimer = null;
     var activeIdx = -1;
@@ -274,6 +298,39 @@ final class PageTagFieldListener
         return Array.from(container.querySelectorAll('.vstag-chip')).map(function (c) {
             return c.dataset.tagSlug;
         });
+    }
+
+    // Dauerhaft sichtbare „Vorhandene Tags"-Leiste: alle existierenden Tags
+    // als anklickbare Chips. Bereits zugewiesene sind ausgegraut. Click = assign.
+    function refreshAvailable() {
+        if (!availableBox) return;
+        fetch('/contao/venne-search/tag/suggest', {credentials:'same-origin'})
+            .then(function (r) { return r.json(); })
+            .then(function (list) {
+                var arr = Array.isArray(list) ? list : (list.tags || []);
+                if (arr.length === 0) {
+                    availableBox.innerHTML = '<span class="vstag-available-empty">Noch keine Tags angelegt — tippe oben einen Begriff ein.</span>';
+                    return;
+                }
+                var assigned = getAssignedSlugs();
+                availableBox.innerHTML = arr.map(function (t) {
+                    var isAssigned = assigned.indexOf(t.slug) !== -1;
+                    return '<button type="button" class="vstag-available-chip" '
+                        + 'data-slug="' + escapeHtml(t.slug) + '" '
+                        + 'data-label="' + escapeHtml(t.label) + '" '
+                        + 'data-color="' + escapeHtml(t.color || 'blue') + '" '
+                        + 'data-assigned="' + (isAssigned ? '1' : '0') + '" '
+                        + 'style="color:' + colorFg(t.color) + ';">'
+                        + '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + colorFg(t.color) + ';"></span>'
+                        + escapeHtml(t.label) + '</button>';
+                }).join('');
+                Array.from(availableBox.querySelectorAll('.vstag-available-chip')).forEach(function (chip) {
+                    chip.addEventListener('click', function () {
+                        if (chip.dataset.assigned === '1') return;
+                        assignTag({tagSlug: chip.dataset.slug, label: chip.dataset.label, color: chip.dataset.color});
+                    });
+                });
+            }).catch(function () {});
     }
 
     function fetchSuggest(query) {
@@ -358,6 +415,7 @@ final class PageTagFieldListener
             container.appendChild(renderChip(tag));
             input.value = '';
             hideSuggest();
+            refreshAvailable();
             toast('Tag „' + tag.label + '" zugewiesen');
         }).catch(function () {
             toast('Netzwerk-Fehler beim Zuweisen', 'err');
@@ -378,11 +436,15 @@ final class PageTagFieldListener
             }
             chip.remove();
             showEmptyHintIfNeeded();
+            refreshAvailable();
             toast('Tag entfernt');
         }).catch(function () {
             toast('Netzwerk-Fehler beim Entfernen', 'err');
         });
     }
+
+    // Initial die „Vorhandene Tags"-Leiste laden.
+    refreshAvailable();
 
     // Input-Handling
     input.addEventListener('input', function () {

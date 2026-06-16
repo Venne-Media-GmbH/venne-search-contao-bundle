@@ -930,7 +930,9 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         ];
 
         var TYPE_LABELS = {
-            page: T('typePage'), file: T('typeFile'), article: T('typeArticle'), crawled: T('typeCrawled'),
+            // crawled wird bewusst als "Seite" gelabelt — der User-seitige Unterschied
+            // zwischen intern indexiert und extern gecrawlt ist nicht relevant.
+            page: T('typePage'), file: T('typeFile'), article: T('typeArticle'), crawled: T('typePage'),
             pdf: 'PDF', docx: 'DOCX', doc: 'DOC',
             xlsx: 'XLSX', xls: 'XLS', pptx: 'PPTX', ppt: 'PPT',
             odt: 'ODT', rtf: 'RTF', txt: 'TXT', md: 'MD'
@@ -1403,7 +1405,8 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
                 // Meta-Zeile
                 var typeKey;
                 if (hit.type === 'file') typeKey = ext || 'file';
-                else if (hit.type === 'crawled') typeKey = 'crawled';
+                // crawled wird visuell als "Seite" behandelt — gleiches Badge wie page,
+                // damit die Trefferliste keinen kuenstlichen Doctype-Unterschied zeigt.
                 else typeKey = 'page';
                 var typeLabel = TYPE_LABELS[typeKey] || typeKey.toUpperCase();
                 var metaParts = ['<span class="vs-badge vs-badge--' + escapeHtml(typeKey) + '">' + escapeHtml(typeLabel) + '</span>'];
@@ -1622,7 +1625,9 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
 
         function renderFacets(typeFacets, tagFacets, q) {
             typeFacets = typeFacets || {};
-            var labels = { page: T('typePages'), file: T('typeFiles'), article: T('typeArticles'), crawled: T('typeCrawledPl') };
+            // crawled wird im Backend bereits in den page-Bucket gemerged —
+            // hier nur defensiver Fallback falls trotzdem mal "crawled" ankommt.
+            var labels = { page: T('typePages'), file: T('typeFiles'), article: T('typeArticles'), crawled: T('typePages') };
             var html = '<button type="button" class="vsearch__facet' + (currentTypeFilter === '' ? ' vsearch__facet--active' : '') + '" data-vsearch-facet-type="">' + escapeHtml(T('all')) + '</button>';
             Object.keys(typeFacets).forEach(function (type) {
                 var active = currentTypeFilter === type ? ' vsearch__facet--active' : '';

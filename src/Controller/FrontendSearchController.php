@@ -128,7 +128,12 @@ final class FrontendSearchController extends AbstractController
         $filters = [];
         $type = (string) $request->query->get('type', '');
         if ($type !== '') {
-            $filters['type'] = $type;
+            // "Seiten" deckt jetzt page UND crawled ab — gecrawlte externe
+            // Treffer sind aus User-Sicht ebenfalls Seiten, nicht ein eigener
+            // Typ. Daher beim Page-Filter beide doctypes via IN-Liste durchlassen.
+            $filters['type'] = ($type === 'page' || $type === 'crawled')
+                ? ['page', 'crawled']
+                : $type;
         }
         // v2.0.0: ?tags[]=spongebob&tags[]=krabbenburger
         // Tags trennen wir auf in zwei Klassen:
@@ -477,7 +482,9 @@ final class FrontendSearchController extends AbstractController
             'totalHits' => $result->totalHits,
             'offset' => $result->offset,
             'limit' => $result->limit,
-            'facets' => $result->facets,
+            // crawled-Counts werden in den page-Count gemerged — "Websiteinhalt"
+            // soll im Frontend nicht mehr als separater Tab erscheinen.
+            'facets' => self::mergeCrawledIntoPage($result->facets),
             'tagFacets' => $tagFacetList,
             'queryTimeMs' => $result->queryTimeMs,
         ]);
@@ -489,6 +496,30 @@ final class FrontendSearchController extends AbstractController
         $response->setMaxAge(30);
         $response->setVary(['Cookie'], false);
         return $response;
+    }
+
+    /**
+     * Fasst die Facet-Counts fuer "page" und "crawled" zu einem einzigen
+     * "page"-Bucket zusammen. Im Frontend soll es keinen separaten Tab
+     * "Websiteinhalte" mehr geben — gecrawlte externe Seiten gehoeren aus
+     * User-Sicht in die Kategorie "Seiten".
+     *
+     * @param array<string,mixed> $facets
+     * @return array<string,mixed>
+     */
+    private static function mergeCrawledIntoPage(array $facets): array
+    {
+        if (!isset($facets['type']) || !\is_array($facets['type'])) {
+            return $facets;
+        }
+        $type = $facets['type'];
+        $crawled = (int) ($type['crawled'] ?? 0);
+        if ($crawled > 0) {
+            $type['page'] = (int) ($type['page'] ?? 0) + $crawled;
+        }
+        unset($type['crawled']);
+        $facets['type'] = $type;
+        return $facets;
     }
 
     /**

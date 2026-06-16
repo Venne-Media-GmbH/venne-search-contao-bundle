@@ -4,9 +4,6 @@ declare(strict_types=1);
 
 namespace VenneMedia\VenneSearchContaoBundle\EventListener;
 
-use Contao\System;
-use Doctrine\DBAL\Connection;
-
 /**
  * Rendert das Lupen-Icon pro Page-Zeile in der Seitenstruktur (button_callback).
  *
@@ -21,14 +18,12 @@ use Doctrine\DBAL\Connection;
  */
 final class PageSearchToggleListener
 {
-    public function __construct(private readonly Connection $db)
-    {
-    }
-
     /**
-     * Contao-button_callback-Signatur in 4.13:
-     *   render(array $row, string $href, string $label, string $title,
-     *          string $icon, string $attributes)
+     * Contao-button_callback-Signatur in 4.13. Wir nutzen nur $row;
+     * die anderen Argumente kommen vom Framework, werden hier aber nicht
+     * gebraucht weil wir das Icon-HTML komplett selbst zusammenbauen.
+     *
+     * @param array<string,mixed> $row
      */
     public function render(array $row, string $href, string $label, string $title, string $icon, string $attributes): string
     {
@@ -70,15 +65,24 @@ final class PageSearchToggleListener
 
     private static function buildBootstrapScript(): string
     {
+        // Capture-Phase + stopImmediatePropagation: Contao 4.13 bindet auf
+        // das umschliessende <li class="click2edit"> einen Mootools-Handler,
+        // der die Frontend-Vorschau oeffnet. Ohne Capture-Phase laeuft unser
+        // Listener zu spaet und der Browser navigiert davon, bevor wir den
+        // Toggle ausloesen koennen.
         return <<<'HTML'
 <script>
 (function(){
     if (window.__vsearchToggleBound) return;
     window.__vsearchToggleBound = true;
-    document.addEventListener('click', function(e) {
-        var a = e.target.closest('[data-vsearch-toggle-page]');
+    var handler = function(e) {
+        var a = e.target.closest && e.target.closest('[data-vsearch-toggle-page]');
         if (!a) return;
         e.preventDefault();
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+            e.stopImmediatePropagation();
+        }
         var pageId = parseInt(a.getAttribute('data-vsearch-toggle-page'), 10);
         if (!pageId) return;
         var img = a.querySelector('img');
@@ -104,7 +108,19 @@ final class PageSearchToggleListener
             if (img) { img.setAttribute('src', prevSrc); img.style.opacity = '1'; }
             alert('Netzwerkfehler beim Toggle');
         });
-    });
+    };
+    // Capture-Phase = lauft VOR allen Bubble-Handlern (inkl. Contao click2edit).
+    document.addEventListener('click', handler, true);
+    // Mousedown ebenfalls abfangen — manche Contao-Versionen reagieren
+    // schon auf mousedown statt click.
+    document.addEventListener('mousedown', function(e) {
+        var a = e.target.closest && e.target.closest('[data-vsearch-toggle-page]');
+        if (!a) return;
+        e.stopPropagation();
+        if (typeof e.stopImmediatePropagation === 'function') {
+            e.stopImmediatePropagation();
+        }
+    }, true);
 })();
 </script>
 HTML;

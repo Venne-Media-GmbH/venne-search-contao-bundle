@@ -524,7 +524,7 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
     }
     .vsearch--modal .vsearch__list a { padding: 1.5rem 1rem; gap: 1.5rem; }
     .vsearch--modal .vs-icon--cover { width: 240px !important; min-height: 0 !important; border-radius: 6px !important; }
-    .vsearch--modal .vs-icon--big { width: 180px !important; min-height: 130px !important; border-radius: 4px !important; }
+    .vsearch--modal .vs-icon--big { width: 240px !important; min-height: 0 !important; border-radius: 6px !important; }
     .vs-title { font-size: 1.05rem !important; }
     .vsearch--modal .vs-title { font-size: 1.05rem !important; font-weight: 700 !important; white-space: normal !important; line-height: 1.4 !important; }
     .vs-snippet { font-size: .92rem; -webkit-line-clamp: 2; }
@@ -550,15 +550,21 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
     .vs-icon--rtf { background: #f3e8ff; color: #7e22ce; }
     .vs-icon--txt, .vs-icon--md { background: #f3f4f6; color: #374151; }
     /* GROßES Placeholder-Icon im Cover-Format wenn kein cover_url vorhanden.
-       Sichtbarer "wir konnten kein Bild finden"-Ersatz statt 56px-Briefmarke. */
+       Selbes Ratio wie vs-icon--cover (OG 1200x630 = 1.91:1), damit
+       Cover- und Placeholder-Karten exakt gleich breit sind und der
+       Titel-Text nicht hin- und herspringt. */
     .vs-icon--big {
-        width: 120px !important;
+        width: 200px !important;
+        aspect-ratio: 1200 / 630 !important;
         height: auto !important;
-        min-height: 120px !important;
-        border-radius: 14px !important;
+        min-height: 0 !important;
+        border-radius: 10px !important;
         flex-shrink: 0 !important;
         flex-grow: 0 !important;
-        align-self: stretch !important;
+        align-self: flex-start !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
     }
     .vs-icon--crawled.vs-icon--big {
         background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
@@ -600,8 +606,8 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         border-radius: inherit !important;
     }
     @media (max-width: 600px) {
-        .vs-icon--cover { width: 90px !important; min-height: 90px !important; border-radius: 12px !important; }
-        .vs-cover-img { min-height: 90px !important; }
+        .vs-icon--cover, .vs-icon--big { width: 130px !important; min-height: 0 !important; border-radius: 8px !important; }
+        .vs-cover-img { min-height: 0 !important; }
     }
 
     /* Body */
@@ -854,9 +860,8 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
         /* Treffer-Karten kompakter */
         .vsearch__list a { padding: .9rem .85rem; gap: .85rem; }
         .vsearch--modal .vsearch__list a { padding: 1rem .5rem; gap: .9rem; }
-        .vs-icon--cover { width: 80px !important; min-height: 80px !important; }
-        .vs-icon--big { width: 80px !important; min-height: 80px !important; }
-        .vsearch--modal .vs-icon--cover, .vsearch--modal .vs-icon--big { width: 90px !important; min-height: 90px !important; }
+        .vs-icon--cover, .vs-icon--big { width: 120px !important; min-height: 0 !important; }
+        .vsearch--modal .vs-icon--cover, .vsearch--modal .vs-icon--big { width: 140px !important; min-height: 0 !important; }
         .vs-title { font-size: .95rem; white-space: normal; }
         .vsearch--modal .vs-title { font-size: 1rem !important; }
         .vs-snippet { font-size: .85rem; -webkit-line-clamp: 3; }

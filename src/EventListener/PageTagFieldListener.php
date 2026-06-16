@@ -389,12 +389,20 @@ final class PageTagFieldListener
         clearTimeout(debounceTimer);
         var q = input.value.trim();
         if (q.length < 1) {
-            hideSuggest();
+            // Bei leerem Input: ALLE bisher vorhandenen Tags listen — der User
+            // sieht direkt was schon existiert, kein blindes Tippen noetig.
+            fetchSuggest('').then(function (d) { renderSuggest('', d); }).catch(function () {});
             return;
         }
         debounceTimer = setTimeout(function () {
             fetchSuggest(q).then(function (d) { renderSuggest(q, d); }).catch(function () {});
         }, 180);
+    });
+
+    // Focus zeigt direkt alle existierenden Tags (Discovery).
+    input.addEventListener('focus', function () {
+        if (input.value.trim().length >= 1) return;
+        fetchSuggest('').then(function (d) { renderSuggest('', d); }).catch(function () {});
     });
 
     input.addEventListener('keydown', function (e) {

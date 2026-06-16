@@ -209,8 +209,12 @@ final class FileTagFieldListener
     input.addEventListener('input', function () {
         clearTimeout(debounceTimer);
         var q = input.value.trim();
-        if (q.length < 1) { hideSuggest(); return; }
+        if (q.length < 1) { fetchSuggest('').then(function (d) { renderSuggest('', d); }).catch(function () {}); return; }
         debounceTimer = setTimeout(function () { fetchSuggest(q).then(function (d) { renderSuggest(q, d); }).catch(function () {}); }, 180);
+    });
+    input.addEventListener('focus', function () {
+        if (input.value.trim().length >= 1) return;
+        fetchSuggest('').then(function (d) { renderSuggest('', d); }).catch(function () {});
     });
     input.addEventListener('keydown', function (e) {
         var items = suggestList.querySelectorAll('.vstag-suggest-item');

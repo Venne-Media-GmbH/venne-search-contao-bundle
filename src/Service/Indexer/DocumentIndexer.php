@@ -65,6 +65,10 @@ final class DocumentIndexer
         // sieht, selbst wenn sie irgendwie im Index liegen.
         'is_protected',
         'allowed_groups',
+        // v2.2.0: Filter-Loeschen per URL — wird vom Lupen-Toggle in der
+        // Seitenstruktur (PageSearchToggleController) genutzt um page +
+        // crawled-Twin gleichzeitig zu entfernen.
+        'url',
     ];
 
     /** Felder nach denen sortiert werden darf. */
@@ -268,12 +272,9 @@ final class DocumentIndexer
      * Loescht alle Meili-Dokumente, deren `url`-Attribut exakt einem der
      * uebergebenen Werte entspricht. Wird beim Toggle "nicht durchsuchbar"
      * gebraucht, damit nicht nur das page-Dokument verschwindet, sondern auch
-     * etwaige crawled-Twins mit derselben URL.
-     *
-     * Da `url` nicht in den filterable-attributes liegt, koennen wir Meili
-     * nicht serverseitig filtern lassen. Stattdessen suchen wir mit der URL
-     * als Volltext-Query, filtern die Hits clientseitig auf exakte URL-Gleichheit
-     * und loeschen die getroffenen IDs einzeln.
+     * etwaige crawled-Twins mit derselben URL. Setzt voraus, dass `url` in
+     * den filterable-attributes des Index gelistet ist (siehe v2.2.0
+     * Mig06_AddUrlFilterable).
      *
      * @param string[] $urls
      */
@@ -285,22 +286,11 @@ final class DocumentIndexer
         }
         try {
             $index = $this->meilisearch->index($this->indexName($locale));
-            $toDelete = [];
-            foreach ($urls as $url) {
-                $result = $index->search($url, [
-                    'limit' => 50,
-                    'attributesToRetrieve' => ['id', 'url'],
-                ]);
-                $hits = $result->getHits();
-                foreach ($hits as $hit) {
-                    if (\is_array($hit) && (string) ($hit['url'] ?? '') === $url && isset($hit['id'])) {
-                        $toDelete[(string) $hit['id']] = true;
-                    }
-                }
-            }
-            if ($toDelete !== []) {
-                $index->deleteDocuments(array_keys($toDelete));
-            }
+            $filter = implode(' OR ', array_map(
+                static fn (string $u): string => 'url = "' . addslashes($u) . '"',
+                $urls,
+            ));
+            $index->deleteDocuments(['filter' => $filter]);
         } catch (\Throwable $e) {
             $this->logger->warning('venne_search.indexer.delete_by_urls_failed', [
                 'urls' => $urls,

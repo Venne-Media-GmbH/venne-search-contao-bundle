@@ -54,6 +54,26 @@ final class TagBackendListener
             return '';
         }
 
+        // Schutz: Wenn der Tag noch keinen Slug hat (= Save vom Edit-Form
+        // ist noch nicht durchgelaufen, label fehlt oder save_callback hat
+        // gecrasht), darf der Picker nicht aktiv sein — sonst kommt beim
+        // Klick auf „Auswahl zuweisen" ein 404 tag_not_found.
+        try {
+            $tagRow = $this->db->fetchAssociative(
+                'SELECT slug, label FROM tl_venne_search_tag WHERE id = ?',
+                [$tagId],
+            );
+        } catch (\Throwable) {
+            $tagRow = false;
+        }
+        $slug = \is_array($tagRow) ? trim((string) ($tagRow['slug'] ?? '')) : '';
+        $label = \is_array($tagRow) ? trim((string) ($tagRow['label'] ?? '')) : '';
+        if ($slug === '' || $label === '') {
+            return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#92400e;">'
+                . '<strong>Tag noch nicht vollstaendig.</strong> Bitte oben eine <em>Bezeichnung</em> eintragen und einmal <em>Speichern</em> klicken — danach kann der Tag Seiten und Dateien zugewiesen werden.'
+                . '</div>';
+        }
+
         $targets = $this->tags->targetsForTag($tagId);
         // Auch bei leerer Liste: weiter, damit der Picker gerendert wird.
 

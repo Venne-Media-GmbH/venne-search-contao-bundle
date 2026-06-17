@@ -208,6 +208,34 @@ final class FrontendSearchController extends AbstractController
             }
         }
 
+        // Bei aktivem Type-Filter sind die Type-Facet-Counts der Hauptquery
+        // verzerrt (Meili liefert nur den aktiven Typ, dedupe/post-filter
+        // schreiben das spaeter nochmal). Wir holen die ECHTEN Counts vorher
+        // in einer leichten Parallel-Query OHNE Type-Filter und mergen das
+        // Ergebnis ganz am Ende vor JSON-Response.
+        $unfilteredTypeCounts = null;
+        if (isset($filters['type'])) {
+            $filtersForFacets = $filters;
+            unset($filtersForFacets['type']);
+            try {
+                $facetResult = $service->search(
+                    query: $effectiveQuery,
+                    locale: $locale,
+                    filters: $filtersForFacets,
+                    limit: 1,
+                    offset: 0,
+                    userGroups: $userGroups,
+                    locales: $locales,
+                    sort: $sort,
+                );
+                if (isset($facetResult->facets['type']) && \is_array($facetResult->facets['type'])) {
+                    $unfilteredTypeCounts = $facetResult->facets['type'];
+                }
+            } catch (\Throwable) {
+                // Facet-Query darf die Haupt-Suche nicht killen.
+            }
+        }
+
         try {
             $result = $service->search(
                 query: $effectiveQuery,
@@ -219,41 +247,6 @@ final class FrontendSearchController extends AbstractController
                 locales: $locales,
                 sort: $sort,
             );
-            // Bei aktivem Type-Filter liefert Meilisearch nur die Facet-Counts
-            // FUER den aktiven Typ (z.B. nur "page: 12"). Damit das Tab-Label
-            // "Dateien (n)" nach jedem Query-Wechsel aktuell bleibt, holen wir
-            // die Type-Counts in einer zweiten leichten Query ohne Type-Filter.
-            if (isset($filters['type'])) {
-                $filtersForFacets = $filters;
-                unset($filtersForFacets['type']);
-                try {
-                    $facetResult = $service->search(
-                        query: $effectiveQuery,
-                        locale: $locale,
-                        filters: $filtersForFacets,
-                        limit: 1, // wir brauchen nur Facets, nicht die Hits
-                        offset: 0,
-                        userGroups: $userGroups,
-                        locales: $locales,
-                        sort: $sort,
-                    );
-                    if (isset($facetResult->facets['type'])) {
-                        $mergedFacets = $result->facets;
-                        $mergedFacets['type'] = $facetResult->facets['type'];
-                        $result = new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
-                            hits: $result->hits,
-                            totalHits: $result->totalHits,
-                            offset: $result->offset,
-                            limit: $result->limit,
-                            facets: $mergedFacets,
-                            queryTimeMs: $result->queryTimeMs,
-                        );
-                    }
-                } catch (\Throwable) {
-                    // Facet-Query darf die Haupt-Suche nicht killen — Counts
-                    // bleiben dann eben kurz veraltet.
-                }
-            }
         } catch (ResolveAuthException) {
             return $this->errorResponse(401, 'unauthorized', 'Suche aktuell nicht verfügbar — der Site-Betreiber muss den Plattform-Schlüssel prüfen.');
         } catch (ResolveSubscriptionException) {
@@ -519,7 +512,10 @@ final class FrontendSearchController extends AbstractController
             'limit' => $result->limit,
             // crawled-Counts werden in den page-Count gemerged — "Websiteinhalt"
             // soll im Frontend nicht mehr als separater Tab erscheinen.
-            'facets' => self::mergeCrawledIntoPage($result->facets),
+            // Bei aktivem Type-Filter ersetzen wir vorher noch die verzerrten
+            // type-Counts durch die echten unfilterten Counts aus der
+            // Parallel-Facet-Query (sonst zeigt das Frontend nur den aktiven Tab).
+            'facets' => self::mergeCrawledIntoPage(self::applyUnfilteredTypeCounts($result->facets, $unfilteredTypeCounts)),
             'tagFacets' => $tagFacetList,
             'queryTimeMs' => $result->queryTimeMs,
         ]);
@@ -531,6 +527,24 @@ final class FrontendSearchController extends AbstractController
         $response->setMaxAge(30);
         $response->setVary(['Cookie'], false);
         return $response;
+    }
+
+    /**
+     * Ersetzt die type-Facet-Counts durch die echten unfilterten Counts (aus
+     * der Parallel-Facet-Query). Wird nur aufgerufen wenn ein Type-Filter
+     * aktiv war — sonst sind die Counts aus der Haupt-Query bereits korrekt.
+     *
+     * @param array<string,mixed> $facets
+     * @param array<string,int>|null $unfilteredTypeCounts
+     * @return array<string,mixed>
+     */
+    private static function applyUnfilteredTypeCounts(array $facets, ?array $unfilteredTypeCounts): array
+    {
+        if ($unfilteredTypeCounts === null) {
+            return $facets;
+        }
+        $facets['type'] = $unfilteredTypeCounts;
+        return $facets;
     }
 
     /**

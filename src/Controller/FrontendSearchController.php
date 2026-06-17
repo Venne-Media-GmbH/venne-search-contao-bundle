@@ -219,6 +219,41 @@ final class FrontendSearchController extends AbstractController
                 locales: $locales,
                 sort: $sort,
             );
+            // Bei aktivem Type-Filter liefert Meilisearch nur die Facet-Counts
+            // FUER den aktiven Typ (z.B. nur "page: 12"). Damit das Tab-Label
+            // "Dateien (n)" nach jedem Query-Wechsel aktuell bleibt, holen wir
+            // die Type-Counts in einer zweiten leichten Query ohne Type-Filter.
+            if (isset($filters['type'])) {
+                $filtersForFacets = $filters;
+                unset($filtersForFacets['type']);
+                try {
+                    $facetResult = $service->search(
+                        query: $effectiveQuery,
+                        locale: $locale,
+                        filters: $filtersForFacets,
+                        limit: 1, // wir brauchen nur Facets, nicht die Hits
+                        offset: 0,
+                        userGroups: $userGroups,
+                        locales: $locales,
+                        sort: $sort,
+                    );
+                    if (isset($facetResult->facets['type'])) {
+                        $mergedFacets = $result->facets;
+                        $mergedFacets['type'] = $facetResult->facets['type'];
+                        $result = new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
+                            hits: $result->hits,
+                            totalHits: $result->totalHits,
+                            offset: $result->offset,
+                            limit: $result->limit,
+                            facets: $mergedFacets,
+                            queryTimeMs: $result->queryTimeMs,
+                        );
+                    }
+                } catch (\Throwable) {
+                    // Facet-Query darf die Haupt-Suche nicht killen — Counts
+                    // bleiben dann eben kurz veraltet.
+                }
+            }
         } catch (ResolveAuthException) {
             return $this->errorResponse(401, 'unauthorized', 'Suche aktuell nicht verfügbar — der Site-Betreiber muss den Plattform-Schlüssel prüfen.');
         } catch (ResolveSubscriptionException) {

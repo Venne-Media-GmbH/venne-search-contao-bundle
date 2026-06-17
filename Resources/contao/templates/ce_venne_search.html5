@@ -1284,14 +1284,15 @@ $vsI18n = $vsI18nMap[$vsLocale] ?? $vsI18nMap['en'];
             if (!append && q && lastTotalHits > 0) pushRecent(q);
 
             // Cache-Strategie fuer Sidebar-Pills (Type & Tag):
-            //  1) Ohne Filter cachen wir die VOLLE Type-Verteilung als Universal-Snapshot.
-            //  2) Mit Tag-Filter aber ohne Type-Filter cachen wir die Type-Verteilung
-            //     getrennt — diese „tag-gefilterten" Counts brauchen wir, wenn der
-            //     User zusaetzlich einen Type-Filter setzt: andere Type-Pills muessen
-            //     dann sichtbar bleiben, aber mit korrekten Counts zum aktiven Tag.
+            //  1) Type-Verteilung cachen wir immer — das Backend liefert auch bei
+            //     aktivem Type-Filter die unfilterten Counts (zweite Facet-Query),
+            //     damit die Tab-Labels "Seiten (n)" / "Dateien (n)" bei jedem
+            //     neuen Suchbegriff aktuell bleiben.
+            //  2) Tag-Filter beeinflusst die Counts weiter — wir cachen den
+            //     tag-gefilterten Snapshot getrennt.
             //  3) Tag-Facets cachen wir ohne Type-Filter, damit bei Type-Filter-Klick
             //     der Tag-Bereich nicht verschwindet.
-            if (data.facets && data.facets.type && currentTypeFilter === '') {
+            if (data.facets && data.facets.type) {
                 if (currentTagFilters.length === 0) {
                     lastFullTypeFacets = data.facets.type;
                 } else {

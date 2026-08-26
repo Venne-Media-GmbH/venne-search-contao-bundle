@@ -64,6 +64,14 @@ Geschützte Inhalte (Member-Bereiche) bleiben geschützt. Zwei Modi zur Auswahl:
 
 Zusätzlich gibt es einen **Tree-Picker** im Backend, mit dem du pro Klick einzelne Ordner aus dem Datei-Manager komplett von der Indexierung ausschließen kannst. Bei der ersten Migration werden — falls vorhanden — `files/intern`, `files/admin` und `files/private` automatisch vorausgewählt.
 
+### Seiten aus der Suche nehmen (Lupen-Icon)
+
+In der Seitenstruktur hat jede Seite ein **Lupen-Icon** (Contao 4.13: `tl_page.noSearch`). Ein Klick schaltet die Suche für die Seite aus bzw. wieder ein — der Index wird sofort synchronisiert, kein Reindex nötig.
+
+Das Flag **gilt für den ganzen Zweig**: Steht ein Startpunkt oder eine Elternseite auf „wird nicht durchsucht", sind auch alle Unterseiten draußen — ohne dass du sie einzeln umstellen musst. Unterseiten zeigen dann eine abgeblendete, durchgestrichene Lupe mit Hinweis auf die übergeordnete Seite. Ebenso sind Seiten unter einem **unveröffentlichten Startpunkt** nie im Index (Contao liefert sie im Frontend auch nicht aus).
+
+Wer die Suche für einen Zweig wieder einschaltet, bekommt Seite **und** Unterseiten sofort reindexiert (Unterseiten mit eigenem Flag bleiben draußen).
+
 Im Frontend filtert Meilisearch hart bei jedem Such-Call:
 
 ```

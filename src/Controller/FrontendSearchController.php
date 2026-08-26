@@ -304,7 +304,7 @@ final class FrontendSearchController extends AbstractController
                 usort($filtered, static function ($a, $b): int {
                     $cmp = strcmp($a->contentType, $b->contentType);
                     if ($cmp !== 0) return $cmp;
-                    return $b->score <=> $a->score;
+                    return SearchService::compareRelevance($a, $b);
                 });
             }
             // Type-Facet-Counts aus dem post-gefilterten Pool neu berechnen,

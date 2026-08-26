@@ -320,10 +320,10 @@ final class SearchService
             usort($allHits, static function ($a, $b): int {
                 $cmp = strcmp($a->contentType, $b->contentType);
                 if ($cmp !== 0) return $cmp;
-                return $b->score <=> $a->score;
+                return self::compareRelevance($a, $b);
             });
         } else {
-            usort($allHits, static fn ($a, $b): int => $b->score <=> $a->score);
+            usort($allHits, [self::class, 'compareRelevance']);
         }
         $paged = \array_slice($allHits, $offset, $limit);
 
@@ -338,11 +338,22 @@ final class SearchService
     }
 
     /**
-     * Sort-Klausel pro Mode. weight + indexed_at sind v2.1.0-Felder; bei alten
-     * Indexen fängt der search()-Try/Catch-Fallback das ab.
-     *
-     * @return list<string>
+     * Relevanz-Vergleich für PHP-seitiges Re-Ranking (Multi-Locale-Merge,
+     * Post-Filter): höherer Score zuerst, bei gleichem Score das NEUERE
+     * Dokument zuerst — spiegelt den `published_at:desc`-Tie-Breaker aus
+     * DocumentIndexer::RANKING_RULES. Ohne den Tie-Break würde usort()
+     * (stabil) die Einfüge-Reihenfolge behalten, also ältere Docs oben.
      */
+    public static function compareRelevance(SearchHit $a, SearchHit $b): int
+    {
+        $cmp = $b->score <=> $a->score;
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+
+        return $b->publishedAt <=> $a->publishedAt;
+    }
+
     /**
      * Crawler-Default-Datum erkennen: Wenn ein gecrawltes Dokument kein
      * erkennbares Inhaltsdatum hat, traegt der externe Crawler den

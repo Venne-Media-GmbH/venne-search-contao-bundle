@@ -4,12 +4,20 @@ declare(strict_types=1);
 
 namespace VenneMedia\VenneSearchContaoBundle\EventListener;
 
+use VenneMedia\VenneSearchContaoBundle\Service\Page\PageSearchabilityResolver;
+
 /**
  * Rendert das Lupen-Icon pro Page-Zeile in der Seitenstruktur (button_callback).
  *
  * - noSearch = '' / '0' → aktive Lupe (Page ist suchbar). Klick = ausschalten.
  * - noSearch = '1'      → durchgestrichene Lupe (Page nicht im Index).
  *                         Klick = einschalten.
+ * - v2.2.0: Vorfahre noSearch = '1' → durchgestrichene Lupe, zusaetzlich
+ *                         abgeblendet + Tooltip nennt die uebergeordnete
+ *                         Seite. Das Flag wird vererbt (siehe
+ *                         PageSearchabilityResolver) — ohne die Anzeige
+ *                         wuerde ein aktives Lupen-Icon vortaeuschen, die
+ *                         Seite sei im Index.
  *
  * Der Klick wird per Inline-JS abgefangen (event.preventDefault) und gegen
  * /contao/venne-search/page/toggle-no-search gepostet. Bei Erfolg wird das
@@ -18,6 +26,11 @@ namespace VenneMedia\VenneSearchContaoBundle\EventListener;
  */
 final class PageSearchToggleListener
 {
+    public function __construct(
+        private readonly ?PageSearchabilityResolver $searchability = null,
+    ) {
+    }
+
     /**
      * Contao-button_callback-Signatur in 4.13. Wir nutzen nur $row;
      * die anderen Argumente kommen vom Framework, werden hier aber nicht
@@ -33,12 +46,29 @@ final class PageSearchToggleListener
         }
 
         $isNoSearch = (string) ($row['noSearch'] ?? '') === '1';
-        $iconFile = $isNoSearch
+        $inheritedFrom = '';
+        if (!$isNoSearch && $this->searchability !== null) {
+            try {
+                $r = $this->searchability->resolve($pageId);
+                if ($r['reason'] === PageSearchabilityResolver::REASON_INHERITED) {
+                    $inheritedFrom = $r['sourceTitle'] !== '' ? $r['sourceTitle'] : ('#' . $r['sourceId']);
+                }
+            } catch (\Throwable) {
+                // Icon darf die Seitenstruktur nie kaputt machen.
+            }
+        }
+        $iconFile = ($isNoSearch || $inheritedFrom !== '')
             ? 'bundles/vennesearchcontao/icons/search-off.svg'
             : 'bundles/vennesearchcontao/icons/search-on.svg';
-        $titleText = $isNoSearch
-            ? 'Diese Seite wird NICHT durchsucht — klicken zum Aktivieren'
-            : 'Diese Seite wird durchsucht — klicken zum Deaktivieren';
+        if ($inheritedFrom !== '') {
+            $titleText = 'Diese Seite wird NICHT durchsucht — deaktiviert über die übergeordnete Seite „'
+                . $inheritedFrom . '"';
+        } else {
+            $titleText = $isNoSearch
+                ? 'Diese Seite wird NICHT durchsucht — klicken zum Aktivieren'
+                : 'Diese Seite wird durchsucht — klicken zum Deaktivieren';
+        }
+        $imgStyle = $inheritedFrom !== '' ? ' style="opacity:.45"' : '';
 
         // Inline-JS wird einmal pro Seitenstruktur-Ansicht geliefert. Wir
         // packen es als data-Attribut an den Link und einen einmaligen Init-
@@ -53,12 +83,13 @@ final class PageSearchToggleListener
 
         return sprintf(
             '<a href="#" class="vsearch-page-toggle" data-vsearch-toggle-page="%d" title="%s">'
-                . '<img src="/%s" width="16" height="16" alt="%s">'
+                . '<img src="/%s" width="16" height="16" alt="%s"%s>'
                 . '</a>%s',
             $pageId,
             htmlspecialchars($titleText, \ENT_QUOTES, 'UTF-8'),
             $iconFile,
             htmlspecialchars($titleText, \ENT_QUOTES, 'UTF-8'),
+            $imgStyle,
             $script,
         );
     }
@@ -104,6 +135,10 @@ final class PageSearchToggleListener
                 : 'Diese Seite wird NICHT durchsucht — klicken zum Aktivieren';
             if (img) { img.setAttribute('src', nextSrc); img.style.opacity = '1'; img.setAttribute('alt', nextTitle); }
             a.setAttribute('title', nextTitle);
+            // v2.2.0: Das Flag vererbt sich auf Unterseiten — deren Icons
+            // (abgeblendete Lupe) stimmen nur nach einem Reload. Nur wenn
+            // es ueberhaupt Nachfahren gab, sonst bleibt es reload-frei.
+            if (d.descendants && d.descendants > 0) { window.location.reload(); }
         }).catch(function(){
             if (img) { img.setAttribute('src', prevSrc); img.style.opacity = '1'; }
             alert('Netzwerkfehler beim Toggle');

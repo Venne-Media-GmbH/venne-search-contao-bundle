@@ -823,6 +823,8 @@ final class BackendActionListener
             '     if(r==="permission_excluded")return "durch Berechtigung ausgeschlossen";'.
             '     if(r==="page_noindex_robots")return "Page hat noindex-Robots-Tag";'.
             '     if(r==="page_no_search_flag")return "Page hat noSearch-Flag";'.
+            '     if(r==="page_no_search_inherited")return "uebergeordnete Seite steht auf \'nicht durchsuchen\'";'.
+            '     if(r==="page_root_unpublished")return "Startpunkt (Root) nicht veroeffentlicht";'.
             '     if(r.indexOf("file_too_large_")===0)return "Datei zu groß";'.
             '     if(r.indexOf("parse_timeout")===0)return "PDF-Parser-Timeout";'.
             '     if(r.indexOf("parse_failed:")===0)return "Parse-Fehler: "+r.substring(13,80);'.

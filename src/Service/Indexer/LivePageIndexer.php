@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
+use VenneMedia\VenneSearchContaoBundle\Service\Page\PageSearchabilityResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
@@ -33,6 +34,9 @@ final class LivePageIndexer
         private readonly FileLocaleDetector $localeDetector,
         private readonly TagRepository $tags,
         private readonly LoggerInterface $logger = new NullLogger(),
+        // v2.2.0: noSearch-Vererbung. Optional, damit ein alter Container-
+        // Cache ohne den Service den Live-Indexer nicht killt.
+        private readonly ?PageSearchabilityResolver $searchability = null,
     ) {
     }
 
@@ -57,6 +61,20 @@ final class LivePageIndexer
             return;
         }
 
+        // v2.2.0: Root-Pages werden selbst nie indexiert, ihre Flags gelten
+        // aber für den ganzen Baum: Root unveröffentlicht (Contao:
+        // !rootIsPublic → 404 für alle Unterseiten) oder Root noSearch=1 →
+        // alle Nachfahren aus dem Index. Damit räumt z.B.
+        // `venne-search:reindex-page <rootId>` einen alten Zweig komplett ab.
+        if ((string) ($pageRow['type'] ?? '') === 'root') {
+            $rootUnpublished = (string) ($pageRow['published'] ?? '') !== '1';
+            $rootNoSearch = isset($pageRow['noSearch']) && (string) $pageRow['noSearch'] === '1';
+            if ($rootUnpublished || $rootNoSearch) {
+                $this->deletePageTree($pageId, $config);
+            }
+            return;
+        }
+
         // Nur publizierte Pages werden indexiert. Doctrine DBAL kann je nach
         // MySQL-Version int(1) oder string('1') zurückliefern, also tolerant
         // casten — sonst greift der String-Strict-Vergleich nicht.
@@ -77,9 +95,20 @@ final class LivePageIndexer
             $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
             return;
         }
-        // Contao 4.13: noSearch-Flag (in 5.x nicht mehr vorhanden)
+        // Contao 4.13: noSearch-Flag (in 5.x nicht mehr vorhanden).
+        // v2.2.0: Wird eine Seite auf noSearch gestellt, fliegt der ganze
+        // Zweig raus — die Unterseiten erben das Flag (siehe
+        // PageSearchabilityResolver). Löschen ist billig, deshalb hier
+        // synchron; das Re-Enable eines Zweigs macht der Lupen-Toggle bzw.
+        // der nächste Full-Reindex.
         if (isset($pageRow['noSearch']) && (string) $pageRow['noSearch'] === '1') {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageTree($pageId, $config);
+            return;
+        }
+        // v2.2.0: Vorfahre noSearch=1 oder Root unveröffentlicht → nicht
+        // indexieren, ggf. vorhandenes Doc entfernen.
+        if ($this->searchability !== null && $this->searchability->excludedReason($pageId) !== null) {
+            $this->deletePageTree($pageId, $config);
             return;
         }
         // v2.1.0: hide-Flag respektieren wenn das Setting deaktiviert ist —
@@ -313,6 +342,26 @@ final class LivePageIndexer
         try {
             $this->indexer->delete('page-'.$pageId, $locale);
         } catch (\Throwable) {
+        }
+    }
+
+    /**
+     * Löscht eine Page UND alle Nachfahren aus allen aktiven Locale-Indexen.
+     * Pages tragen ihre Locale nicht selbst (nur die Root), deshalb gehen
+     * wir über alle enabledLocales — ein Delete auf eine nicht vorhandene
+     * ID ist in Meilisearch ein No-Op.
+     */
+    public function deletePageTree(int $pageId, SettingsConfig $config): void
+    {
+        $ids = [$pageId];
+        if ($this->searchability !== null) {
+            $ids = array_merge($ids, $this->searchability->descendantIds($pageId));
+        }
+        $locales = $config->enabledLocales !== [] ? $config->enabledLocales : ['de'];
+        foreach ($ids as $id) {
+            foreach ($locales as $locale) {
+                $this->deletePage($id, $locale);
+            }
         }
     }
 

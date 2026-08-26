@@ -7,6 +7,7 @@ namespace VenneMedia\VenneSearchContaoBundle\Service\Indexer;
 use Doctrine\DBAL\Connection;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
 use VenneMedia\VenneSearchContaoBundle\Service\Metadata\FileDateExtractor;
+use VenneMedia\VenneSearchContaoBundle\Service\Page\PageSearchabilityResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfThumbnailGenerator;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
@@ -39,6 +40,9 @@ final class IndexableItemProcessor
         private readonly ?PdfThumbnailGenerator $pdfThumbnails = null,
         // v2.2.0: optional, Container-resistent wie pdfThumbnails.
         private readonly ?FileDateExtractor $fileDateExtractor = null,
+        // v2.2.0: noSearch-Vererbung + unveröffentlichte Root. Optional aus
+        // demselben Grund.
+        private readonly ?PageSearchabilityResolver $searchability = null,
     ) {
     }
 
@@ -101,6 +105,18 @@ final class IndexableItemProcessor
                 'ok' => true,
                 'skipped' => true,
                 'reason' => 'page_no_search_flag',
+                'durationMs' => (int) ((microtime(true) - $start) * 1000),
+            ];
+        }
+        // v2.2.0: Vererbung über die Hierarchie (Vorfahre noSearch=1 oder
+        // Root unveröffentlicht). Defensive Doppelprüfung zum Plan — der
+        // kann veraltet sein.
+        $inheritedReason = $this->searchability?->excludedReason($pageId);
+        if ($inheritedReason !== null) {
+            return [
+                'ok' => true,
+                'skipped' => true,
+                'reason' => $inheritedReason,
                 'durationMs' => (int) ((microtime(true) - $start) * 1000),
             ];
         }

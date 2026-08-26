@@ -28,14 +28,22 @@ final class DocumentIndexer
      * Ranking-Rules in dieser Reihenfolge (höchste Priorität zuerst).
      * Klassisches BM25-Ranking ohne Embeddings oder semantische Komponenten —
      * deterministisch, schnell, ohne externe Modelle.
+     *
+     * v2.2.0: `published_at:desc` als LETZTER Tie-Breaker. Ohne ihn ordnet
+     * Meilisearch gleich relevante Treffer nach interner Doc-ID, also nach
+     * Indexier-Reihenfolge — Files kommen „ORDER BY path", d.h. der
+     * Geschäftsbericht 2010 stand vor 2024. Jetzt: bei gleicher Relevanz
+     * das neueste Dokument zuerst. Steht bewusst NACH exactness, damit das
+     * Datum nie echte Treffer-Qualität überstimmt.
      */
-    private const RANKING_RULES = [
-        'words',         // Alle Query-Worte gefunden?
-        'typo',          // Wie viele Tippfehler?
-        'proximity',     // Worte nah beieinander?
-        'attribute',     // Title > Tags > Content
-        'sort',          // Falls per Sort-Param sortiert
-        'exactness',     // Exakte Wortform vor Stamm
+    public const RANKING_RULES = [
+        'words',              // Alle Query-Worte gefunden?
+        'typo',               // Wie viele Tippfehler?
+        'proximity',          // Worte nah beieinander?
+        'attribute',          // Title > Tags > Content
+        'sort',               // Falls per Sort-Param sortiert
+        'exactness',          // Exakte Wortform vor Stamm
+        'published_at:desc',  // Tie-Break: neuestes Dokument zuerst
     ];
 
     /**

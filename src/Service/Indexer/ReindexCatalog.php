@@ -9,6 +9,7 @@ use Meilisearch\Client;
 use Meilisearch\Contracts\DocumentsQuery;
 use Symfony\Component\HttpKernel\KernelInterface;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
+use VenneMedia\VenneSearchContaoBundle\Service\Page\PageSearchabilityResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
 
@@ -46,6 +47,9 @@ final class ReindexCatalog
         private readonly KernelInterface $kernel,
         private readonly PermissionResolver $permissions,
         private readonly FileLocaleDetector $localeDetector,
+        // v2.2.0: optional, Container-resistent (alter Cache ohne den Service
+        // → Plan läuft trotzdem, nur ohne Hierarchie-Vererbung).
+        private readonly ?PageSearchabilityResolver $searchability = null,
     ) {
     }
 
@@ -139,11 +143,24 @@ final class ReindexCatalog
         $pageLocaleCache = [];
         $log('pages_loop_start', []);
         $pageIdx = 0;
+        $inheritedSkipped = 0;
         foreach ($pageRows as $row) {
             if (++$pageIdx % 500 === 0) {
                 $log('pages_loop_progress', ['done' => $pageIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
             }
             $pageId = (int) $row['id'];
+
+            // v2.2.0: Hierarchie-Vererbung. Die SQL-Where oben kennt nur die
+            // Flags der Seite selbst — Unterseiten eines noSearch-Zweigs oder
+            // einer unveröffentlichten Root landeten bisher im Index (FFA:
+            // „Richtlinien" aus dem „(ALT)"-Baum). Solche Pages behandeln wir
+            // exakt wie eigenes noSearch=1: gar nicht als Site-Item führen →
+            // falls noch im Index, werden sie als Orphan erkannt und beim
+            // Finalize entfernt.
+            if ($this->searchability !== null && $this->searchability->excludedReason($pageId) !== null) {
+                ++$inheritedSkipped;
+                continue;
+            }
             $alias = (string) ($row['alias'] ?? '');
             $title = (string) ($row['title'] ?? '');
             $label = $title !== '' ? $title : ($alias !== '' ? '/' . $alias : 'Seite #' . $pageId);
@@ -182,7 +199,7 @@ final class ReindexCatalog
             $fileRows = [];
         }
 
-        $log('pages_loop_done', ['count' => $pageIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+        $log('pages_loop_done', ['count' => $pageIdx, 'inheritedSkipped' => $inheritedSkipped, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
 
         // BULK-WARMUP: Page-Embedding-Locales für ALLE Files in einem Rutsch
         // berechnen. Spart bei großen Sites tausende Einzel-Queries (pro File

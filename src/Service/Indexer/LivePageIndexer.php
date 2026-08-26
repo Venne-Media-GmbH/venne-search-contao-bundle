@@ -79,7 +79,7 @@ final class LivePageIndexer
         // MySQL-Version int(1) oder string('1') zurückliefern, also tolerant
         // casten — sonst greift der String-Strict-Vergleich nicht.
         if ((string) ($pageRow['published'] ?? '') !== '1') {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
 
@@ -92,7 +92,7 @@ final class LivePageIndexer
         // Robots-Tag respektieren: noindex → aus Index raus
         $robots = (string) ($pageRow['robots'] ?? '');
         if ($robots !== '' && stripos($robots, 'noindex') !== false) {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
         // Contao 4.13: noSearch-Flag (in 5.x nicht mehr vorhanden).
@@ -114,7 +114,7 @@ final class LivePageIndexer
         // v2.1.0: hide-Flag respektieren wenn das Setting deaktiviert ist —
         // versteckte Seiten werden auch beim Live-Index-Trigger entfernt.
         if (!$config->indexHiddenPages && (string) ($pageRow['hide'] ?? '') === '1') {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
 
@@ -127,7 +127,7 @@ final class LivePageIndexer
         $alias = (string) ($pageRow['alias'] ?? '');
         $logicalPath = 'tl_page/' . ($alias !== '' ? $alias : (string) $pageId);
         if ($this->shouldSkipForPermission('page', $logicalPath, $perm['isProtected'], $config)) {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
 
@@ -357,11 +357,22 @@ final class LivePageIndexer
         if ($this->searchability !== null) {
             $ids = array_merge($ids, $this->searchability->descendantIds($pageId));
         }
-        $locales = $config->enabledLocales !== [] ? $config->enabledLocales : ['de'];
         foreach ($ids as $id) {
-            foreach ($locales as $locale) {
-                $this->deletePage($id, $locale);
-            }
+            $this->deletePageEverywhere($id, $config);
+        }
+    }
+
+    /**
+     * Löscht EINE Page aus allen aktiven Locale-Indexen. Vorher lief das
+     * über `tl_page.language ?: 'de'` — language ist aber nur auf Root-Pages
+     * gesetzt, d.h. Unterseiten im en-Index wurden nie getroffen (FFA:
+     * page-6/page-7 blieben im en-Index haengen).
+     */
+    public function deletePageEverywhere(int $pageId, SettingsConfig $config): void
+    {
+        $locales = $config->enabledLocales !== [] ? $config->enabledLocales : ['de'];
+        foreach ($locales as $locale) {
+            $this->deletePage($pageId, $locale);
         }
     }
 

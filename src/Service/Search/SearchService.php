@@ -43,6 +43,16 @@ final class SearchService
     ];
 
     /**
+     * v2.2.0: Score-Abstand, bis zu dem zwei Treffer als „gleich relevant"
+     * gelten und nach Aktualität sortiert werden (siehe
+     * rankByRelevanceWithRecency). Empirisch: exactness-/Wortpositions-
+     * Unterschiede bewegen Meilisearchs Ranking-Score um ~0.01, ein
+     * fehlendes Query-Wort, ein Tippfehler oder „nur im Inhalt statt im
+     * Titel" um deutlich mehr als 0.02.
+     */
+    public const RELEVANCE_EPSILON = 0.02;
+
+    /**
      * @param array<string, mixed> $filters    z.B. ['type' => 'page', 'tags' => ['shop']]
      * @param list<int>            $userGroups tl_member_group-IDs des aktuellen Frontend-Users.
      *                                          Leeres Array = anonymer Besucher → nur public docs.
@@ -204,6 +214,9 @@ final class SearchService
                 if ($b->publishedAt === 0) return -1;
                 return $a->publishedAt <=> $b->publishedAt;
             });
+        } elseif ($sort === self::SORT_RELEVANCE) {
+            // v2.2.0: nahezu gleich relevante Treffer → neuestes zuerst.
+            $hits = self::rankByRelevanceWithRecency($hits);
         }
 
         return new SearchResult(
@@ -323,7 +336,7 @@ final class SearchService
                 return self::compareRelevance($a, $b);
             });
         } else {
-            usort($allHits, [self::class, 'compareRelevance']);
+            $allHits = self::rankByRelevanceWithRecency($allHits);
         }
         $paged = \array_slice($allHits, $offset, $limit);
 
@@ -352,6 +365,86 @@ final class SearchService
         }
 
         return $b->publishedAt <=> $a->publishedAt;
+    }
+
+    /**
+     * Relevanz-Reihenfolge mit Aktualitäts-Gruppierung (v2.2.0, Ticket FFA).
+     *
+     * Meilisearch liefert pro Treffer einen globalen Ranking-Score (0..1).
+     * Winzige Unterschiede — exactness „matchesStart", weil der PDF-Text
+     * zufällig mit dem Suchwort beginnt, oder Wortposition 0 statt 1 —
+     * bewegen den Score nur um ~0.01, entscheiden aber die Reihenfolge.
+     * Live-Befund: Geschäftsberichte 2001–2007 (0.997) standen vor
+     * 2016–2024 (0.987), obwohl alle denselben Titel „FFA-Geschäftsbericht
+     * JJJJ" tragen.
+     *
+     * Verfahren: nach Score absteigend sortieren, dann von oben nach unten in
+     * Gruppen schneiden. Ein Treffer gehört zur aktuellen Gruppe, solange sein
+     * Score höchstens $epsilon unter dem GRUPPEN-MAXIMUM liegt — bewusst nicht
+     * „unter dem Vorgänger", sonst verschmilzt eine Kette kleiner Schritte zu
+     * einer riesigen Datums-Gruppe. Innerhalb einer Gruppe: neuestes Datum
+     * zuerst, unbekanntes Datum (0) ans Ende.
+     *
+     * Sind alle Scores 0 (Meilisearch ohne showRankingScore-Support), bleibt
+     * die gelieferte Reihenfolge unangetastet.
+     *
+     * @param list<SearchHit> $hits
+     *
+     * @return list<SearchHit>
+     */
+    public static function rankByRelevanceWithRecency(array $hits, float $epsilon = self::RELEVANCE_EPSILON): array
+    {
+        $hits = array_values($hits);
+        if (\count($hits) < 2) {
+            return $hits;
+        }
+        $hasScores = false;
+        foreach ($hits as $h) {
+            if ($h->score > 0.0) {
+                $hasScores = true;
+                break;
+            }
+        }
+        if (!$hasScores) {
+            return $hits;
+        }
+
+        usort($hits, [self::class, 'compareRelevance']);
+
+        $out = [];
+        $group = [];
+        $groupMax = null;
+        foreach ($hits as $hit) {
+            if ($groupMax !== null && $hit->score < $groupMax - $epsilon) {
+                array_push($out, ...self::sortNewestFirst($group));
+                $group = [];
+                $groupMax = null;
+            }
+            if ($groupMax === null) {
+                $groupMax = $hit->score;
+            }
+            $group[] = $hit;
+        }
+        array_push($out, ...self::sortNewestFirst($group));
+
+        return $out;
+    }
+
+    /**
+     * @param list<SearchHit> $group
+     *
+     * @return list<SearchHit>
+     */
+    private static function sortNewestFirst(array $group): array
+    {
+        usort($group, static function (SearchHit $a, SearchHit $b): int {
+            if ($a->publishedAt === 0 && $b->publishedAt === 0) return 0;
+            if ($a->publishedAt === 0) return 1;
+            if ($b->publishedAt === 0) return -1;
+            return $b->publishedAt <=> $a->publishedAt;
+        });
+
+        return $group;
     }
 
     /**

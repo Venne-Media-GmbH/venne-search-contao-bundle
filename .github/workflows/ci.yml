@@ -69,5 +69,13 @@ jobs:
               run: |
                   composer config minimum-stability dev
                   composer config prefer-stable true
+                  # Nur fuer diesen CI-Install-Test: Composer blockt seit 2.9/2.10 standardmaessig
+                  # Pakete mit bekannten Security-Advisories komplett vom Installieren, auch nur
+                  # zum Kompatibilitaets-Check. Das faellige Contao 4.13 (weiterhin per composer.json
+                  # unterstuetzt) hat als EOL-Linie durchgehend Advisories - ohne diese Zeile laesst
+                  # sich hier gar keine 4.13.x-Version mehr installieren. Betrifft nur diesen
+                  # Wegwerf-CI-Checkout, NICHT das committete composer.json - echte Nutzer, die das
+                  # Bundle installieren, bekommen die Advisory-Warnung weiterhin ganz normal.
+                  composer config policy.advisories.block false
                   composer require --no-update --dev "contao/core-bundle:^${{ matrix.contao }}"
                   composer update --prefer-dist --no-interaction --no-progress

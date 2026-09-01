@@ -1,6 +1,5 @@
 {
     "name": "venne-media/venne-search-contao-bundle",
-    "version": "2.2.0-dev",
     "description": "Volltext-Suche für Contao mit Live-Indexing von Seiten und Datei-Inhalten (PDF, DOCX, ODT, RTF). Mehrsprachig, Tag-System mit Tree-Picker, anonymes Search-Analytics-Tracking, Tippfehler-Toleranz, ACL-aware.",
     "type": "contao-bundle",
     "license": "LGPL-3.0-or-later",

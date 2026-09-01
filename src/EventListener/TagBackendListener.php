@@ -54,6 +54,26 @@ final class TagBackendListener
             return '';
         }
 
+        // Schutz: Wenn der Tag noch keinen Slug hat (= Save vom Edit-Form
+        // ist noch nicht durchgelaufen, label fehlt oder save_callback hat
+        // gecrasht), darf der Picker nicht aktiv sein — sonst kommt beim
+        // Klick auf „Auswahl zuweisen" ein 404 tag_not_found.
+        try {
+            $tagRow = $this->db->fetchAssociative(
+                'SELECT slug, label FROM tl_venne_search_tag WHERE id = ?',
+                [$tagId],
+            );
+        } catch (\Throwable) {
+            $tagRow = false;
+        }
+        $slug = \is_array($tagRow) ? trim((string) ($tagRow['slug'] ?? '')) : '';
+        $label = \is_array($tagRow) ? trim((string) ($tagRow['label'] ?? '')) : '';
+        if ($slug === '' || $label === '') {
+            return '<div style="margin:14px 18px;padding:14px 18px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;color:#92400e;">'
+                . '<strong>Tag noch nicht vollstaendig.</strong> Bitte oben eine <em>Bezeichnung</em> eintragen und einmal <em>Speichern</em> klicken — danach kann der Tag Seiten und Dateien zugewiesen werden.'
+                . '</div>';
+        }
+
         $targets = $this->tags->targetsForTag($tagId);
         // Auch bei leerer Liste: weiter, damit der Picker gerendert wird.
 
@@ -461,6 +481,7 @@ HTML;
         // Contao 4.13/5.x: Backend-Links brauchen den Request-Token (rt-Parameter),
         // sonst bringt Contao eine "Ungültiges Token"-Bestätigungsseite.
         $manageUrl = $this->buildBackendUrl('do=venne_search&table=tl_venne_search_tag');
+        $synonymUrl = $this->buildBackendUrl('do=venne_search&table=tl_venne_search_synonym');
 
         return <<<HTML
 <div style="margin:14px 18px;padding:18px 22px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">
@@ -471,7 +492,10 @@ HTML;
                 Auf "+" klicken, um eine einzelne Seite zu taggen. Mehrere Seiten? Häkchen setzen → unten auswählen, was sie alle bekommen.
             </div>
         </div>
-        <a href="{$manageUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
+            <a href="{$manageUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Tags verwalten</a>
+            <a href="{$synonymUrl}" class="tl_submit" style="padding:6px 12px;text-decoration:none;display:inline-block;">Synonyme verwalten</a>
+        </div>
     </div>
     <div id="vsearch-tag-tree" style="background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:8px 12px;max-height:600px;overflow-y:auto;">
         {$treeHtml}

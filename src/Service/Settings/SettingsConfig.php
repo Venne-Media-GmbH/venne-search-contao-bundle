@@ -67,6 +67,21 @@ final class SettingsConfig
         public readonly array $fileLocaleOverrides = [],
         /** Master-Toggle für Search-Analytics (Buffer + Flush). */
         public readonly bool $analyticsEnabled = true,
+        /**
+         * v2.1.0: Wenn false, werden Seiten mit gesetztem tl_page.hide
+         * („Im Menü nicht anzeigen") aus der Suche ausgeschlossen.
+         * Default true = bisheriges Verhalten der Bundle-Versionen vor 2.1.
+         * Re-Index erforderlich nach Änderung.
+         */
+        public readonly bool $indexHiddenPages = true,
+        /**
+         * v2.2.0: Wenn true, generiert der Indexer pro PDF ein JPG-Thumbnail
+         * der ersten Seite und schreibt die URL als cover_url ins Document.
+         * Voraussetzung: Ghostscript (`gs`) oder PHP-Imagick auf dem Server.
+         * Default false weil Generation pro PDF 100-500ms kostet — User
+         * soll bewusst aktivieren.
+         */
+        public readonly bool $generatePdfThumbnails = false,
     ) {
     }
 }

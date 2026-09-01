@@ -15,6 +15,8 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['security_legend'] = 'Sicherheit
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['status_legend'] = 'Status';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['documents_legend'] = 'Indexierte Daten';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['analytics_legend'] = 'Suchanfragen-Analytics';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['crawler_legend'] = 'Externer Crawler';
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['crawler_panel'] = ['Externer Crawler', 'Crawlt dynamische Detail-Seiten (z.B. ?meldung=…) die nicht im Contao-Seitenbaum stehen.'];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['tags_legend'] = 'Tags & Schlagwörter';
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'] = ['Index aktualisieren', 'Erst Vorschau (was ist neu vs. schon im Index?), dann live indexieren.'];
 
@@ -50,6 +52,14 @@ $GLOBALS['TL_LANG']['tl_venne_search_settings']['index_pdfs'] = [
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['auto_indexing'] = [
     'Automatisch indexieren',
     'Reindex bei jedem Save und nach Datei-Upload/-Löschen.',
+];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['index_hidden_pages'] = [
+    'Versteckte Seiten indexieren',
+    'Seiten mit gesetztem „Im Menü nicht anzeigen"-Status werden in die Suche aufgenommen. Deaktivieren, um sie aus der Suche auszuschließen. Geschützte Inhaltselemente werden weiterhin nicht durchsucht (Contao-Standard). Reindex erforderlich nach Änderung.',
+];
+$GLOBALS['TL_LANG']['tl_venne_search_settings']['generate_pdf_thumbnails'] = [
+    'PDF-Vorschaubilder',
+    'Generiert pro PDF ein Thumbnail der ersten Seite und zeigt es in den Suchergebnissen als Cover. Benötigt <code>ghostscript</code> oder PHP-<code>imagick</code> auf dem Server. Indexierung dauert pro PDF 100-500 ms länger. Reindex erforderlich nach Aktivierung.',
 ];
 $GLOBALS['TL_LANG']['tl_venne_search_settings']['search_strictness'] = [
     'Suchstärke',

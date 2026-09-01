@@ -9,8 +9,15 @@ use Meilisearch\Client;
 use Meilisearch\Contracts\DocumentsQuery;
 use Symfony\Component\HttpKernel\KernelInterface;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
+use VenneMedia\VenneSearchContaoBundle\Service\Page\PageSearchabilityResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
+
+/**
+ * Callback-Typ: (string $stage, array $context) → void
+ * Damit kann der ReindexPlanController Progress-Updates in sein eigenes Log
+ * mitschneiden, ohne dass ReindexCatalog selbst Filesystem-IO macht.
+ */
 
 /**
  * Baut die komplette Reindex-Vorschau in einem einzigen Aufruf.
@@ -40,6 +47,9 @@ final class ReindexCatalog
         private readonly KernelInterface $kernel,
         private readonly PermissionResolver $permissions,
         private readonly FileLocaleDetector $localeDetector,
+        // v2.2.0: optional, Container-resistent (alter Cache ohne den Service
+        // → Plan läuft trotzdem, nur ohne Hierarchie-Vererbung).
+        private readonly ?PageSearchabilityResolver $searchability = null,
     ) {
     }
 
@@ -50,8 +60,15 @@ final class ReindexCatalog
      *   orphans: list<string>
      * }
      */
-    public function buildPlan(SettingsConfig $config): array
+    /**
+     * @param SettingsConfig $config
+     * @param callable|null  $progress Optional: (string $stage, array $ctx) => void
+     */
+    public function buildPlan(SettingsConfig $config, ?callable $progress = null): array
     {
+        $log = $progress ?? static function (): void {};
+        $log('plan_start', ['memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
         $locale = $config->enabledLocales[0] ?? 'de';
         $mode = $config->indexMode;
 
@@ -60,22 +77,28 @@ final class ReindexCatalog
         // Das respektiert die SEO-Konfiguration der Site-Betreiber.
         // noSearch existiert nur in Contao 4 — in 5.x weggefallen, daher
         // versuchen wir es per try/catch.
+        // v2.1.0: hide-Filter wenn Setting deaktiviert ist. Wir lesen das
+        // hide-Feld immer mit (Contao 4 + 5 haben es), filtern aber nur bei
+        // Bedarf — sonst bleibt das bisherige Verhalten erhalten.
+        $hideClause = $config->indexHiddenPages ? '' : " AND (hide IS NULL OR hide = '' OR hide = '0')";
         try {
             $pageRows = $this->db->fetchAllAssociative(
-                "SELECT id, alias, title FROM tl_page
+                "SELECT id, alias, title, hide FROM tl_page
                 WHERE type IN ('regular', 'forward', 'redirect')
                   AND published = '1'
                   AND (robots = '' OR robots IS NULL OR robots NOT LIKE '%noindex%')
-                  AND (noSearch IS NULL OR noSearch = '' OR noSearch = '0')
+                  AND (noSearch IS NULL OR noSearch = '' OR noSearch = '0')"
+                . $hideClause . "
                 ORDER BY id ASC"
             );
         } catch (\Throwable) {
             // Contao 5.x: noSearch-Spalte gibt's nicht mehr → ohne diesen Filter
             $pageRows = $this->db->fetchAllAssociative(
-                "SELECT id, alias, title FROM tl_page
+                "SELECT id, alias, title, hide FROM tl_page
                 WHERE type IN ('regular', 'forward', 'redirect')
                   AND published = '1'
-                  AND (robots = '' OR robots IS NULL OR robots NOT LIKE '%noindex%')
+                  AND (robots = '' OR robots IS NULL OR robots NOT LIKE '%noindex%')"
+                . $hideClause . "
                 ORDER BY id ASC"
             );
         }
@@ -83,6 +106,8 @@ final class ReindexCatalog
         // pro Pfad enthalten. Wir nehmen pro Pfad die Row mit der niedrigsten
         // id — funktioniert auf allen MySQL/MariaDB-Versionen, ohne ANY_VALUE
         // (das gibt es erst in MySQL 5.7+ / MariaDB 10.5+).
+        $log('pages_loaded', ['count' => \count($pageRows), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
         $fileRows = $this->db->fetchAllAssociative(
             "SELECT f.id, f.uuid, f.path, f.extension
              FROM tl_files f
@@ -94,6 +119,7 @@ final class ReindexCatalog
              ) AS unique_files ON unique_files.min_id = f.id
              ORDER BY f.path ASC"
         );
+        $log('files_loaded', ['count' => \count($fileRows), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
 
         $projectDir = rtrim($this->kernel->getProjectDir(), '/');
 
@@ -107,14 +133,34 @@ final class ReindexCatalog
         $siteItemIds = [];
 
         $indexUid = $config->indexPrefix . '_' . $locale;
+        $log('indexed_ids_start', ['indexUid' => $indexUid]);
         $indexedIds = $this->loadIndexedIds($indexUid);
+        $log('indexed_ids_loaded', ['count' => \count($indexedIds), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
 
         // ===== PAGES =====
         // Page-Locale lookup: tl_page.language gilt nur auf Root-Pages, deshalb
         // wandern wir bei Bedarf nach oben zur Root und nehmen deren Sprache.
         $pageLocaleCache = [];
+        $log('pages_loop_start', []);
+        $pageIdx = 0;
+        $inheritedSkipped = 0;
         foreach ($pageRows as $row) {
+            if (++$pageIdx % 500 === 0) {
+                $log('pages_loop_progress', ['done' => $pageIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+            }
             $pageId = (int) $row['id'];
+
+            // v2.2.0: Hierarchie-Vererbung. Die SQL-Where oben kennt nur die
+            // Flags der Seite selbst — Unterseiten eines noSearch-Zweigs oder
+            // einer unveröffentlichten Root landeten bisher im Index (FFA:
+            // „Richtlinien" aus dem „(ALT)"-Baum). Solche Pages behandeln wir
+            // exakt wie eigenes noSearch=1: gar nicht als Site-Item führen →
+            // falls noch im Index, werden sie als Orphan erkannt und beim
+            // Finalize entfernt.
+            if ($this->searchability !== null && $this->searchability->excludedReason($pageId) !== null) {
+                ++$inheritedSkipped;
+                continue;
+            }
             $alias = (string) ($row['alias'] ?? '');
             $title = (string) ($row['title'] ?? '');
             $label = $title !== '' ? $title : ($alias !== '' ? '/' . $alias : 'Seite #' . $pageId);
@@ -153,7 +199,35 @@ final class ReindexCatalog
             $fileRows = [];
         }
 
+        $log('pages_loop_done', ['count' => $pageIdx, 'inheritedSkipped' => $inheritedSkipped, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
+        // BULK-WARMUP: Page-Embedding-Locales für ALLE Files in einem Rutsch
+        // berechnen. Spart bei großen Sites tausende Einzel-Queries (pro File
+        // lief vorher 1 tl_files-Lookup + 1 singleSRC-Query + 1 multiSRC-LIKE).
+        $allPaths = [];
         foreach ($fileRows as $row) {
+            $ext = strtolower((string) ($row['extension'] ?? ''));
+            if (\in_array($ext, self::INDEXABLE_FILE_EXTENSIONS, true)) {
+                $allPaths[] = (string) $row['path'];
+            }
+        }
+        $this->localeDetector->warmupEmbeddingLocales($allPaths, $config);
+        $log('files_warmup_done', ['files' => \count($allPaths), 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
+        $log('files_loop_start', ['total' => \count($fileRows)]);
+        $fileIdx = 0;
+        $filesLoopStart = microtime(true);
+        foreach ($fileRows as $row) {
+            if (++$fileIdx % 100 === 0) {
+                $log('files_loop_progress', [
+                    'done' => $fileIdx,
+                    'total' => \count($fileRows),
+                    'elapsedMs' => (int) ((microtime(true) - $filesLoopStart) * 1000),
+                    'memMb' => (int) (memory_get_usage(true) / 1024 / 1024),
+                ]);
+                // Time-Limit immer wieder verlängern damit FPM nicht killt
+                @set_time_limit(120);
+            }
             $ext = strtolower((string) ($row['extension'] ?? ''));
             if (!\in_array($ext, self::INDEXABLE_FILE_EXTENSIONS, true)) {
                 continue;
@@ -165,16 +239,30 @@ final class ReindexCatalog
                 : 'file-path-' . md5($relativePath);
             $siteItemIds[$docId] = true;
 
-            $absolute = $projectDir . '/' . ltrim($relativePath, '/');
-            $bytes = @filesize($absolute);
-            $sizeKb = $bytes === false ? 0 : (int) round($bytes / 1024);
-
-            // public_only-Modus: ACL-Lookup skippen (spart pro File einen
-            // LIKE-Scan auf tl_content). Im with_protected-Modus brauchen
-            // wir die Member-Groups für die Such-Filterung.
-            $skipAcl = $config->indexMode === SettingsConfig::MODE_PUBLIC_ONLY;
-            $perm = $this->permissions->resolveFilePermissions($relativePath, $skipAcl);
-            $decision = $this->decidePermission('file', $relativePath, $perm['isProtected'], $config);
+            // PLAN-FAST-PATH: bei public_only komplett alle teuren Lookups
+            // überspringen. Die Plan-Vorschau zeigt eh nur "public" an, und
+            // der echte Indexer macht Permission-Resolve sowieso pro File
+            // noch mal selbst. Bei großen Sites (>2000 Files) ist das der
+            // einzige Weg, dass die Vorschau in <30s antwortet.
+            $isPublicOnlyMode = $config->indexMode === SettingsConfig::MODE_PUBLIC_ONLY;
+            if ($isPublicOnlyMode) {
+                $sizeKb = 0;
+                $perm = ['isProtected' => false, 'allowedGroups' => []];
+                // WICHTIG: Key heißt 'include' (Bool), NICHT 'decision' —
+                // buildItemEntry() prüft genau das. Falscher Key = 2234 Files
+                // landen fälschlich in der "excluded"-Spalte.
+                $decision = ['include' => true, 'reason' => null];
+            } else {
+                if (\count($fileRows) > 2000) {
+                    $sizeKb = 0;
+                } else {
+                    $absolute = $projectDir . '/' . ltrim($relativePath, '/');
+                    $bytes = @filesize($absolute);
+                    $sizeKb = $bytes === false ? 0 : (int) round($bytes / 1024);
+                }
+                $perm = $this->permissions->resolveFilePermissions($relativePath, false);
+                $decision = $this->decidePermission('file', $relativePath, $perm['isProtected'], $config);
+            }
 
             $detectedLocale = $this->localeDetector->detect($relativePath, $config);
 
@@ -196,12 +284,20 @@ final class ReindexCatalog
             );
         }
 
+        $log('files_loop_done', ['count' => $fileIdx, 'memMb' => (int) (memory_get_usage(true) / 1024 / 1024)]);
+
         $orphans = [];
         foreach ($indexedIds as $indexedId => $_) {
             if (!isset($siteItemIds[$indexedId])) {
                 $orphans[] = $indexedId;
             }
         }
+
+        $log('plan_done', [
+            'items' => \count($items), 'orphans' => \count($orphans),
+            'new' => $newCount, 'existing' => $existingCount, 'excluded' => $excludedCount,
+            'memMb' => (int) (memory_get_usage(true) / 1024 / 1024),
+        ]);
 
         return [
             'stats' => [

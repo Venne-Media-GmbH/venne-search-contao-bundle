@@ -113,6 +113,15 @@ final class SettingsRepository
         );
         $analyticsEnabled = (string) ($row['analytics_enabled'] ?? '1') === '1';
 
+        // v2.1.0: Versteckte Seiten (tl_page.hide = '1') in den Index aufnehmen
+        // oder ausschließen. Default '1' = bisheriges Verhalten — versteckte
+        // Seiten sind drin. User stellt im Backend um, wenn er sie ausschließen will.
+        $indexHiddenPages = (string) ($row['index_hidden_pages'] ?? '1') === '1';
+
+        // v2.2.0: PDF-Thumbnails generieren? Default '0' (aus), weil Ghostscript-
+        // Aufrufe pro PDF 100-500ms kosten — User soll bewusst einschalten.
+        $generatePdfThumbnails = (string) ($row['generate_pdf_thumbnails'] ?? '0') === '1';
+
         // Default-Blacklist: wenn der User noch nichts ausgewählt hat,
         // schützen wir konventionell die typischen Admin-Verzeichnisse.
         if ($excludedPaths === []) {
@@ -139,6 +148,8 @@ final class SettingsRepository
                 defaultFileLocale: $defaultFileLocale,
                 fileLocaleOverrides: $fileLocaleOverrides,
                 analyticsEnabled: $analyticsEnabled,
+                indexHiddenPages: $indexHiddenPages,
+                generatePdfThumbnails: $generatePdfThumbnails,
             );
         }
 
@@ -161,6 +172,8 @@ final class SettingsRepository
             defaultFileLocale: $defaultFileLocale,
             fileLocaleOverrides: $fileLocaleOverrides,
             analyticsEnabled: $analyticsEnabled,
+            indexHiddenPages: $indexHiddenPages,
+            generatePdfThumbnails: $generatePdfThumbnails,
         );
     }
 

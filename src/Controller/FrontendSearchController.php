@@ -46,6 +46,64 @@ final class FrontendSearchController extends AbstractController
         // (Browse-by-Tag-Modus: User klickt eine Tag-Pill, sieht alle Treffer).
         $hasTagFilter = \is_array($request->query->all('tags') ?? null)
             && \count($request->query->all('tags')) > 0;
+        $locale = preg_replace('/[^a-z]/', '', (string) $request->query->get('locale', 'de')) ?: 'de';
+        $limit = (int) $request->query->get('limit', 20);
+        $offset = (int) $request->query->get('offset', 0);
+
+        // Facets-Only-Modus: leere Query + limit=0 ist ein expliziter Call vom
+        // Frontend, um die Tag-Cloud im Initial-Modal („Was suchst du?") zu füllen.
+        // Wir liefern hier alle im Backend angelegten Tags zurück (auch ohne
+        // explizite Assignments, weil Auto-Match-Tags zur Laufzeit erst über
+        // URL-Patterns vergeben werden und nicht in tl_venne_search_tag_assignment
+        // landen). Counts berechnen wir best-effort via Meilisearch-facetDistribution
+        // mit einem Wildcard-Search; klappt das nicht (Permission/Empty-Index),
+        // fallen wir auf 0 zurück.
+        $facetsOnly = $query === '' && !$hasTagFilter && $limit === 0;
+        if ($facetsOnly) {
+            $allTags = $tags->findAll();
+            $tagCounts = [];
+            try {
+                $facetResult = $service->search(
+                    query: '',
+                    locale: $locale,
+                    filters: [],
+                    limit: 1,
+                    offset: 0,
+                    userGroups: $this->resolveCurrentUserGroups(),
+                    locales: [],
+                    sort: SearchService::SORT_RELEVANCE,
+                );
+                $rawTagFacet = (array) ($facetResult->facets['tags'] ?? []);
+                foreach ($rawTagFacet as $token => $count) {
+                    $tagCounts[(string) $token] = (int) $count;
+                }
+            } catch (\Throwable) {
+                // Index leer, Auth-Issue etc. — wir liefern Tags trotzdem mit Count 0.
+            }
+            $tagFacetList = [];
+            foreach ($allTags as $t) {
+                $count = $tagCounts[$t['slug']] ?? $tagCounts[mb_strtolower($t['label'])] ?? 0;
+                $tagFacetList[] = [
+                    'slug' => $t['slug'],
+                    'label' => TagRepository::translateLabel($t, $locale),
+                    'color' => $t['color'],
+                    'boost' => $t['boost'],
+                    'count' => $count,
+                ];
+            }
+            usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
+
+            $facetsResp = new JsonResponse([
+                'hits' => [],
+                'totalHits' => 0,
+                'queryTimeMs' => 0,
+                'facets' => [],
+                'tagFacets' => $tagFacetList,
+            ]);
+            $facetsResp->setPrivate();
+            $facetsResp->setMaxAge(60);
+            return $facetsResp;
+        }
         if ($query === '' && !$hasTagFilter) {
             return new JsonResponse([
                 'hits' => [],
@@ -54,10 +112,6 @@ final class FrontendSearchController extends AbstractController
                 'message' => 'Kein Suchbegriff angegeben.',
             ]);
         }
-
-        $locale = preg_replace('/[^a-z]/', '', (string) $request->query->get('locale', 'de')) ?: 'de';
-        $limit = (int) $request->query->get('limit', 20);
-        $offset = (int) $request->query->get('offset', 0);
 
         // v2.0.0: optionales Multi-Locale via ?locales[]=de&locales[]=en
         $localesParam = $request->query->all('locales');
@@ -74,15 +128,35 @@ final class FrontendSearchController extends AbstractController
         $filters = [];
         $type = (string) $request->query->get('type', '');
         if ($type !== '') {
-            $filters['type'] = $type;
+            // "Seiten" deckt jetzt page UND crawled ab — gecrawlte externe
+            // Treffer sind aus User-Sicht ebenfalls Seiten, nicht ein eigener
+            // Typ. Daher beim Page-Filter beide doctypes via IN-Liste durchlassen.
+            $filters['type'] = ($type === 'page' || $type === 'crawled')
+                ? ['page', 'crawled']
+                : $type;
         }
         // v2.0.0: ?tags[]=spongebob&tags[]=krabbenburger
+        // Tags trennen wir auf in zwei Klassen:
+        //   - „echte" Tags (im Index als tags[] vorhanden) → harter Meili-Filter
+        //   - Auto-Match-Tags (URL-Pattern, im Index NICHT taggable) → werden
+        //     hier ausgeklammert und unten via globMatch nach-gefiltert.
         $tagsParam = $request->query->all('tags');
+        $autoMatchTagsAll = $tags->findAutoMatchTags();
+        $autoMatchBySlug = [];
+        foreach ($autoMatchTagsAll as $am) {
+            $autoMatchBySlug[$am['slug']] = $am;
+        }
+        $autoMatchFilterTags = [];
         if (\is_array($tagsParam)) {
             $cleanTags = [];
             foreach ($tagsParam as $t) {
                 $clean = preg_replace('/[^a-z0-9-]/', '', (string) $t) ?? '';
-                if ($clean !== '' && \strlen($clean) <= 64) {
+                if ($clean === '' || \strlen($clean) > 64) {
+                    continue;
+                }
+                if (isset($autoMatchBySlug[$clean])) {
+                    $autoMatchFilterTags[] = $autoMatchBySlug[$clean];
+                } else {
                     $cleanTags[] = $clean;
                 }
             }
@@ -91,17 +165,87 @@ final class FrontendSearchController extends AbstractController
             }
         }
 
+        // v2.1.0: ?ext[]=pdf&ext[]=xlsx — Datei-Extension-Filter. Im Index
+        // werden Extensions als Tag mitgeschrieben (siehe IndexableItemProcessor),
+        // also lassen sich beide Filter über die `tags`-Filterable kombinieren:
+        // tags IN ["a"] AND tags IN ["pdf","xlsx"]. Meilisearch kann das, wir
+        // schreiben es deshalb als zweites Filter-Set ('tags_ext').
+        $extParam = $request->query->all('ext');
+        if (\is_array($extParam)) {
+            $cleanExts = [];
+            foreach ($extParam as $e) {
+                $clean = preg_replace('/[^a-z0-9]/', '', strtolower((string) $e)) ?? '';
+                if ($clean !== '' && \strlen($clean) <= 8) {
+                    $cleanExts[] = $clean;
+                }
+            }
+            if ($cleanExts !== []) {
+                // Wir nutzen einen logischen Filter-Schlüssel; das Mapping auf
+                // den echten Filterable-Namen passiert im SearchService.
+                $filters['file_ext'] = $cleanExts;
+            }
+        }
+
+        // v2.1.0: Sort-Mode (relevance / date_desc / date_asc)
+        $sort = (string) $request->query->get('sort', SearchService::SORT_RELEVANCE);
+
         $userGroups = $this->resolveCurrentUserGroups();
+
+        // Auto-Match-Tag-Filter: wir holen den Pool gezielt per Volltext-Suche
+        // mit den signifikanten Pattern-Termen (zwischen den * in Glob-Patterns),
+        // sonst landen einzelne Detail-URLs nicht in den Top-N einer leeren
+        // Wildcard-Suche. Beispiel Pattern „*pressemitteilungen-detailseite*"
+        // → Suchterm „pressemitteilungen-detailseite" → trifft alle Docs mit
+        //   diesem URL-Fragment. Anschliessend in PHP per globMatch nachfiltern.
+        $effectiveQuery = $query;
+        $serviceLimit = $limit;
+        $serviceOffset = $offset;
+        if ($autoMatchFilterTags !== []) {
+            $serviceLimit = 1000;
+            $serviceOffset = 0;
+            if ($query === '') {
+                $effectiveQuery = self::buildPatternQuery($autoMatchFilterTags, $locale);
+            }
+        }
+
+        // Bei aktivem Type-Filter sind die Type-Facet-Counts der Hauptquery
+        // verzerrt (Meili liefert nur den aktiven Typ, dedupe/post-filter
+        // schreiben das spaeter nochmal). Wir holen die ECHTEN Counts vorher
+        // in einer leichten Parallel-Query OHNE Type-Filter und mergen das
+        // Ergebnis ganz am Ende vor JSON-Response.
+        $unfilteredTypeCounts = null;
+        if (isset($filters['type'])) {
+            $filtersForFacets = $filters;
+            unset($filtersForFacets['type']);
+            try {
+                $facetResult = $service->search(
+                    query: $effectiveQuery,
+                    locale: $locale,
+                    filters: $filtersForFacets,
+                    limit: 1,
+                    offset: 0,
+                    userGroups: $userGroups,
+                    locales: $locales,
+                    sort: $sort,
+                );
+                if (isset($facetResult->facets['type']) && \is_array($facetResult->facets['type'])) {
+                    $unfilteredTypeCounts = $facetResult->facets['type'];
+                }
+            } catch (\Throwable) {
+                // Facet-Query darf die Haupt-Suche nicht killen.
+            }
+        }
 
         try {
             $result = $service->search(
-                query: $query,
+                query: $effectiveQuery,
                 locale: $locale,
                 filters: $filters,
-                limit: $limit,
-                offset: $offset,
+                limit: $serviceLimit,
+                offset: $serviceOffset,
                 userGroups: $userGroups,
                 locales: $locales,
+                sort: $sort,
             );
         } catch (ResolveAuthException) {
             return $this->errorResponse(401, 'unauthorized', 'Suche aktuell nicht verfügbar — der Site-Betreiber muss den Plattform-Schlüssel prüfen.');
@@ -117,6 +261,82 @@ final class FrontendSearchController extends AbstractController
             // Letzter Fallback für Meilisearch- oder unerwartete Fehler.
             return $this->errorResponse(500, 'search_failed', 'Unerwarteter Fehler bei der Suche.');
         }
+
+        // Auto-Match-Tag-Post-Filter: Treffer behalten, deren URL gegen MINDESTENS
+        // ein Pattern eines angefragten Auto-Match-Tags matched (logisches AND
+        // ueber alle angefragten Auto-Match-Tags, OR ueber Patterns innerhalb).
+        if ($autoMatchFilterTags !== []) {
+            $matchAuto = static function (string $url) use ($autoMatchFilterTags, $locale): bool {
+                foreach ($autoMatchFilterTags as $am) {
+                    $oneMatched = false;
+                    foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
+                        if (self::globMatch($pattern, $url)) {
+                            $oneMatched = true;
+                            break;
+                        }
+                    }
+                    if (!$oneMatched) {
+                        return false;
+                    }
+                }
+                return true;
+            };
+            $filtered = [];
+            foreach ($result->hits as $h) {
+                if ($matchAuto((string) $h->url)) {
+                    $filtered[] = $h;
+                }
+            }
+            // Nach Sort-Mode sortieren — Meilisearch hat den Pool zwar mit dem
+            // angefragten Sort geholt, aber durch die Volltext-Pattern-Query
+            // sind Hits mit hohem Score nach oben gewandert. Wir muessen den
+            // Sort nach dem Post-Filter selbst nochmal anwenden.
+            if ($sort === SearchService::SORT_DATE_DESC) {
+                usort($filtered, static fn ($a, $b): int => $b->publishedAt <=> $a->publishedAt);
+            } elseif ($sort === SearchService::SORT_DATE_ASC) {
+                usort($filtered, static function ($a, $b): int {
+                    if ($a->publishedAt === 0 && $b->publishedAt === 0) return 0;
+                    if ($a->publishedAt === 0) return 1;
+                    if ($b->publishedAt === 0) return -1;
+                    return $a->publishedAt <=> $b->publishedAt;
+                });
+            } elseif ($sort === SearchService::SORT_TYPE_ASC) {
+                usort($filtered, static function ($a, $b): int {
+                    $cmp = strcmp($a->contentType, $b->contentType);
+                    if ($cmp !== 0) return $cmp;
+                    return SearchService::compareRelevance($a, $b);
+                });
+            }
+            // Type-Facet-Counts aus dem post-gefilterten Pool neu berechnen,
+            // sonst zeigt die Sidebar inkonsistente Counts an (z.B. "Dateien (10)"
+            // weil Meilisearch 10 Volltext-Dateien gefunden hat, aber unser
+            // URL-Glob-Filter keine davon akzeptiert).
+            $typeCounts = [];
+            foreach ($filtered as $h) {
+                $t = (string) $h->type;
+                $typeCounts[$t] = ($typeCounts[$t] ?? 0) + 1;
+            }
+            $newFacets = $result->facets;
+            $newFacets['type'] = $typeCounts;
+
+            $totalAfter = \count($filtered);
+            $paged = \array_slice($filtered, $offset, $limit);
+            $result = new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
+                hits: $paged,
+                totalHits: $totalAfter,
+                offset: $offset,
+                limit: $limit,
+                facets: $newFacets,
+                queryTimeMs: $result->queryTimeMs,
+            );
+        }
+
+        // URL-Deduplizierung: derselbe Inhalt kann doppelt im Index liegen
+        // (z.B. als Contao-Page UND als crawled-Hit von der gleichen URL).
+        // Wir behalten pro normalisierter URL nur den qualitativ besten Hit.
+        // Prioritaet: page/file/article > crawled (interne Daten gewinnen,
+        // weil sie strukturiert sind und korrekte Permissions/Tags haben).
+        $result = self::dedupeByUrl($result);
 
         // v2.0.0: Anonymes Analytics-Tracking. Niemals den Such-Pfad blockieren.
         try {
@@ -157,6 +377,7 @@ final class FrontendSearchController extends AbstractController
                         'slug' => (string) $token,
                         'label' => (string) $token,
                         'color' => 'gray',
+                        'boost' => 1.0,
                         'count' => $count,
                     ];
                 }
@@ -166,19 +387,52 @@ final class FrontendSearchController extends AbstractController
             if (!isset($tagFacetByTag[$key]) || $tagFacetByTag[$key]['count'] < $count) {
                 $tagFacetByTag[$key] = [
                     'slug' => $tag['slug'],
-                    'label' => $tag['label'],
+                    'label' => TagRepository::translateLabel($tag, $locale),
                     'color' => $tag['color'],
+                    'boost' => (float) ($tag['boost'] ?? 1.0),
                     'count' => $count,
                 ];
             }
         }
+        // Auto-Match-Tags: pro Tag URL-Glob-Patterns. Jeder Hit der
+        // matcht, kriegt den Tag dazu — ohne Indexer-Eingriff.
+        $autoMatchTags = $tags->findAutoMatchTags();
+        // Counts für Auto-Tags zur Facet-Liste hinzufügen (nur wenn min. 1 Hit matcht).
+        $autoMatchHitCounts = [];
+        foreach ($result->hits as $h) {
+            foreach ($autoMatchTags as $am) {
+                foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
+                    if (self::globMatch($pattern, (string) $h->url)) {
+                        $autoMatchHitCounts[$am['slug']] = ($autoMatchHitCounts[$am['slug']] ?? 0) + 1;
+                        break 2;
+                    }
+                }
+            }
+        }
+        foreach ($autoMatchTags as $am) {
+            $count = $autoMatchHitCounts[$am['slug']] ?? 0;
+            if ($count === 0) {
+                continue;
+            }
+            $existing = $tagFacetByTag[$am['slug']] ?? null;
+            if ($existing === null || $existing['count'] < $count) {
+                $tagFacetByTag[$am['slug']] = [
+                    'slug' => $am['slug'],
+                    'label' => TagRepository::translateLabel($am, $locale),
+                    'color' => $am['color'],
+                    'boost' => $am['boost'],
+                    'count' => $count,
+                ];
+            }
+        }
+
         // Sortiert: häufigste Tags zuerst.
         $tagFacetList = array_values($tagFacetByTag);
         usort($tagFacetList, static fn (array $a, array $b): int => $b['count'] <=> $a['count']);
 
         $response = new JsonResponse([
             'hits' => array_map(
-                static function ($h) use ($bySlug, $byLabelLower, $extensions): array {
+                static function ($h) use ($bySlug, $byLabelLower, $extensions, $autoMatchTags, $locale): array {
                     $resolvedById = [];
                     foreach ($h->tags as $raw) {
                         if ($raw === '' || \in_array(strtolower($raw), $extensions, true)) {
@@ -186,13 +440,25 @@ final class FrontendSearchController extends AbstractController
                         }
                         // Treffer per Slug?
                         if (isset($bySlug[$raw])) {
-                            $resolvedById[$bySlug[$raw]['slug']] = $bySlug[$raw];
+                            $t = $bySlug[$raw];
+                            $resolvedById[$t['slug']] = [
+                                'slug' => $t['slug'],
+                                'label' => TagRepository::translateLabel($t, $locale),
+                                'color' => $t['color'],
+                                'boost' => $t['boost'] ?? 1.0,
+                            ];
                             continue;
                         }
                         // Treffer per Label?
                         $low = mb_strtolower($raw);
                         if (isset($byLabelLower[$low])) {
-                            $resolvedById[$byLabelLower[$low]['slug']] = $byLabelLower[$low];
+                            $t = $byLabelLower[$low];
+                            $resolvedById[$t['slug']] = [
+                                'slug' => $t['slug'],
+                                'label' => TagRepository::translateLabel($t, $locale),
+                                'color' => $t['color'],
+                                'boost' => $t['boost'] ?? 1.0,
+                            ];
                             continue;
                         }
                         // Unbekannter Tag (Legacy aus tl_page.keywords ODER Tag aus
@@ -200,7 +466,21 @@ final class FrontendSearchController extends AbstractController
                         // grauer Chip, Slug ist die normalisierte Form.
                         $rawSlug = preg_replace('/[^a-z0-9]+/', '-', $low) ?? $low;
                         $rawSlug = trim((string) $rawSlug, '-');
-                        $resolvedById['raw:' . $low] = ['slug' => $rawSlug !== '' ? $rawSlug : $raw, 'label' => $raw, 'color' => 'gray'];
+                        $resolvedById['raw:' . $low] = ['slug' => $rawSlug !== '' ? $rawSlug : $raw, 'label' => $raw, 'color' => 'gray', 'boost' => 1.0];
+                    }
+                    // Auto-Match-Tags: URL gegen Patterns prüfen, passende dazu.
+                    foreach ($autoMatchTags as $am) {
+                        foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
+                            if (self::globMatch($pattern, (string) $h->url)) {
+                                $resolvedById[$am['slug']] = [
+                                    'slug' => $am['slug'],
+                                    'label' => TagRepository::translateLabel($am, $locale),
+                                    'color' => $am['color'],
+                                    'boost' => $am['boost'],
+                                ];
+                                break;
+                            }
+                        }
                     }
                     return [
                         'id' => $h->id,
@@ -212,6 +492,17 @@ final class FrontendSearchController extends AbstractController
                         'tagsResolved' => array_values($resolvedById),
                         'score' => $h->score,
                         'isProtected' => $h->isProtected,
+                        'altText' => $h->altText,
+                        // v2.2.0: Cover-Bild-URL (leer = kein Cover, Frontend
+                        // rendert das generische Icon).
+                        'coverUrl' => $h->coverUrl,
+                        // v2.2.0: Sort-Key für „Nach Dokumentenart".
+                        'contentType' => $h->contentType,
+                        // v2.2.0: Unix-Timestamp, hilft Frontend bei Anzeige
+                        // einer Datumsspalte falls sortiert nach Datum.
+                        'publishedAt' => $h->publishedAt,
+                        // v2.2.0: Dateigröße in Bytes (Frontend formatiert).
+                        'fileSize' => $h->fileSize,
                     ];
                 },
                 $result->hits,
@@ -219,7 +510,12 @@ final class FrontendSearchController extends AbstractController
             'totalHits' => $result->totalHits,
             'offset' => $result->offset,
             'limit' => $result->limit,
-            'facets' => $result->facets,
+            // crawled-Counts werden in den page-Count gemerged — "Websiteinhalt"
+            // soll im Frontend nicht mehr als separater Tab erscheinen.
+            // Bei aktivem Type-Filter ersetzen wir vorher noch die verzerrten
+            // type-Counts durch die echten unfilterten Counts aus der
+            // Parallel-Facet-Query (sonst zeigt das Frontend nur den aktiven Tab).
+            'facets' => self::mergeCrawledIntoPage(self::applyUnfilteredTypeCounts($result->facets, $unfilteredTypeCounts)),
             'tagFacets' => $tagFacetList,
             'queryTimeMs' => $result->queryTimeMs,
         ]);
@@ -230,8 +526,195 @@ final class FrontendSearchController extends AbstractController
         $response->setPrivate();
         $response->setMaxAge(30);
         $response->setVary(['Cookie'], false);
-
         return $response;
+    }
+
+    /**
+     * Ersetzt die type-Facet-Counts durch die echten unfilterten Counts (aus
+     * der Parallel-Facet-Query). Wird nur aufgerufen wenn ein Type-Filter
+     * aktiv war — sonst sind die Counts aus der Haupt-Query bereits korrekt.
+     *
+     * @param array<string,mixed> $facets
+     * @param array<string,int>|null $unfilteredTypeCounts
+     * @return array<string,mixed>
+     */
+    private static function applyUnfilteredTypeCounts(array $facets, ?array $unfilteredTypeCounts): array
+    {
+        if ($unfilteredTypeCounts === null) {
+            return $facets;
+        }
+        $facets['type'] = $unfilteredTypeCounts;
+        return $facets;
+    }
+
+    /**
+     * Fasst die Facet-Counts fuer "page" und "crawled" zu einem einzigen
+     * "page"-Bucket zusammen. Im Frontend soll es keinen separaten Tab
+     * "Websiteinhalte" mehr geben — gecrawlte externe Seiten gehoeren aus
+     * User-Sicht in die Kategorie "Seiten".
+     *
+     * @param array<string,mixed> $facets
+     * @return array<string,mixed>
+     */
+    private static function mergeCrawledIntoPage(array $facets): array
+    {
+        if (!isset($facets['type']) || !\is_array($facets['type'])) {
+            return $facets;
+        }
+        $type = $facets['type'];
+        $crawled = (int) ($type['crawled'] ?? 0);
+        if ($crawled > 0) {
+            $type['page'] = (int) ($type['page'] ?? 0) + $crawled;
+        }
+        unset($type['crawled']);
+        $facets['type'] = $type;
+        return $facets;
+    }
+
+    /**
+     * URL-Deduplizierung: Wenn derselbe Inhalt mehrfach im Index liegt
+     * (z.B. als Contao-Page UND als gecrawltes Dokument von der gleichen URL),
+     * behalten wir nur die qualitativ beste Variante.
+     * Prio: page/file/article > crawled (interne Quellen gewinnen).
+     * Facet-Counts werden entsprechend neu gezaehlt.
+     */
+    private static function dedupeByUrl(\VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult $result): \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult
+    {
+        $priority = ['page' => 4, 'file' => 3, 'article' => 2, 'crawled' => 1];
+
+        // Phase 1: URL-Dedup. Prio-Loser wird verworfen, Prio-Sieger behalten.
+        $byUrl = [];
+        $dropped = 0;
+        foreach ($result->hits as $h) {
+            $key = self::normalizeUrl((string) $h->url);
+            if ($key === '') {
+                $byUrl[spl_object_hash($h)] = $h;
+                continue;
+            }
+            if (!isset($byUrl[$key])) {
+                $byUrl[$key] = $h;
+                continue;
+            }
+            $existing = $byUrl[$key];
+            if (($priority[$h->type] ?? 0) > ($priority[$existing->type] ?? 0)) {
+                $byUrl[$key] = $h;
+            }
+            $dropped++;
+        }
+
+        // Phase 2: Title-Dedup nur fuer crawled-Hits. Wenn der Crawler den
+        // gleichen <title> (typischerweise Site-Default) auf mehreren URLs
+        // gefunden hat, ist der Title fuer den User nicht unterscheidend.
+        // Behalte den ersten pro Title, verwerfe die weiteren — User sieht
+        // nicht mehr 6x „FFA - Die Filmfoerderung des Bundes" untereinander.
+        $deduped = [];
+        $crawledByTitle = [];
+        foreach ($byUrl as $h) {
+            if ($h->type !== 'crawled') {
+                $deduped[] = $h;
+                continue;
+            }
+            $title = strip_tags((string) $h->title);
+            $titleKey = mb_strtolower(trim(preg_replace('/\s+/', ' ', $title) ?? ''));
+            if ($titleKey === '') {
+                $deduped[] = $h;
+                continue;
+            }
+            if (!isset($crawledByTitle[$titleKey])) {
+                $crawledByTitle[$titleKey] = true;
+                $deduped[] = $h;
+            } else {
+                $dropped++;
+            }
+        }
+
+        if ($dropped === 0) {
+            return $result;
+        }
+
+        // Type-Facets neu zaehlen.
+        $typeCounts = [];
+        foreach ($deduped as $h) {
+            $t = (string) $h->type;
+            $typeCounts[$t] = ($typeCounts[$t] ?? 0) + 1;
+        }
+        $facets = $result->facets;
+        $facets['type'] = $typeCounts;
+        return new \VenneMedia\VenneSearchContaoBundle\Service\Search\SearchResult(
+            hits: $deduped,
+            totalHits: max(0, $result->totalHits - $dropped),
+            offset: $result->offset,
+            limit: $result->limit,
+            facets: $facets,
+            queryTimeMs: $result->queryTimeMs,
+        );
+    }
+
+    /**
+     * Normalisiert URLs fuer Dedup-Vergleich: protokoll + host weg, www. weg,
+     * trailing slash weg, query bleibt drin (`?meldung=xyz` differenziert
+     * unterschiedliche Detail-Seiten). Leere/relative URLs → leer.
+     */
+    private static function normalizeUrl(string $url): string
+    {
+        $url = trim($url);
+        if ($url === '') {
+            return '';
+        }
+        // Protokoll + Host raus
+        $url = preg_replace('#^https?://(www\.)?[^/]+#i', '', $url) ?? $url;
+        // Falls KEIN Protokoll war, evtl. fuehrendes "www.host" trotzdem entfernen.
+        $url = preg_replace('#^(www\.)?[^/]+\.[a-z]{2,}#i', '', $url) ?? $url;
+        $url = strtolower($url);
+        $url = rtrim($url, '/');
+        return $url;
+    }
+
+    /**
+     * Baut aus Auto-Match-Patterns eine Volltext-Query, mit der Meilisearch
+     * die relevanten Docs im Index aufstoebert. Pattern „*pressemitteilungen-detailseite*"
+     * wird zu Suchterm „pressemitteilungen-detailseite". Mehrere Tags / Patterns
+     * werden mit Leerzeichen zusammengefuegt — Meilisearch findet dann Docs die
+     * MINDESTENS einen der Terme enthalten (Default-Matching-Strategy „last").
+     *
+     * @param list<array{patterns:list<string>}> $autoMatchTags
+     */
+    private static function buildPatternQuery(array $autoMatchTags, string $locale = 'de'): string
+    {
+        $terms = [];
+        foreach ($autoMatchTags as $am) {
+            foreach (TagRepository::patternsForLocale($am, $locale) as $pattern) {
+                // Aufteilen an Wildcards: signifikante Token zwischen den * / ? extrahieren.
+                $parts = preg_split('/[*?]+/', $pattern) ?: [];
+                foreach ($parts as $p) {
+                    $p = trim((string) $p);
+                    // URL-Trennzeichen rauswerfen damit Meilisearch tokenisieren kann.
+                    $p = str_replace(['/', '\\', '?', '#', '&', '=', '.'], ' ', $p);
+                    $p = trim(preg_replace('/\s+/', ' ', $p) ?? '');
+                    if ($p !== '' && \strlen($p) >= 3) {
+                        $terms[] = $p;
+                    }
+                }
+            }
+        }
+        return implode(' ', array_unique($terms));
+    }
+
+    /**
+     * Glob-Match (Wildcard * = beliebig viele Zeichen, ? = ein Zeichen).
+     * Case-insensitive, ohne Regex-Magie. Genutzt für Auto-Tag-Patterns.
+     */
+    public static function globMatch(string $pattern, string $url): bool
+    {
+        if ($pattern === '' || $url === '') {
+            return false;
+        }
+        $regex = '#' . str_replace(
+            ['\\*', '\\?'],
+            ['.*', '.'],
+            preg_quote($pattern, '#'),
+        ) . '#i';
+        return (bool) @preg_match($regex, $url);
     }
 
     /**

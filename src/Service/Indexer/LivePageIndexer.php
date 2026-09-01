@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use VenneMedia\VenneSearchContaoBundle\Service\Locale\FileLocaleDetector;
+use VenneMedia\VenneSearchContaoBundle\Service\Page\PageSearchabilityResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfExtractor;
 use VenneMedia\VenneSearchContaoBundle\Service\Permission\PermissionResolver;
 use VenneMedia\VenneSearchContaoBundle\Service\Settings\SettingsConfig;
@@ -33,6 +34,9 @@ final class LivePageIndexer
         private readonly FileLocaleDetector $localeDetector,
         private readonly TagRepository $tags,
         private readonly LoggerInterface $logger = new NullLogger(),
+        // v2.2.0: noSearch-Vererbung. Optional, damit ein alter Container-
+        // Cache ohne den Service den Live-Indexer nicht killt.
+        private readonly ?PageSearchabilityResolver $searchability = null,
     ) {
     }
 
@@ -57,11 +61,25 @@ final class LivePageIndexer
             return;
         }
 
+        // v2.2.0: Root-Pages werden selbst nie indexiert, ihre Flags gelten
+        // aber für den ganzen Baum: Root unveröffentlicht (Contao:
+        // !rootIsPublic → 404 für alle Unterseiten) oder Root noSearch=1 →
+        // alle Nachfahren aus dem Index. Damit räumt z.B.
+        // `venne-search:reindex-page <rootId>` einen alten Zweig komplett ab.
+        if ((string) ($pageRow['type'] ?? '') === 'root') {
+            $rootUnpublished = (string) ($pageRow['published'] ?? '') !== '1';
+            $rootNoSearch = isset($pageRow['noSearch']) && (string) $pageRow['noSearch'] === '1';
+            if ($rootUnpublished || $rootNoSearch) {
+                $this->deletePageTree($pageId, $config);
+            }
+            return;
+        }
+
         // Nur publizierte Pages werden indexiert. Doctrine DBAL kann je nach
         // MySQL-Version int(1) oder string('1') zurückliefern, also tolerant
         // casten — sonst greift der String-Strict-Vergleich nicht.
         if ((string) ($pageRow['published'] ?? '') !== '1') {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
 
@@ -74,12 +92,29 @@ final class LivePageIndexer
         // Robots-Tag respektieren: noindex → aus Index raus
         $robots = (string) ($pageRow['robots'] ?? '');
         if ($robots !== '' && stripos($robots, 'noindex') !== false) {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
-        // Contao 4.13: noSearch-Flag (in 5.x nicht mehr vorhanden)
+        // Contao 4.13: noSearch-Flag (in 5.x nicht mehr vorhanden).
+        // v2.2.0: Wird eine Seite auf noSearch gestellt, fliegt der ganze
+        // Zweig raus — die Unterseiten erben das Flag (siehe
+        // PageSearchabilityResolver). Löschen ist billig, deshalb hier
+        // synchron; das Re-Enable eines Zweigs macht der Lupen-Toggle bzw.
+        // der nächste Full-Reindex.
         if (isset($pageRow['noSearch']) && (string) $pageRow['noSearch'] === '1') {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageTree($pageId, $config);
+            return;
+        }
+        // v2.2.0: Vorfahre noSearch=1 oder Root unveröffentlicht → nicht
+        // indexieren, ggf. vorhandenes Doc entfernen.
+        if ($this->searchability !== null && $this->searchability->excludedReason($pageId) !== null) {
+            $this->deletePageTree($pageId, $config);
+            return;
+        }
+        // v2.1.0: hide-Flag respektieren wenn das Setting deaktiviert ist —
+        // versteckte Seiten werden auch beim Live-Index-Trigger entfernt.
+        if (!$config->indexHiddenPages && (string) ($pageRow['hide'] ?? '') === '1') {
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
 
@@ -92,14 +127,20 @@ final class LivePageIndexer
         $alias = (string) ($pageRow['alias'] ?? '');
         $logicalPath = 'tl_page/' . ($alias !== '' ? $alias : (string) $pageId);
         if ($this->shouldSkipForPermission('page', $logicalPath, $perm['isProtected'], $config)) {
-            $this->deletePage($pageId, (string) ($pageRow['language'] ?: 'de'));
+            $this->deletePageEverywhere($pageId, $config);
             return;
         }
 
+        // Title/Pagetitle/Article/Content alles durch den Insert-Tag-Stripper
+        // jagen — sonst landen rohe „{{file::...}}"/„{{link::42}}"-Tags im
+        // Index und werden im Frontend als haesslicher Text gerendert.
+        $rawTitle = (string) ($pageRow['pageTitle'] ?: ($pageRow['title'] ?? ''));
+        $cleanTitle = $this->stripInsertTags($rawTitle);
+
         $contentParts = [
-            (string) ($pageRow['pageTitle'] ?: ($pageRow['title'] ?? '')),
-            (string) ($pageRow['description'] ?? ''),
-            (string) ($pageRow['keywords'] ?? ''),
+            $cleanTitle,
+            $this->stripInsertTags((string) ($pageRow['description'] ?? '')),
+            $this->stripInsertTags((string) ($pageRow['keywords'] ?? '')),
         ];
 
         $articles = $this->db->fetchAllAssociative(
@@ -108,15 +149,15 @@ final class LivePageIndexer
         );
 
         foreach ($articles as $article) {
-            $contentParts[] = (string) ($article['title'] ?? '');
-            $contentParts[] = (string) ($article['teaser'] ?? '');
+            $contentParts[] = $this->stripInsertTags((string) ($article['title'] ?? ''));
+            $contentParts[] = $this->stripInsertTags((string) ($article['teaser'] ?? ''));
             $elements = $this->db->fetchAllAssociative(
                 "SELECT headline, text FROM tl_content WHERE pid = ? AND ptable = 'tl_article' AND invisible = '' ORDER BY sorting",
                 [(int) $article['id']]
             );
             foreach ($elements as $el) {
-                $contentParts[] = $this->extractHeadlineText((string) ($el['headline'] ?? ''));
-                $contentParts[] = strip_tags((string) ($el['text'] ?? ''));
+                $contentParts[] = $this->stripInsertTags($this->extractHeadlineText((string) ($el['headline'] ?? '')));
+                $contentParts[] = $this->stripInsertTags(strip_tags((string) ($el['text'] ?? '')));
             }
         }
 
@@ -128,12 +169,18 @@ final class LivePageIndexer
         $url = $this->resolvePageUrl($pageId, (string) ($pageRow['alias'] ?? ''));
 
         // v2.0.0: Tag-System bevorzugt (Slug+Label = searchable); Fallback Legacy.
+        // v2.1.0: Boost = max(boost) aller zugewiesenen Tags → SearchDocument.weight.
         $tagObjects = $this->tags->tagsForTarget('page', (string) $pageId);
         $tags = [];
+        $weight = 1.0;
         foreach ($tagObjects as $t) {
             $tags[] = $t['slug'];
             if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
                 $tags[] = $t['label'];
+            }
+            $tagBoost = (float) ($t['boost'] ?? 1.0);
+            if ($tagBoost > $weight) {
+                $weight = $tagBoost;
             }
         }
         if ($tags === []) {
@@ -145,14 +192,16 @@ final class LivePageIndexer
             id: 'page-'.$pageId,
             type: 'page',
             locale: (string) ($pageRow['language'] ?: 'de'),
-            title: (string) ($pageRow['pageTitle'] ?: ($pageRow['title'] ?? '')),
+            title: $cleanTitle !== '' ? $cleanTitle : (string) ($pageRow['title'] ?? ''),
             url: $url,
             content: $normalizedContent,
             tags: $tags,
             publishedAt: !empty($pageRow['start']) ? (int) $pageRow['start'] : (int) ($pageRow['tstamp'] ?? 0),
-            weight: 1.0,
+            weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
+            coverUrl: $this->resolvePageCoverUrl($pageId),
+            contentType: 'page',
         );
 
         try {
@@ -243,25 +292,39 @@ final class LivePageIndexer
 
         $tagObjects = $this->tags->tagsForTarget('file', $relativePath);
         $fileTags = [];
+        // v2.1.0: Boost = max(boost) aller zugewiesenen Tags.
+        $weight = 1.0;
         foreach ($tagObjects as $t) {
             $fileTags[] = $t['slug'];
             if ($t['label'] !== '' && $t['label'] !== $t['slug']) {
                 $fileTags[] = $t['label'];
             }
+            $tagBoost = (float) ($t['boost'] ?? 1.0);
+            if ($tagBoost > $weight) {
+                $weight = $tagBoost;
+            }
         }
         $fileTags[] = $extension;
         $fileTags = array_values(array_unique(array_filter($fileTags)));
+
+        // v2.1.0: Datei-Titel und ALT-Text aus tl_files.meta.
+        $meta = $this->extractFileMeta($relativePath, $locale, $config->enabledLocales);
+        $title = $meta['title'] !== ''
+            ? $meta['title']
+            : $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME));
 
         $doc = new SearchDocument(
             id: $docId,
             type: 'file',
             locale: $locale,
-            title: $this->humanizeFilename(pathinfo($relativePath, PATHINFO_FILENAME)),
+            title: $title,
             url: '/'.$relativePath,
             content: $this->normalizer->normalize($text),
             tags: $fileTags,
+            weight: $weight,
             isProtected: $perm['isProtected'],
             allowedGroups: $perm['allowedGroups'],
+            altText: $meta['alt'],
         );
 
         try {
@@ -279,6 +342,37 @@ final class LivePageIndexer
         try {
             $this->indexer->delete('page-'.$pageId, $locale);
         } catch (\Throwable) {
+        }
+    }
+
+    /**
+     * Löscht eine Page UND alle Nachfahren aus allen aktiven Locale-Indexen.
+     * Pages tragen ihre Locale nicht selbst (nur die Root), deshalb gehen
+     * wir über alle enabledLocales — ein Delete auf eine nicht vorhandene
+     * ID ist in Meilisearch ein No-Op.
+     */
+    public function deletePageTree(int $pageId, SettingsConfig $config): void
+    {
+        $ids = [$pageId];
+        if ($this->searchability !== null) {
+            $ids = array_merge($ids, $this->searchability->descendantIds($pageId));
+        }
+        foreach ($ids as $id) {
+            $this->deletePageEverywhere($id, $config);
+        }
+    }
+
+    /**
+     * Löscht EINE Page aus allen aktiven Locale-Indexen. Vorher lief das
+     * über `tl_page.language ?: 'de'` — language ist aber nur auf Root-Pages
+     * gesetzt, d.h. Unterseiten im en-Index wurden nie getroffen (FFA:
+     * page-6/page-7 blieben im en-Index haengen).
+     */
+    public function deletePageEverywhere(int $pageId, SettingsConfig $config): void
+    {
+        $locales = $config->enabledLocales !== [] ? $config->enabledLocales : ['de'];
+        foreach ($locales as $locale) {
+            $this->deletePage($pageId, $locale);
         }
     }
 
@@ -333,6 +427,94 @@ final class LivePageIndexer
     {
         $cleaned = preg_replace('/[-_]+/', ' ', $filename) ?? $filename;
         return ucwords(mb_strtolower(trim($cleaned)));
+    }
+
+    /**
+     * Entfernt Contao-Insert-Tags wie {{file::...}}, {{link::42}}, {{date::...}} etc.
+     * aus Indexier-Inputs. Wir loesen sie NICHT auf — beim Indexieren gibt es
+     * keinen Request-Kontext (kein FrontendUser, kein Page-Model im Scope),
+     * und Tags wie {{file::scripte/foo.php}} liefern eh nichts Sinnvolles
+     * fuer den Volltext-Index. Doppel-geschachtelte Tags werden iterativ entfernt.
+     */
+    private function stripInsertTags(string $input): string
+    {
+        if ($input === '' || strpos($input, '{{') === false) {
+            return $input;
+        }
+        $prev = '';
+        $current = $input;
+        // Iterativ, weil Insert-Tags geschachtelt sein koennen.
+        // Limit auf 5 Runden — sollte fuer alle realen Faelle reichen.
+        for ($i = 0; $i < 5 && $prev !== $current; $i++) {
+            $prev = $current;
+            $current = preg_replace('/\{\{[^{}]+\}\}/', '', $current) ?? $current;
+        }
+        return trim(preg_replace('/\s+/', ' ', $current) ?? $current);
+    }
+
+    /**
+     * Liest Title + ALT-Text aus tl_files.meta. Locale-Auswahl: erst exakter
+     * Locale-Match, dann enabledLocales-Reihenfolge, dann erster verfügbarer.
+     * Format ist serialisiertes PHP-Array (Contao 4.x) oder JSON (Contao 5.x).
+     *
+     * @param list<string> $enabledLocales
+     * @return array{title:string, alt:string}
+     */
+    private function extractFileMeta(string $relativePath, string $locale, array $enabledLocales): array
+    {
+        $empty = ['title' => '', 'alt' => ''];
+
+        try {
+            $row = $this->db->fetchAssociative(
+                'SELECT meta FROM tl_files WHERE path = ?',
+                [ltrim($relativePath, '/')],
+            );
+        } catch (\Throwable) {
+            return $empty;
+        }
+        if (!\is_array($row) || empty($row['meta'])) {
+            return $empty;
+        }
+
+        $raw = (string) $row['meta'];
+        $decoded = null;
+        if ($raw !== '' && ($raw[0] === 'a' || $raw[0] === 's' || $raw[0] === 'b')) {
+            $decoded = @unserialize($raw, ['allowed_classes' => false]);
+        }
+        if (!\is_array($decoded)) {
+            $jsonDecoded = json_decode($raw, true);
+            if (\is_array($jsonDecoded)) {
+                $decoded = $jsonDecoded;
+            }
+        }
+        if (!\is_array($decoded)) {
+            return $empty;
+        }
+
+        $candidates = array_unique(array_filter(array_merge([$locale], $enabledLocales)));
+        $entry = null;
+        foreach ($candidates as $loc) {
+            if (isset($decoded[$loc]) && \is_array($decoded[$loc])) {
+                $entry = $decoded[$loc];
+                break;
+            }
+        }
+        if ($entry === null) {
+            foreach ($decoded as $value) {
+                if (\is_array($value)) {
+                    $entry = $value;
+                    break;
+                }
+            }
+        }
+        if (!\is_array($entry)) {
+            return $empty;
+        }
+
+        return [
+            'title' => mb_substr(trim(strip_tags((string) ($entry['title'] ?? ''))), 0, 255),
+            'alt' => mb_substr(trim(strip_tags((string) ($entry['alt'] ?? ''))), 0, 500),
+        ];
     }
 
     /**
@@ -433,5 +615,135 @@ final class LivePageIndexer
         } catch (\Throwable) {
         }
         return '.html';
+    }
+
+    /**
+     * Identisch zu IndexableItemProcessor::resolvePageCoverUrl — siehe dort
+     * für die Begründung. Unterstützt Standard-singleSRC UND RSCE-JSON-UUIDs.
+     * Prio 1: OpenGraph-Bild (wenn Plugin installiert), Prio 2: singleSRC, Prio 3: RSCE.
+     */
+    private function resolvePageCoverUrl(int $pageId): string
+    {
+        // Prio 1: OpenGraph-Bild aus tl_page (numero2/opengraph3 oder
+        // andere SEO-Plugins). Spaltenname wird zur Laufzeit erkannt — wir
+        // probieren die gaengigen Namen durch.
+        try {
+            $cols = $this->ogImageColumns();
+            if ($cols !== []) {
+                $select = implode(', ', array_map(static fn ($c) => 'p.' . $c, $cols));
+                $row = $this->db->fetchAssociative(
+                    'SELECT ' . $select . ' FROM tl_page p WHERE p.id = ?',
+                    [$pageId],
+                );
+                if (\is_array($row)) {
+                    foreach ($cols as $col) {
+                        $uuid = (string) ($row[$col] ?? '');
+                        if ($uuid === '') {
+                            continue;
+                        }
+                        $url = $this->lookupFileByUuidBin($uuid);
+                        if ($url !== '') {
+                            return $url;
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+        }
+
+        try {
+            $row = $this->db->fetchAssociative(
+                "SELECT c.singleSRC
+                 FROM tl_content c
+                 INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
+                 WHERE a.pid = ?
+                   AND c.invisible = ''
+                   AND c.type IN ('image', 'text', 'headline', 'gallery', 'hyperlink', 'accordionSingle')
+                   AND c.singleSRC IS NOT NULL
+                   AND c.singleSRC <> ''
+                 ORDER BY a.sorting ASC, c.sorting ASC
+                 LIMIT 1",
+                [$pageId],
+            );
+            if (\is_array($row) && isset($row['singleSRC'])) {
+                $url = $this->lookupFileByUuidBin((string) $row['singleSRC']);
+                if ($url !== '') return $url;
+            }
+        } catch (\Throwable) {
+        }
+        // RSCE: UUID-Strings in JSON-Feld rsce_data.
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                "SELECT c.rsce_data
+                 FROM tl_content c
+                 INNER JOIN tl_article a ON a.id = c.pid AND c.ptable = 'tl_article'
+                 WHERE a.pid = ? AND c.invisible = '' AND c.rsce_data IS NOT NULL AND c.rsce_data <> ''
+                 ORDER BY a.sorting ASC, c.sorting ASC",
+                [$pageId],
+            );
+            foreach ($rows as $r) {
+                $raw = (string) ($r['rsce_data'] ?? '');
+                if ($raw === '' || !preg_match_all('/\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b/i', $raw, $matches)) {
+                    continue;
+                }
+                foreach ($matches[1] as $uuidHex) {
+                    $uuidBin = @hex2bin(str_replace('-', '', $uuidHex));
+                    if ($uuidBin === false || \strlen($uuidBin) !== 16) continue;
+                    $url = $this->lookupFileByUuidBin($uuidBin);
+                    if ($url !== '') return $url;
+                }
+            }
+        } catch (\Throwable) {
+        }
+        return '';
+    }
+
+    /**
+     * Erkennt welche OG-Image-Spalten in tl_page existieren — verschiedene
+     * SEO-Plugins benutzen unterschiedliche Namen. Cache pro Request.
+     *
+     * @return list<string>
+     */
+    private function ogImageColumns(): array
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        $candidates = [
+            // numero2/contao-opengraph3
+            'og_image',
+            // alternative Naming-Konventionen anderer SEO-Plugins
+            'og_picture', 'opengraph_image', 'opengraph_picture',
+            'social_image', 'share_image', 'meta_image',
+            // Contao 5 SERP / generic
+            'metaImage',
+        ];
+        try {
+            $cols = array_keys($this->db->createSchemaManager()->listTableColumns('tl_page'));
+            $cached = array_values(array_filter($candidates, static fn ($c) => \in_array($c, $cols, true)));
+        } catch (\Throwable) {
+            $cached = [];
+        }
+        return $cached;
+    }
+
+    private function lookupFileByUuidBin(string $uuidBin): string
+    {
+        if (\strlen($uuidBin) !== 16) return '';
+        try {
+            $fileRow = $this->db->fetchAssociative(
+                'SELECT path, extension FROM tl_files WHERE uuid = ? LIMIT 1',
+                [$uuidBin],
+            );
+        } catch (\Throwable) {
+            return '';
+        }
+        if (!\is_array($fileRow)) return '';
+        $path = (string) ($fileRow['path'] ?? '');
+        $ext = strtolower((string) ($fileRow['extension'] ?? ''));
+        $imageExts = ['jpg', 'jpeg', 'png', 'webp', 'gif', 'svg'];
+        if ($path === '' || !\in_array($ext, $imageExts, true)) return '';
+        return '/' . ltrim($path, '/');
     }
 }

@@ -23,16 +23,130 @@ final class TagRepository
     }
 
     /**
-     * @return list<array{id:int, slug:string, label:string, color:string, description:?string, count:int}>
+     * Tags die ein auto_match_pattern haben — werden im SearchService gegen
+     * jede Treffer-URL gematcht und automatisch zugewiesen. Spart Backfill
+     * und funktioniert für gecrawlte externe URLs genauso wie für interne.
+     *
+     * @return list<array{slug:string, label:string, color:string, boost:float, patterns:list<string>, translations:?string, patternTranslations:?string}>
+     */
+    public function findAutoMatchTags(): array
+    {
+        if (!$this->tablesExist()) {
+            return [];
+        }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
+        $hasTrans = $this->translationsColumnAvailable();
+        $transExpr = $hasTrans ? 't.translations' : 'NULL AS translations';
+        $hasPatternTrans = $this->patternTranslationsColumnAvailable();
+        $patternTransExpr = $hasPatternTrans ? 't.auto_match_pattern_translations' : 'NULL AS auto_match_pattern_translations';
+        try {
+            $rows = $this->db->fetchAllAssociative(
+                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.auto_match_pattern, ' . $transExpr . ', ' . $patternTransExpr . '
+                 FROM ' . self::TAG_TABLE . ' t
+                 WHERE (t.auto_match_pattern IS NOT NULL AND t.auto_match_pattern <> \'\')
+                    OR (' . ($hasPatternTrans ? 't.auto_match_pattern_translations IS NOT NULL AND t.auto_match_pattern_translations <> \'\'' : '0=1') . ')',
+            );
+        } catch (\Throwable) {
+            // Spalte existiert noch nicht (Migration noch nicht gelaufen) — kein Auto-Match.
+            return [];
+        }
+        $out = [];
+        foreach ($rows as $r) {
+            $raw = (string) ($r['auto_match_pattern'] ?? '');
+            $patterns = [];
+            foreach (preg_split('/\r\n|\r|\n/', $raw) ?: [] as $line) {
+                $line = trim((string) $line);
+                if ($line !== '') {
+                    $patterns[] = $line;
+                }
+            }
+            $hasPatternTrans = $r['auto_match_pattern_translations'] !== null
+                && (string) $r['auto_match_pattern_translations'] !== '';
+            if ($patterns === [] && !$hasPatternTrans) {
+                continue;
+            }
+            $out[] = [
+                'slug' => (string) $r['slug'],
+                'label' => (string) $r['label'],
+                'color' => (string) $r['color'],
+                'boost' => (float) $r['boost'],
+                'patterns' => $patterns,
+                'translations' => $r['translations'] !== null ? (string) $r['translations'] : null,
+                'patternTranslations' => $r['auto_match_pattern_translations'] !== null
+                    ? (string) $r['auto_match_pattern_translations']
+                    : null,
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Liefert die Auto-Match-Patterns fuer eine bestimmte Locale. Wenn fuer
+     * die Locale ein Override existiert, wird der genutzt. Sonst fallback
+     * auf das Standard-Pattern (Sprache-unabhaengig).
+     *
+     * @param array{patterns?:list<string>, patternTranslations?:?string} $tag
+     * @return list<string>
+     */
+    public static function patternsForLocale(array $tag, string $locale): array
+    {
+        $locale = strtolower(substr($locale, 0, 2));
+        $raw = $tag['patternTranslations'] ?? null;
+        if (\is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw, true);
+            if (\is_array($decoded) && isset($decoded[$locale]) && \is_string($decoded[$locale]) && trim($decoded[$locale]) !== '') {
+                $patterns = [];
+                foreach (preg_split('/\r\n|\r|\n/', $decoded[$locale]) ?: [] as $line) {
+                    $line = trim($line);
+                    if ($line !== '') {
+                        $patterns[] = $line;
+                    }
+                }
+                if ($patterns !== []) {
+                    return $patterns;
+                }
+            }
+        }
+        return $tag['patterns'] ?? [];
+    }
+
+    private function patternTranslationsColumnAvailable(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            $cols = $this->db->createSchemaManager()->listTableColumns(self::TAG_TABLE);
+            return $cached = isset($cols['auto_match_pattern_translations']);
+        } catch (\Throwable) {
+            return $cached = false;
+        }
+    }
+
+    private function autoMatchColumnAvailable(): bool
+    {
+        try {
+            $cols = $this->db->createSchemaManager()->listTableColumns(self::TAG_TABLE);
+            return isset($cols['auto_match_pattern']);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    /**
+     * @return list<array{id:int, slug:string, label:string, color:string, boost:float, description:?string, count:int}>
      */
     public function findAllWithCounts(): array
     {
         if (!$this->tablesExist()) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT t.id, t.slug, t.label, t.color, t.description,
+                'SELECT t.id, t.slug, t.label, t.color, ' . $boostExpr . ' AS boost, t.description,
                         (SELECT COUNT(*) FROM ' . self::ASSIGN_TABLE . ' a WHERE a.tag_id = t.id) AS cnt
                  FROM ' . self::TAG_TABLE . ' t
                  ORDER BY t.label ASC',
@@ -47,6 +161,7 @@ final class TagRepository
                 'slug' => (string) $r['slug'],
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
+                'boost' => (float) ($r['boost'] ?? 1.0),
                 'description' => $r['description'] !== null ? (string) $r['description'] : null,
                 'count' => (int) $r['cnt'],
             ];
@@ -55,16 +170,19 @@ final class TagRepository
     }
 
     /**
-     * @return list<array{id:int, slug:string, label:string, color:string}>
+     * @return list<array{id:int, slug:string, label:string, color:string, boost:float, translations:?string}>
      */
     public function findAll(): array
     {
         if (!$this->tablesExist()) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 'boost' : "'1.00'";
+        $hasTranslations = $this->translationsColumnAvailable();
+        $translationsExpr = $hasTranslations ? 'translations' : "NULL AS translations";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT id, slug, label, color FROM ' . self::TAG_TABLE . ' ORDER BY label ASC',
+                'SELECT id, slug, label, color, ' . $boostExpr . ' AS boost, ' . $translationsExpr . ' FROM ' . self::TAG_TABLE . ' ORDER BY label ASC',
             );
         } catch (\Throwable) {
             return [];
@@ -76,9 +194,48 @@ final class TagRepository
                 'slug' => (string) $r['slug'],
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
+                'boost' => (float) ($r['boost'] ?? 1.0),
+                'translations' => $r['translations'] !== null ? (string) $r['translations'] : null,
             ];
         }
         return $out;
+    }
+
+    /**
+     * Liefert das uebersetzte Label fuer eine Locale, fallback Default-Label.
+     *
+     * @param array{label:string, translations?:?string} $tag
+     */
+    public static function translateLabel(array $tag, string $locale): string
+    {
+        $default = (string) ($tag['label'] ?? '');
+        $raw = $tag['translations'] ?? null;
+        if (!\is_string($raw) || $raw === '') {
+            return $default;
+        }
+        $decoded = json_decode($raw, true);
+        if (!\is_array($decoded)) {
+            return $default;
+        }
+        $locale = strtolower(substr($locale, 0, 2));
+        if (isset($decoded[$locale]) && $decoded[$locale] !== '') {
+            return (string) $decoded[$locale];
+        }
+        return $default;
+    }
+
+    private function translationsColumnAvailable(): bool
+    {
+        static $cached = null;
+        if ($cached !== null) {
+            return $cached;
+        }
+        try {
+            $cols = $this->db->createSchemaManager()->listTableColumns(self::TAG_TABLE);
+            return $cached = isset($cols['translations']);
+        } catch (\Throwable) {
+            return $cached = false;
+        }
     }
 
     /**
@@ -108,16 +265,17 @@ final class TagRepository
     /**
      * Volle Tag-Daten für eine Target. Kommt im Frontend an die Search-Hits ran.
      *
-     * @return list<array{slug:string, label:string, color:string}>
+     * @return list<array{slug:string, label:string, color:string, boost:float}>
      */
     public function tagsForTarget(string $targetType, string $targetId): array
     {
         if (!$this->tablesExist()) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
         try {
             $rows = $this->db->fetchAllAssociative(
-                'SELECT t.slug, t.label, t.color FROM ' . self::TAG_TABLE . ' t
+                'SELECT t.slug, t.label, t.color, ' . $boostExpr . ' AS boost FROM ' . self::TAG_TABLE . ' t
                  INNER JOIN ' . self::ASSIGN_TABLE . ' a ON a.tag_id = t.id
                  WHERE a.target_type = ? AND a.target_id = ?
                  ORDER BY t.label ASC',
@@ -132,22 +290,51 @@ final class TagRepository
                 'slug' => (string) $r['slug'],
                 'label' => (string) $r['label'],
                 'color' => (string) $r['color'],
+                'boost' => (float) ($r['boost'] ?? 1.0),
             ];
         }
         return $out;
     }
 
     /**
+     * Höchster Boost-Wert aller einem Target zugewiesenen Tags. Wird beim
+     * Indexieren ins SearchDocument.weight gesetzt — Sort weight DESC sorgt
+     * dafür, dass geboostete Treffer in der Ergebnisliste oben stehen.
+     */
+    public function maxBoostForTarget(string $targetType, string $targetId): float
+    {
+        if (!$this->tablesExist() || !$this->boostColumnAvailable()) {
+            return 1.0;
+        }
+        try {
+            $value = $this->db->fetchOne(
+                'SELECT MAX(t.boost) FROM ' . self::TAG_TABLE . ' t
+                 INNER JOIN ' . self::ASSIGN_TABLE . ' a ON a.tag_id = t.id
+                 WHERE a.target_type = ? AND a.target_id = ?',
+                [$targetType, $targetId],
+            );
+        } catch (\Throwable) {
+            return 1.0;
+        }
+        if ($value === false || $value === null) {
+            return 1.0;
+        }
+        $boost = (float) $value;
+        return $boost > 0.0 ? $boost : 1.0;
+    }
+
+    /**
      * Tagged-Count für eine ganze Liste targets in einem Query (für Backend-Tree).
      *
      * @param list<array{type:string, id:string}> $targets
-     * @return array<string, list<array{slug:string,label:string,color:string}>> Schlüssel: "type:id"
+     * @return array<string, list<array{slug:string,label:string,color:string,boost:float}>> Schlüssel: "type:id"
      */
     public function bulkTagsForTargets(array $targets): array
     {
         if (!$this->tablesExist() || $targets === []) {
             return [];
         }
+        $boostExpr = $this->boostColumnAvailable() ? 't.boost' : "'1.00'";
 
         // Wir gruppieren pro target_type, damit der WHERE-Clause clean bleibt.
         $byType = [];
@@ -164,7 +351,7 @@ final class TagRepository
             $placeholders = implode(',', array_fill(0, \count($ids), '?'));
             try {
                 $rows = $this->db->fetchAllAssociative(
-                    'SELECT a.target_id, t.slug, t.label, t.color
+                    'SELECT a.target_id, t.slug, t.label, t.color, ' . $boostExpr . ' AS boost
                      FROM ' . self::ASSIGN_TABLE . ' a
                      INNER JOIN ' . self::TAG_TABLE . ' t ON t.id = a.tag_id
                      WHERE a.target_type = ? AND a.target_id IN (' . $placeholders . ')
@@ -183,6 +370,7 @@ final class TagRepository
                     'slug' => (string) $r['slug'],
                     'label' => (string) $r['label'],
                     'color' => (string) $r['color'],
+                    'boost' => (float) ($r['boost'] ?? 1.0),
                 ];
             }
         }
@@ -210,6 +398,7 @@ final class TagRepository
             'slug' => (string) $row['slug'],
             'label' => (string) $row['label'],
             'color' => (string) $row['color'],
+            'boost' => isset($row['boost']) ? (float) $row['boost'] : 1.0,
             'description' => $row['description'] !== null ? (string) $row['description'] : null,
         ];
     }
@@ -325,5 +514,28 @@ final class TagRepository
         } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Defensiv: Boost-Spalte existiert erst nach v2.1.0-Migration. Wenn die
+     * Migration noch nicht gelaufen ist (z.B. Bundle-Update ohne contao:migrate),
+     * fallen alle boost-bezogenen Queries auf neutralen Wert 1.0 zurück und
+     * niemand crasht.
+     */
+    private ?bool $boostAvailable = null;
+
+    private function boostColumnAvailable(): bool
+    {
+        if ($this->boostAvailable !== null) {
+            return $this->boostAvailable;
+        }
+        try {
+            $sm = $this->db->createSchemaManager();
+            $columns = $sm->listTableColumns(self::TAG_TABLE);
+            $this->boostAvailable = isset($columns['boost']);
+        } catch (\Throwable) {
+            $this->boostAvailable = false;
+        }
+        return $this->boostAvailable;
     }
 }

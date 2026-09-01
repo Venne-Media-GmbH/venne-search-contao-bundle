@@ -28,20 +28,34 @@ final class DocumentIndexer
      * Ranking-Rules in dieser Reihenfolge (höchste Priorität zuerst).
      * Klassisches BM25-Ranking ohne Embeddings oder semantische Komponenten —
      * deterministisch, schnell, ohne externe Modelle.
+     *
+     * v2.2.0: `published_at:desc` als LETZTER Tie-Breaker. Ohne ihn ordnet
+     * Meilisearch gleich relevante Treffer nach interner Doc-ID, also nach
+     * Indexier-Reihenfolge — Files kommen „ORDER BY path", d.h. der
+     * Geschäftsbericht 2010 stand vor 2024. Jetzt: bei gleicher Relevanz
+     * das neueste Dokument zuerst. Steht bewusst NACH exactness, damit das
+     * Datum nie echte Treffer-Qualität überstimmt.
      */
-    private const RANKING_RULES = [
-        'words',         // Alle Query-Worte gefunden?
-        'typo',          // Wie viele Tippfehler?
-        'proximity',     // Worte nah beieinander?
-        'attribute',     // Title > Tags > Content
-        'sort',          // Falls per Sort-Param sortiert
-        'exactness',     // Exakte Wortform vor Stamm
+    public const RANKING_RULES = [
+        'words',              // Alle Query-Worte gefunden?
+        'typo',               // Wie viele Tippfehler?
+        'proximity',          // Worte nah beieinander?
+        'attribute',          // Title > Tags > Content
+        'sort',               // Falls per Sort-Param sortiert
+        'exactness',          // Exakte Wortform vor Stamm
+        'published_at:desc',  // Tie-Break: neuestes Dokument zuerst
     ];
 
-    /** Welche Felder durchsuchbar sind (Reihenfolge = Gewichtung). */
+    /**
+     * Welche Felder durchsuchbar sind (Reihenfolge = Gewichtung).
+     * v2.1.0: alt_text steht zwischen tags und content — Datei-Metadaten
+     * (Titel, ALT) sind aussagekräftiger als der OCR/PDF-Volltext, sollten
+     * also stärker ins Ranking einfließen, aber nicht über echten Tags.
+     */
     private const SEARCHABLE_ATTRIBUTES = [
         'title',
         'tags',
+        'alt_text',
         'content',
     ];
 
@@ -51,11 +65,18 @@ final class DocumentIndexer
         'locale',
         'tags',
         'published_at',
+        // v2.2.0: für `type_asc`-Sort + zukünftige „nach Dateityp filtern"
+        // Queries auf einem dedizierten Feld (statt missbrauchtem tags-Array).
+        'content_type',
         // Permission-ACL (v0.4.0): Frontend-Suche filtert hart nach diesen,
         // damit ein nicht-eingeloggter Besucher keine geschützten Treffer
         // sieht, selbst wenn sie irgendwie im Index liegen.
         'is_protected',
         'allowed_groups',
+        // v2.2.0: Filter-Loeschen per URL — wird vom Lupen-Toggle in der
+        // Seitenstruktur (PageSearchToggleController) genutzt um page +
+        // crawled-Twin gleichzeitig zu entfernen.
+        'url',
     ];
 
     /** Felder nach denen sortiert werden darf. */
@@ -63,6 +84,10 @@ final class DocumentIndexer
         'published_at',
         'indexed_at',
         'weight',
+        // v2.2.0: Sortierung nach Dokumentenart (Pages → Files alphabetisch
+        // nach Extension). Lexikographische Sortierung über content_type
+        // bringt page < pdf < ... automatisch in eine sinnvolle Reihenfolge.
+        'content_type',
     ];
 
     /**
@@ -101,7 +126,44 @@ final class DocumentIndexer
         private readonly Client $meilisearch,
         private readonly SettingsRepository $settings,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?\VenneMedia\VenneSearchContaoBundle\Service\Synonym\SynonymRepository $synonyms = null,
     ) {
+    }
+
+    /**
+     * Liefert die Synonym-Map fuer eine Locale: DB-Custom-Synonyme (User-gepflegt)
+     * gemerged mit den DEFAULT_SYNONYMS_DE. User-Eintraege gewinnen bei Konflikt.
+     *
+     * @return array<string, list<string>>
+     */
+    private function buildSynonyms(string $locale): array
+    {
+        $base = $locale === 'de' ? self::DEFAULT_SYNONYMS_DE : [];
+        if ($this->synonyms === null) {
+            return $base;
+        }
+        $custom = $this->synonyms->buildMeilisearchSynonyms();
+        // Custom ueberschreibt Base.
+        return array_merge($base, $custom);
+    }
+
+    /**
+     * Schreibt die aktuelle Synonym-Map in den Meilisearch-Index. Wird vom
+     * Synonym-Save-Listener nach jedem DB-Change gerufen, damit Aenderungen
+     * sofort wirksam sind (ohne Reindex).
+     */
+    public function pushSynonyms(string $locale): void
+    {
+        $indexUid = $this->indexName($locale);
+        try {
+            $index = $this->meilisearch->index($indexUid);
+            $index->updateSynonyms($this->buildSynonyms($locale));
+        } catch (\Throwable $e) {
+            $this->logger->warning('venne_search.synonyms.push_failed', [
+                'locale' => $locale,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -127,8 +189,10 @@ final class DocumentIndexer
         $index->updateFilterableAttributes(self::FILTERABLE_ATTRIBUTES);
         $index->updateSortableAttributes(self::SORTABLE_ATTRIBUTES);
 
-        if ($locale === 'de') {
-            $index->updateSynonyms(self::DEFAULT_SYNONYMS_DE);
+        // Synonyme = Default-Map (z.B. Maße/Masse) + User-gepflegte Synonyme aus DB.
+        $synonyms = $this->buildSynonyms($locale);
+        if ($synonyms !== []) {
+            $index->updateSynonyms($synonyms);
         }
 
         // Such-Strenge: typoTolerance + prefix-search entsprechend setzen.
@@ -207,6 +271,37 @@ final class DocumentIndexer
             // Nicht kritisch — Dokument existiert evtl. eh nicht mehr.
             $this->logger->warning('venne_search.indexer.delete_failed', [
                 'id' => $documentId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Loescht alle Meili-Dokumente, deren `url`-Attribut exakt einem der
+     * uebergebenen Werte entspricht. Wird beim Toggle "nicht durchsuchbar"
+     * gebraucht, damit nicht nur das page-Dokument verschwindet, sondern auch
+     * etwaige crawled-Twins mit derselben URL. Setzt voraus, dass `url` in
+     * den filterable-attributes des Index gelistet ist (siehe v2.2.0
+     * Mig06_AddUrlFilterable).
+     *
+     * @param string[] $urls
+     */
+    public function deleteByUrls(array $urls, string $locale): void
+    {
+        $urls = array_values(array_filter(array_unique($urls), static fn ($u): bool => $u !== ''));
+        if ($urls === []) {
+            return;
+        }
+        try {
+            $index = $this->meilisearch->index($this->indexName($locale));
+            $filter = implode(' OR ', array_map(
+                static fn (string $u): string => 'url = "' . addslashes($u) . '"',
+                $urls,
+            ));
+            $index->deleteDocuments(['filter' => $filter]);
+        } catch (\Throwable $e) {
+            $this->logger->warning('venne_search.indexer.delete_by_urls_failed', [
+                'urls' => $urls,
                 'error' => $e->getMessage(),
             ]);
         }

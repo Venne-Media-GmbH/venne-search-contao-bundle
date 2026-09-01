@@ -6,7 +6,11 @@ declare(strict_types=1);
  * Backend-Modul-Beschriftung. Wird auf der linken Sidebar des Contao-Backends
  * unter "System" angezeigt.
  */
-$GLOBALS['TL_LANG']['MOD']['venne_search'] = ['Venne Search', 'Volltextsuche für deine Site verwalten — API-Key, Indexierung, Status, Daten-Browser.'];
+$GLOBALS['TL_LANG']['MOD']['venne_search'] = ['Venne Search', 'Volltextsuche für deine Site verwalten — API-Key, Indexierung, Status, Daten-Browser, Synonyme.'];
+// Tabellen-Untertitel im Breadcrumb erwarten Contao 4.13 als String, nicht als Array.
+$GLOBALS['TL_LANG']['MOD']['tl_venne_search_synonym'] = 'Synonyme';
+$GLOBALS['TL_LANG']['MOD']['tl_venne_search_tag'] = 'Tags';
+$GLOBALS['TL_LANG']['MOD']['tl_venne_search_settings'] = 'Einstellungen';
 
 // Frontend-Modul-Label im Backend (Themes → Frontend-Module → Typ)
 $GLOBALS['TL_LANG']['FMD']['venne_search'] = ['Venne Search', 'Suchfeld mit AJAX-Live-Vorschau für Besucher der Website.'];

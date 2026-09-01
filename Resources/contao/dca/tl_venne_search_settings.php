@@ -59,7 +59,7 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         //   reindex_button = großer Reindex-Button mit Beschreibung
         //   status_panel   = Live-Status (Anzahl Dokumente)
         //   documents_panel = Tabelle mit Filter
-        'default' => '{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
+        'default' => 'quick_nav;{verbindung_legend},api_key;{indexing_legend},enabled_locales,default_file_locale,index_pdfs,auto_indexing,index_hidden_pages,generate_pdf_thumbnails;{search_legend},search_strictness;{analytics_legend},analytics_enabled;{security_legend:hide},index_mode,excluded_folders;{crawler_legend},crawler_panel;{reindex_legend},reindex_button;{status_legend},status_panel;{tags_legend},tag_tree_panel,tags_overview_panel;{documents_legend},documents_panel',
     ],
     'fields' => [
         'id' => [
@@ -120,6 +120,77 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
             'default' => '1',
             'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
             'sql' => "char(1) NOT NULL default '1'",
+        ],
+        // v2.1.0: Steuert ob Seiten mit gesetztem `tl_page.hide`-Flag
+        // („Im Menü nicht anzeigen") in den Such-Index aufgenommen werden.
+        // Default '1' = bisheriges Verhalten (vor v2.1) beibehalten — versteckte
+        // Seiten WERDEN indexiert. User stellt um, wenn er sie ausschließen will.
+        // Re-Index nach Änderung erforderlich.
+        'index_hidden_pages' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['index_hidden_pages'],
+            'inputType' => 'checkbox',
+            'default' => '1',
+            'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
+            'sql' => "char(1) NOT NULL default '1'",
+            'save_callback' => [
+                static function ($value, $dc) {
+                    // Hint im Backend anzeigen, dass nach Umschalten ein
+                    // Reindex sinnvoll ist — sonst greift der Filter erst
+                    // beim nächsten Live-Indexier-Trigger (Page-Save etc.).
+                    if (\is_object($dc)) {
+                        $container = \Contao\System::getContainer();
+                        $db = $container?->get('database_connection');
+                        if ($db !== null) {
+                            try {
+                                $old = (string) ($db->fetchOne(
+                                    'SELECT index_hidden_pages FROM tl_venne_search_settings WHERE id = 1',
+                                ) ?: '1');
+                                $new = (string) $value === '1' ? '1' : '';
+                                if ($old !== $new) {
+                                    \Contao\Message::addInfo(
+                                        'Hinweis: Setting „Versteckte Seiten" wurde geändert. Bitte führen Sie einen Reindex durch, damit der Filter auf bereits indexierte Seiten wirkt.',
+                                    );
+                                }
+                            } catch (\Throwable) {
+                            }
+                        }
+                    }
+                    return $value;
+                },
+            ],
+        ],
+        // v2.2.0: Pro PDF ein JPG-Thumbnail der ersten Seite generieren und
+        // im Frontend als Cover anzeigen. Default '0' (aus), weil pro PDF
+        // 100-500ms zusätzliche Indexing-Zeit (Ghostscript-Aufruf) anfallen.
+        'generate_pdf_thumbnails' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['generate_pdf_thumbnails'],
+            'inputType' => 'checkbox',
+            'default' => '0',
+            'eval' => ['tl_class' => 'w50 m12', 'submitOnChange' => true],
+            'sql' => "char(1) NOT NULL default '0'",
+            'save_callback' => [
+                static function ($value, $dc) {
+                    if (\is_object($dc)) {
+                        try {
+                            $container = \Contao\System::getContainer();
+                            $db = $container?->get('database_connection');
+                            if ($db !== null) {
+                                $old = (string) ($db->fetchOne(
+                                    'SELECT generate_pdf_thumbnails FROM tl_venne_search_settings WHERE id = 1',
+                                ) ?: '0');
+                                $new = (string) $value === '1' ? '1' : '';
+                                if ($old !== $new) {
+                                    \Contao\Message::addInfo(
+                                        'Hinweis: PDF-Thumbnail-Setting geändert. Bitte einen Reindex durchführen, damit Cover für vorhandene PDFs generiert werden.',
+                                    );
+                                }
+                            }
+                        } catch (\Throwable) {
+                        }
+                    }
+                    return $value;
+                },
+            ],
         ],
         'default_file_locale' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['default_file_locale'],
@@ -199,6 +270,21 @@ $GLOBALS['TL_DCA']['tl_venne_search_settings'] = [
         'reindex_button' => [
             'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['reindex_button'],
             'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderReindexPanel'],
+            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
+        ],
+        // Quick-Navigation oben — Direkt-Links zu Tags + Synonymen, weil das
+        // BE_MOD-Default direkt in die Settings-Edit-Form springt (Singleton)
+        // und die Sub-Tabellen sonst nicht erreichbar sind ohne URL-Kenntnis.
+        'quick_nav' => [
+            'label' => ['', ''],
+            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\BackendActionListener::class, 'renderQuickNav'],
+            'eval' => ['doNotShow' => true, 'doNotCopy' => true],
+        ],
+        // v2.2.0: Externer Crawler — Konfig läuft über venne-search.de-API,
+        // hier nur Backend-UI zum Setzen der Optionen + Status-Anzeige.
+        'crawler_panel' => [
+            'label' => &$GLOBALS['TL_LANG']['tl_venne_search_settings']['crawler_panel'],
+            'input_field_callback' => [VenneMedia\VenneSearchContaoBundle\EventListener\CrawlerPanelListener::class, 'render'],
             'eval' => ['doNotShow' => true, 'doNotCopy' => true],
         ],
         // Pseudo-Felder ohne SQL — rendern via input_field_callback Custom-HTML.

@@ -187,12 +187,40 @@ final class PdfExtractor
             \gc_collect_cycles();
         }
 
-        $text = trim($text);
+        $text = $this->repairMojibake(trim($text));
         if ($text === '') {
             return new PdfExtractionResult('', 'empty_textlayer_image_only');
         }
 
         return new PdfExtractionResult($text, null);
+    }
+
+    /**
+     * smalot/pdfparser liefert teilweise Latin-1/CP1252-Bytes zurück, die
+     * bereits als UTF-8 interpretiert werden (klassisches Mojibake:
+     * `FÃ¶rderung` statt `Förderung`). mb_check_encoding sagt dann fälschlich
+     * "ist UTF-8", weil die Mojibake-Sequenz selbst valides UTF-8 ist.
+     *
+     * Heuristik: typische Mojibake-Marker zählen. Wenn mehr als 3 vorkommen
+     * UND der Text auch andere UTF-8-Multibyte-Chars nicht häufiger enthält
+     * → einmal durch latin1→utf8 jagen.
+     */
+    private function repairMojibake(string $text): string
+    {
+        $markers = ['Ã¤', 'Ã¶', 'Ã¼', 'Ã„', 'Ã–', 'Ãœ', 'ÃŸ', 'Ã©', 'Ã¨', 'â‚¬'];
+        $mojibakeCount = 0;
+        foreach ($markers as $m) {
+            $mojibakeCount += substr_count($text, $m);
+        }
+        if ($mojibakeCount < 3) {
+            return $text;
+        }
+        $converted = @mb_convert_encoding($text, 'ISO-8859-1', 'UTF-8');
+        if (!\is_string($converted) || $converted === '') {
+            return $text;
+        }
+        $reInterpreted = @mb_convert_encoding($converted, 'UTF-8', 'ISO-8859-1');
+        return \is_string($reInterpreted) && $reInterpreted !== '' ? $reInterpreted : $text;
     }
 }
 

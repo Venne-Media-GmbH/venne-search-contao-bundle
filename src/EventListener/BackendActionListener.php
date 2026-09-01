@@ -562,6 +562,48 @@ final class BackendActionListener
     }
 
     /**
+     * Hub-Navigation oben im Settings-Edit-Form: Direkt-Links zu allen
+     * Bereichen des Bundles. Cards mit Inline-SVG, dezent im Contao-Look.
+     * Index-Browser-Card wurde entfernt, weil das documents_panel weiter
+     * unten in derselben Seite das gleiche bereits zeigt.
+     */
+    public static function renderQuickNav(): string
+    {
+        $rt = htmlspecialchars((string) ($_GET['rt'] ?? ''), ENT_QUOTES);
+        $tags = '/contao?do=venne_search&table=tl_venne_search_tag&rt=' . $rt;
+        $synonyms = '/contao?do=venne_search&table=tl_venne_search_synonym&rt=' . $rt;
+        $platform = 'https://venne-search.de';
+
+        $svgTag = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>';
+        $svgSyn = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
+        $svgExt = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>';
+
+        $card = static function (string $href, string $svg, string $title, string $desc, bool $external = false): string {
+            $extAttr = $external ? ' target="_blank" rel="noopener"' : '';
+            return '<a href="' . $href . '"' . $extAttr . ' style="display:flex;gap:1rem;align-items:flex-start;padding:1.25rem 1.4rem;background:#fff;border:1px solid #d1d5db;border-radius:10px;text-decoration:none;color:inherit;transition:border-color .15s,box-shadow .15s,transform .15s;flex:1;min-width:240px;box-sizing:border-box;"'
+                . ' onmouseover="this.style.borderColor=&quot;#3a7178&quot;;this.style.boxShadow=&quot;0 4px 12px -3px rgba(58,113,120,.28)&quot;;this.style.transform=&quot;translateY(-1px)&quot;;"'
+                . ' onmouseout="this.style.borderColor=&quot;#d1d5db&quot;;this.style.boxShadow=&quot;none&quot;;this.style.transform=&quot;none&quot;;">'
+                . '<span style="flex-shrink:0;color:#3a7178;display:inline-flex;width:40px;height:40px;align-items:center;justify-content:center;background:#f0fdfa;border-radius:8px;">' . $svg . '</span>'
+                . '<span style="display:flex;flex-direction:column;gap:.3rem;line-height:1.4;">'
+                . '<span style="font-weight:600;color:#0f172a;font-size:.95rem;">' . $title . '</span>'
+                . '<span style="font-size:.8rem;color:#64748b;">' . $desc . '</span>'
+                . '</span>'
+                . '</a>';
+        };
+
+        // Wrapper-Style: rundum Luft — oben/unten zu Header/Sektion, links/rechts
+        // zum DCA-Container-Rand. Grid damit Cards gleich gross sind und
+        // sauber umbrechen.
+        return '<div class="widget" style="margin:1.5rem 1.25rem 2rem;padding:0;clear:both;">'
+            . '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.4rem;">'
+            . $card($tags, $svgTag, 'Tags verwalten', 'Boost-Faktor, Auto-Match-Patterns, Übersetzungen pro Sprache.')
+            . $card($synonyms, $svgSyn, 'Synonyme verwalten', 'Wort-Mapping: Suche nach „Messe" findet auch „Ausstellung".')
+            . $card($platform, $svgExt, 'Plattform öffnen', 'Account, API-Keys, Crawler-Config auf venne-search.de verwalten.', true)
+            . '</div>'
+            . '</div>';
+    }
+
+    /**
      * Gemeinsamer Stylesheet-Block für alle Bundle-Backend-Panels.
      * Überschreibt unsere Light-Mode-Inline-Styles wenn Contao auf Dark-Mode
      * umschaltet (`html[data-color-scheme=dark]` oder `prefers-color-scheme`),
@@ -660,7 +702,7 @@ final class BackendActionListener
             '<div style="padding-right:1rem;">'.
             '<h3 style="margin:0 0 4px;color:#1f2937;font-size:1rem;font-weight:600;line-height:1.3;display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;">'.
                 '<span>Komplett-Indexierung deiner Site</span>'.
-                '<span style="font-size:.7rem;font-weight:500;padding:2px 8px;border-radius:999px;background:rgba(74,128,135,0.1);color:#3a7178;letter-spacing:.02em;">v'.htmlspecialchars($bundleVersion).'</span>'.
+                '<span style="font-size:.7rem;font-weight:500;padding:2px 8px;border-radius:999px;background:rgba(74,128,135,0.1);color:#3a7178;letter-spacing:.02em;">v'.htmlspecialchars(ltrim($bundleVersion, 'v')).'</span>'.
             '</h3>'.
             '<p style="margin:0;color:#4b5563;font-size:.9rem;line-height:1.5;padding-right:.4rem;">Crawlt <strong style="color:#1f2937;">alle aktiven Seiten</strong>, Artikel und Dateien aus dem Datei-Bereich (%s). Erst Vorschau, dann live pro Datei — du siehst <strong>vorab</strong>, was indexiert wird.</p>'.
             '</div>'.
@@ -781,6 +823,8 @@ final class BackendActionListener
             '     if(r==="permission_excluded")return "durch Berechtigung ausgeschlossen";'.
             '     if(r==="page_noindex_robots")return "Page hat noindex-Robots-Tag";'.
             '     if(r==="page_no_search_flag")return "Page hat noSearch-Flag";'.
+            '     if(r==="page_no_search_inherited")return "uebergeordnete Seite steht auf \'nicht durchsuchen\'";'.
+            '     if(r==="page_root_unpublished")return "Startpunkt (Root) nicht veroeffentlicht";'.
             '     if(r.indexOf("file_too_large_")===0)return "Datei zu groß";'.
             '     if(r.indexOf("parse_timeout")===0)return "PDF-Parser-Timeout";'.
             '     if(r.indexOf("parse_failed:")===0)return "Parse-Fehler: "+r.substring(13,80);'.
@@ -858,16 +902,26 @@ final class BackendActionListener
             '});'.
             'btn.dataset.originalHtml=btn.innerHTML;'.
             // === START: Plan abrufen, Vorschau zeigen ===
+            // Defensive Frontend-Logik: wenn der Server kein JSON liefert
+            // (z.B. Symfony-Container-Crash → HTML-500-Seite), zeigen wir
+            // eine klare Fehlermeldung statt eine kryptische JSON-Parse-Exception.
             'btn.addEventListener("click",function(){'.
             ' btn.disabled=true;btn.textContent="Lade Vorschau…";'.
             ' planWrap.style.display="none";wrap.style.display="none";'.
             ' fetch(planUrl,{method:"POST",headers:{"Content-Type":"application/json","X-Requested-With":"XMLHttpRequest"},credentials:"same-origin",body:"{}"})'.
-            '  .then(function(r){return r.json();})'.
+            '  .then(function(r){return r.text().then(function(t){'.
+            '   var d;try{d=JSON.parse(t);}catch(e){'.
+            '    var hint=r.status>=500?"Der Server liefert kein JSON (HTTP "+r.status+"). Vermutlich ein Symfony-Container- oder PHP-Fehler. Prüfe var/logs/prod-YYYY-MM-DD.log und führe einen sauberen Cache-Rebuild aus: rm -rf var/cache/* && php vendor/bin/contao-console cache:warmup --env=prod":"HTTP "+r.status+" — Antwort war kein JSON";'.
+            '    throw new Error(hint);'.
+            '   }return d;'.
+            '  });})'.
             '  .then(function(d){'.
             '   if(!d||!d.ok){throw new Error(d&&d.error||"Plan-Call fehlgeschlagen");}'.
             '   showPlan(d);'.
             '  }).catch(function(e){'.
-            '   alert("Fehler beim Lesen der Plan-Vorschau: "+(e&&e.message||"unbekannt"));'.
+            '   var msg=e&&e.message||"unbekannt";'.
+            '   planWrap.innerHTML=\'<div style="padding:1rem 1.2rem;border:1px solid #fca5a5;background:#fef2f2;color:#991b1b;border-radius:8px;"><strong>Fehler beim Lesen der Plan-Vorschau:</strong><br><span style="display:block;margin-top:.4rem;font-family:monospace;font-size:.85rem;white-space:pre-wrap;">\'+msg.replace(/[<>&]/g,function(c){return{"<":"&lt;",">":"&gt;","&":"&amp;"}[c];})+\'</span></div>\';'.
+            '   planWrap.style.display="block";'.
             '   btn.disabled=false;btn.innerHTML=btn.dataset.originalHtml;'.
             '  });'.
             '});'.
@@ -1182,7 +1236,10 @@ final class BackendActionListener
         // Toolbar (Light-Mode)
         $rt = htmlspecialchars((string) ($_GET['rt'] ?? ''));
         $id = htmlspecialchars((string) ($_GET['id'] ?? '1'));
-        $base = sprintf('?do=venne_search&act=edit&id=%s&rt=%s', $id, $rt);
+        // Wichtig: ABSOLUT mit /contao-Prefix. Relativ („?do=...") loest der
+        // Browser je nach Current-Path auf — auf FFA-Production fuehrte das
+        // beim Klick auf „Filtern" zu https://www.ffa.de/?do=... (ohne /contao).
+        $base = sprintf('/contao?do=venne_search&act=edit&id=%s&rt=%s', $id, $rt);
         // Wichtig: KEIN <form> hier — die DCA-Edit-Maske wickelt unsere
         // Felder bereits in ein <form method="post"> ein, und HTML kennt
         // keine verschachtelten Formulare. Browser ignoriert das innere
@@ -1446,13 +1503,38 @@ final class BackendActionListener
                 $packages = $json['packages'] ?? $json ?? [];
                 foreach ($packages as $pkg) {
                     if (($pkg['name'] ?? '') === 'venne-media/venne-search-contao-bundle') {
-                        $v = (string) ($pkg['version'] ?? '');
-                        return ltrim($v, 'v') ?: 'unknown';
+                        return self::cleanVersion((string) ($pkg['version'] ?? ''));
                     }
                 }
             }
         } catch (\Throwable) {
         }
         return 'unknown';
+    }
+
+    /**
+     * Wandelt Composer-Versions-Strings in eine lesbare Form um:
+     *   "v2.2.0"            → "2.2.0"
+     *   "dev-dev-v2.2.0"    → "2.2.0-dev"  (Branch dev-v2.2.0 als Dev-Build)
+     *   "dev-main"          → "main-dev"
+     *   "2.2.x-dev"         → "2.2.x-dev"  (unverändert)
+     */
+    public static function cleanVersion(string $version): string
+    {
+        $v = $version;
+        // Composer kann mehrfach "dev-" prefixen ("dev-dev-v2.2.0" für Branch dev-v2.2.0).
+        // Wir ziehen alle führenden "dev-" weg, dann ein optionales "v".
+        while (str_starts_with($v, 'dev-')) {
+            $v = substr($v, 4);
+        }
+        $v = ltrim($v, 'v');
+        if ($v === '') {
+            return 'unknown';
+        }
+        // Wenn ursprünglich dev-Branch (jetzt ohne führende dev-/v-Prefixe), Suffix anhängen
+        if (str_starts_with($version, 'dev-')) {
+            return $v . '-dev';
+        }
+        return $v;
     }
 }

@@ -26,7 +26,14 @@ final class TagSuggestController extends AbstractController
             return new JsonResponse(['ok' => false, 'error' => 'unauthorized'], 403);
         }
         $q = mb_strtolower(trim((string) $request->query->get('q', '')));
-        $all = $this->tags->findAll();
+        // Leere/orphan Tags (label oder slug fehlt) duerfen nicht in der
+        // Auto-Suggest auftauchen — sonst koennte der User einen nicht
+        // adressierbaren Tag-Ghost in der Liste sehen.
+        $all = array_values(array_filter(
+            $this->tags->findAll(),
+            static fn (array $t): bool => trim((string) ($t['label'] ?? '')) !== ''
+                && trim((string) ($t['slug'] ?? '')) !== '',
+        ));
         if ($q === '') {
             return new JsonResponse(\array_slice($all, 0, 20));
         }

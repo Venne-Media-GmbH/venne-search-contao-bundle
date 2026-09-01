@@ -46,10 +46,12 @@ class ModuleVenneSearch extends Module
     {
         $this->Template->moduleId = $this->id;
         $this->Template->displayMode = $this->vsearch_display_mode ?: 'inline';
-        $this->Template->triggerLabel = $this->vsearch_trigger_label ?: 'Suche öffnen';
-        $this->Template->placeholder = $this->vsearch_placeholder ?: 'Suche…';
-        $this->Template->buttonLabel = $this->vsearch_button_label ?: 'Suchen';
-        $this->Template->locale = $this->getLocale();
+        $locale = $this->getLocale();
+        $defaults = self::defaultLabels($locale);
+        $this->Template->triggerLabel = $this->vsearch_trigger_label ?: $defaults['trigger'];
+        $this->Template->placeholder = $this->vsearch_placeholder ?: $defaults['placeholder'];
+        $this->Template->buttonLabel = $this->vsearch_button_label ?: $defaults['button'];
+        $this->Template->locale = $locale;
         $this->Template->apiUrl = '/vsearch/api';
         $this->Template->minChars = (int) ($this->vsearch_min_chars ?: 3);
         // Default 100 = Meilisearch-Hard-Cap. Wenn der Admin im Backend keinen
@@ -59,6 +61,10 @@ class ModuleVenneSearch extends Module
         $this->Template->headline = $this->headline;
         $this->Template->cssID = $this->cssID;
         $this->Template->showFacets = (bool) $this->vsearch_show_facets;
+        // v2.1.0: zusätzliche UI-Optionen
+        $this->Template->showSort = (bool) $this->vsearch_show_sort;
+        $this->Template->showFiletypeFilter = (bool) $this->vsearch_show_filetype_filter;
+        $this->Template->openInNewTab = (bool) $this->vsearch_open_in_new_tab;
     }
 
     private function getLocale(): string
@@ -80,6 +86,27 @@ class ModuleVenneSearch extends Module
         }
 
         return strtolower(substr((string) ($GLOBALS['TL_LANGUAGE'] ?? 'de'), 0, 2));
+    }
+
+    /**
+     * Default-Labels pro Locale fuer Trigger / Placeholder / Button. User-Werte
+     * aus dem Modul-Setting gewinnen — diese Defaults greifen nur wenn das
+     * jeweilige Feld leer ist und sorgen dafuer, dass auf EN-Pages keine
+     * deutschen Default-Strings auftauchen.
+     *
+     * @return array{trigger:string, placeholder:string, button:string}
+     */
+    public static function defaultLabels(string $locale): array
+    {
+        $map = [
+            'de' => ['trigger' => 'Suche öffnen',  'placeholder' => 'Suche…',  'button' => 'Suchen'],
+            'en' => ['trigger' => 'Open search',   'placeholder' => 'Search…', 'button' => 'Search'],
+            'fr' => ['trigger' => 'Ouvrir',        'placeholder' => 'Recherche…', 'button' => 'Rechercher'],
+            'it' => ['trigger' => 'Apri ricerca',  'placeholder' => 'Cerca…',  'button' => 'Cerca'],
+            'es' => ['trigger' => 'Abrir búsqueda','placeholder' => 'Buscar…', 'button' => 'Buscar'],
+            'nl' => ['trigger' => 'Zoeken openen', 'placeholder' => 'Zoeken…', 'button' => 'Zoeken'],
+        ];
+        return $map[$locale] ?? $map['en'];
     }
 
     private function isBackendRequest(): bool

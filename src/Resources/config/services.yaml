@@ -35,6 +35,70 @@ services:
         arguments:
             $logger: '@?logger'
 
+    # v2.2.0: PDF-Thumbnail-Generator. Wird nur aufgerufen wenn das Setting
+    # `generate_pdf_thumbnails` aktiv ist. Ruft auf dem Server `gs`
+    # (Ghostscript) auf, Fallback auf Imagick wenn `gs` nicht installiert.
+    VenneMedia\VenneSearchContaoBundle\Service\Pdf\PdfThumbnailGenerator:
+        arguments:
+            $logger: '@?logger'
+
+    # v2.2.0: Datei-Erstellungsdatum aus Metadaten lesen (PDF/DOCX/ODT/EXIF/PNG-Text).
+    # Liefert Unix-Timestamp, fällt auf filectime/filemtime zurück.
+    VenneMedia\VenneSearchContaoBundle\Service\Metadata\FileDateExtractor:
+        arguments:
+            $logger: '@?logger'
+
+    # v2.2.0: PageTagFieldListener wird per static::render() aus dem DCA
+    # aufgerufen — der Container muss den Service auflösbar halten (public),
+    # sonst inlined Symfony ihn weg und ::render() crasht beim Lookup.
+    VenneMedia\VenneSearchContaoBundle\EventListener\PageTagFieldListener:
+        public: true
+
+    # Selbes Pattern fuer das Tag-Uebersetzungs-Feld (dynamische Inputs pro Locale).
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagTranslationsFieldListener:
+        public: true
+
+    # Auto-Match-Pattern-Uebersetzungen pro Locale (englische Detail-Seiten
+    # haben andere URL-Pattern als deutsche).
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagPatternTranslationsFieldListener:
+        public: true
+
+    # Tag-Picker im Datei-Edit-Form (tl_files), analog PageTagFieldListener.
+    VenneMedia\VenneSearchContaoBundle\EventListener\FileTagFieldListener:
+        public: true
+
+    # Lupen-Toggle in der Seitenstruktur — button_callback per Service-Lookup.
+    VenneMedia\VenneSearchContaoBundle\EventListener\PageSearchToggleListener:
+        public: true
+
+    # CLI-Command zum Reindexieren einer einzelnen Datei.
+    VenneMedia\VenneSearchContaoBundle\Command\ReindexFileCommand:
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+        tags:
+            - { name: console.command }
+
+    # Synonym-Save-Listener wird per DCA-onsubmit/ondelete_callback als Service-ID
+    # aufgerufen — Contao 4.13 ruft System::getContainer()->get(self::class), das
+    # braucht public Sichtbarkeit. Sonst „ServiceNotFoundException".
+    VenneMedia\VenneSearchContaoBundle\EventListener\SynonymSaveListener:
+        public: true
+
+    # Tag-Delete-Listener — ebenfalls per Service-ID aus DCA-ondelete_callback.
+    VenneMedia\VenneSearchContaoBundle\EventListener\TagDeleteListener:
+        public: true
+        arguments:
+            $projectDir: '%kernel.project_dir%'
+
+    # v2.2.0: Crawler-Panel im DCA, gleiches Pattern wie Tag-Feld (public).
+    VenneMedia\VenneSearchContaoBundle\EventListener\CrawlerPanelListener:
+        public: true
+
+    # v2.2.0: HTTP-Client für die Crawler-API auf venne-search.de.
+    VenneMedia\VenneSearchContaoBundle\Service\Platform\CrawlerConfigClient:
+        arguments:
+            $logger: '@?logger'
+
     # Meilisearch-Client als Singleton — gebaut von der Factory, die das
     # Endpoint+Key aus den DCA-Settings (tl_venne_search_settings) holt.
     Meilisearch\Client:

@@ -76,6 +76,7 @@
             <option value="page"{% if currentType == 'page' %} selected{% endif %}>Seiten</option>
             <option value="article"{% if currentType == 'article' %} selected{% endif %}>Artikel</option>
             <option value="file"{% if currentType == 'file' %} selected{% endif %}>Dateien</option>
+            <option value="crawled"{% if currentType == 'crawled' %} selected{% endif %}>Websiteinhalte (gecrawlt)</option>
         </select>
 
         {% if enabledLocales|length > 1 %}

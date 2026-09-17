@@ -304,7 +304,7 @@ final class PageTagFieldListener
     // als anklickbare Chips. Bereits zugewiesene sind ausgegraut. Click = assign.
     function refreshAvailable() {
         if (!availableBox) return;
-        fetch('/contao/venne-search/tag/suggest', {credentials:'same-origin'})
+        fetch('/contao/venne-search/tag/suggest', {credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}})
             .then(function (r) { return r.json(); })
             .then(function (list) {
                 var arr = Array.isArray(list) ? list : (list.tags || []);
@@ -335,7 +335,7 @@ final class PageTagFieldListener
 
     function fetchSuggest(query) {
         var url = '/contao/venne-search/tag/suggest?q=' + encodeURIComponent(query);
-        return fetch(url, {credentials:'same-origin'}).then(function (r) { return r.json(); });
+        return fetch(url, {credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function (r) { return r.json(); });
     }
 
     function renderSuggest(query, data) {

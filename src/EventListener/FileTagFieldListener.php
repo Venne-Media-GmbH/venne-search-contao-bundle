@@ -169,7 +169,7 @@ final class FileTagFieldListener
     function getAssignedSlugs() { return Array.from(container.querySelectorAll('.vstag-chip')).map(function (c) { return c.dataset.tagSlug; }); }
     function refreshAvailable() {
         if (!availableBox) return;
-        fetch('/contao/venne-search/tag/suggest', {credentials:'same-origin'})
+        fetch('/contao/venne-search/tag/suggest', {credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}})
             .then(function (r) { return r.json(); })
             .then(function (list) {
                 var arr = Array.isArray(list) ? list : (list.tags || []);
@@ -189,7 +189,7 @@ final class FileTagFieldListener
                 });
             }).catch(function () {});
     }
-    function fetchSuggest(q) { return fetch('/contao/venne-search/tag/suggest?q=' + encodeURIComponent(q), {credentials:'same-origin'}).then(function (r) { return r.json(); }); }
+    function fetchSuggest(q) { return fetch('/contao/venne-search/tag/suggest?q=' + encodeURIComponent(q), {credentials:'same-origin', headers:{'X-Requested-With':'XMLHttpRequest'}}).then(function (r) { return r.json(); }); }
     function renderSuggest(q, data) {
         var assigned = getAssignedSlugs();
         var rawList = Array.isArray(data) ? data : (data.tags || []);

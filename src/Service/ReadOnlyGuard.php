@@ -44,7 +44,7 @@ final class ReadOnlyGuard
             return false;
         }
 
-        $this->logger->notice('venne_search.read_only.blocked', ['operation' => $operation]);
+        $this->logger->warning('venne_search.read_only.blocked', ['operation' => $operation]);
 
         return true;
     }

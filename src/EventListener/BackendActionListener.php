@@ -37,6 +37,7 @@ final class BackendActionListener
         private readonly SettingsRepository $settings,
         private readonly Connection $db,
         private readonly DocumentIndexer $indexer,
+        private readonly \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard $readOnly = new \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard(),
     ) {
     }
 
@@ -401,6 +402,11 @@ final class BackendActionListener
         }
 
         $deletedIndexes = 0;
+
+        if ($this->readOnly->blocks('backend.purge')) {
+            $this->renderMessage('Nur-Lese-Modus', 'VENNE_SEARCH_READ_ONLY ist gesetzt – der Index wird von dieser Installation nicht verändert.', 'error');
+            return;
+        }
 
         foreach ($config->enabledLocales as $locale) {
             $indexUid = $config->indexPrefix.'_'.$locale;

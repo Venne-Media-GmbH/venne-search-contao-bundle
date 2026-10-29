@@ -45,6 +45,13 @@ Wer den Contao-Manager nutzt: Paket suchen, installieren, Updates anwenden — d
 
 Das war's. Beim ersten Speichern fragt das Bundle den Endpoint und den scoped Token von venne-search.de ab und cached das eine Stunde.
 
+### Nur-Lese-Modus für Staging-Kopien
+
+Setzt man in der Umgebung `VENNE_SEARCH_READ_ONLY=1` (z. B. in der `.env.local` einer Staging-Kopie), führt das Bundle
+keine Schreiboperationen auf dem Meilisearch-Index aus (kein Upsert/Delete/Purge, keine Synonym- und Settings-Updates,
+keine Analytics). Suchanfragen funktionieren weiter. So kann eine Kopie der Website mit dem Live-API-Key gegen den
+produktiven Index getestet werden, ohne ihn zu verändern. Blockierte Vorgänge erscheinen als `venne_search.read_only.blocked` im Log.
+
 ## Erste Indexierung
 
 Im Backend bei „Venne Search" auf **Vorschau & Indexieren** klicken. Du siehst vorab:

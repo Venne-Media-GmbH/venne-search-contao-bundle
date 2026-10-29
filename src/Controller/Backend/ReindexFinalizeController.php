@@ -35,6 +35,7 @@ final class ReindexFinalizeController extends AbstractController
         private readonly SettingsRepository $settings,
         private readonly Client $meilisearch,
         private readonly Connection $db,
+        private readonly \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard $readOnly = new \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard(),
     ) {
     }
 
@@ -67,7 +68,7 @@ final class ReindexFinalizeController extends AbstractController
             $removeOrphans = (bool) ($payload['removeOrphans'] ?? false);
             $orphans = $payload['orphans'] ?? [];
 
-            if ($removeOrphans && \is_array($orphans) && $orphans !== []) {
+            if ($removeOrphans && \is_array($orphans) && $orphans !== [] && !$this->readOnly->blocks('backend.reindex_finalize')) {
                 $locale = $config->enabledLocales[0] ?? 'de';
                 $indexUid = $config->indexPrefix . '_' . $locale;
                 try {

@@ -127,7 +127,14 @@ final class DocumentIndexer
         private readonly SettingsRepository $settings,
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ?\VenneMedia\VenneSearchContaoBundle\Service\Synonym\SynonymRepository $synonyms = null,
+        private readonly ?\VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard $readOnly = null,
     ) {
+    }
+
+    /** true = Schreiben gesperrt (VENNE_SEARCH_READ_ONLY), Aufrufer kehrt dann still zurück. */
+    private function readOnly(string $operation): bool
+    {
+        return $this->readOnly !== null && $this->readOnly->blocks($operation);
     }
 
     /**
@@ -154,6 +161,10 @@ final class DocumentIndexer
      */
     public function pushSynonyms(string $locale): void
     {
+        if ($this->readOnly('indexer.pushSynonyms')) {
+            return;
+        }
+
         $indexUid = $this->indexName($locale);
         try {
             $index = $this->meilisearch->index($indexUid);
@@ -172,6 +183,10 @@ final class DocumentIndexer
      */
     public function ensureIndex(string $locale): void
     {
+        if ($this->readOnly('indexer.ensureIndex')) {
+            return;
+        }
+
         $indexUid = $this->indexName($locale);
 
         try {
@@ -232,6 +247,10 @@ final class DocumentIndexer
 
     public function upsert(SearchDocument $doc): void
     {
+        if ($this->readOnly('indexer.upsert')) {
+            return;
+        }
+
         $this->ensureIndex($doc->locale);
         $this->meilisearch
             ->index($this->indexName($doc->locale))
@@ -249,6 +268,10 @@ final class DocumentIndexer
      */
     public function upsertMany(iterable $docs): void
     {
+        if ($this->readOnly('indexer.upsertMany')) {
+            return;
+        }
+
         // Gruppiert pro Locale, damit pro Index nur ein Batch-Request rausgeht.
         $byLocale = [];
         foreach ($docs as $doc) {
@@ -263,6 +286,10 @@ final class DocumentIndexer
 
     public function delete(string $documentId, string $locale): void
     {
+        if ($this->readOnly('indexer.delete')) {
+            return;
+        }
+
         try {
             $this->meilisearch
                 ->index($this->indexName($locale))
@@ -288,6 +315,10 @@ final class DocumentIndexer
      */
     public function deleteByUrls(array $urls, string $locale): void
     {
+        if ($this->readOnly('indexer.deleteByUrls')) {
+            return;
+        }
+
         $urls = array_values(array_filter(array_unique($urls), static fn ($u): bool => $u !== ''));
         if ($urls === []) {
             return;
@@ -309,6 +340,10 @@ final class DocumentIndexer
 
     public function purge(string $locale): void
     {
+        if ($this->readOnly('indexer.purge')) {
+            return;
+        }
+
         $indexUid = $this->indexName($locale);
         try {
             $this->meilisearch->deleteIndex($indexUid);

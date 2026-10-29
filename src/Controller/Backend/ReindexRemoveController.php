@@ -33,6 +33,7 @@ final class ReindexRemoveController extends AbstractController
     public function __construct(
         private readonly SettingsRepository $settings,
         private readonly Client $meilisearch,
+        private readonly \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard $readOnly = new \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard(),
     ) {
     }
 
@@ -65,6 +66,10 @@ final class ReindexRemoveController extends AbstractController
             $indexUid = $config->indexPrefix . '_' . $locale;
 
             $totalRemoved = 0;
+
+            if ($this->readOnly->blocks('backend.reindex_remove')) {
+                return new JsonResponse(['ok' => false, 'error' => 'read_only'], 200);
+            }
 
             // Konkrete IDs löschen
             if (isset($payload['docIds']) && \is_array($payload['docIds']) && $payload['docIds'] !== []) {

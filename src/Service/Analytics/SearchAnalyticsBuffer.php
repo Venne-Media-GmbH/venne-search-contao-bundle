@@ -33,6 +33,7 @@ final class SearchAnalyticsBuffer
     public function __construct(
         private readonly SettingsRepository $settings,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard $readOnly = new \VenneMedia\VenneSearchContaoBundle\Service\ReadOnlyGuard(),
         ?HttpClientInterface $http = null,
     ) {
         $this->http = $http ?? HttpClient::create([
@@ -65,7 +66,7 @@ final class SearchAnalyticsBuffer
                 return;
             }
             $config = $this->settings->load();
-            if (!$config->analyticsEnabled) {
+            if (!$config->analyticsEnabled || $this->readOnly->blocks('analytics.flush')) {
                 return;
             }
             $apiKey = $this->settings->getPlatformApiKey();

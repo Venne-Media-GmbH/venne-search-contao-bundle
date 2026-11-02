@@ -37,6 +37,8 @@ if (isset($GLOBALS['TL_DCA']['tl_files']['list']['operations'])) {
         'href' => 'act=edit',
         'icon' => 'bundles/vennesearchcontao/icons/tag.svg',
         'attributes' => 'title="Such-Tags vergeben"',
+        // Contao 5.3+: direkt in der Zeile statt im „…“-Menü (wie der Such-Toggle in tl_page)
+        'primary' => true,
     ];
 }
 

@@ -49,6 +49,9 @@ if (isset($GLOBALS['TL_DCA']['tl_page']['list']['operations'])) {
         'href' => '#',
         'icon' => 'bundles/vennesearchcontao/icons/search-on.svg',
         'attributes' => 'class="vsearch-page-toggle"',
+        // Contao 5.3+: primäre Operationen stehen wie das Auge (publish) direkt in der Zeile,
+        // alle anderen wandern ins „…“-Menü. Der Such-Status soll auf einen Blick sichtbar sein.
+        'primary' => true,
         'button_callback' => [
             VenneMedia\VenneSearchContaoBundle\EventListener\PageSearchToggleListener::class,
             'render',
